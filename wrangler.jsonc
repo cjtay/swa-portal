@@ -1,0 +1,37 @@
+{
+  "name": "swa-portal",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2025-01-01",
+  "account_id": "4e031a33b6cb8ab00fa7df84850dab2f",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "routes": [
+    { "pattern": "admin.singaporewomenassociation.org", "custom_domain": true }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "swa-portal",
+      "database_id": "b8ca063c-6767-445c-a42e-d092daf80fc4"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "SWA_SESSION",
+      "id": "ddb93996417c4476ac0f90ddf1eb332d"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "R2_BUCKET",
+      "bucket_name": "swa-portal-uploads"
+    }
+  ],
+  "workers_dev": true,
+  "vars": {
+    "SWA_ADMIN_DOMAIN": "singaporewomenassociation.org"
+  }
+}

@@ -1,0 +1,20 @@
+# build output
+dist/
+
+# generated types
+.astro/
+
+# dependencies
+node_modules/
+
+# environment
+.dev.vars
+
+# editor
+.vscode/
+
+# secrets
+.dev.vars.wrangler/
+
+# wrangler local state
+.wrangler/

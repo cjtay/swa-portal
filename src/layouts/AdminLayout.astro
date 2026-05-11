@@ -1,0 +1,57 @@
+---
+import '../styles/admin.css';
+
+interface Props {
+  title: string;
+  currentPath?: string;
+}
+
+const { title, currentPath = '' } = Astro.props;
+
+const navItems = [
+  { href: '/', label: 'Dashboard' },
+  { href: '/office-booking', label: 'Office Booking' },
+  { href: '/namecards', label: 'Namecards' },
+  { href: '/members', label: 'Members' },
+];
+---
+
+<div class="admin-layout">
+  <aside class="admin-sidebar">
+    <div class="sidebar-brand"><span>SWA</span> Portal</div>
+    <nav class="sidebar-nav">
+      {navItems.map((item) => (
+        <a href={item.href} aria-current={currentPath === item.href ? 'page' : undefined}>
+          {item.label}
+        </a>
+      ))}
+    </nav>
+    <div class="sidebar-user" id="sidebar-user" style="display:none;">
+      <div class="user-name" id="sidebar-user-name"></div>
+      <button class="logout-btn" id="logout-btn">Sign out</button>
+    </div>
+  </aside>
+  <main class="admin-main">
+    <slot />
+  </main>
+</div>
+
+<script>
+  import { requireAuth } from '../scripts/auth-gate';
+
+  requireAuth({
+    onAuthenticated(data) {
+      const userEl = document.getElementById('sidebar-user');
+      const nameEl = document.getElementById('sidebar-user-name');
+      if (userEl && nameEl) {
+        nameEl.textContent = data.name || data.email || '';
+        userEl.style.display = '';
+      }
+    },
+  });
+
+  document.getElementById('logout-btn')?.addEventListener('click', () => {
+    document.cookie = 'swa_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0';
+    window.location.href = '/login';
+  });
+</script>

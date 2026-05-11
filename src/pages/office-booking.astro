@@ -1,0 +1,155 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Office Booking — SWA Portal" currentPath="/office-booking">
+  <h1>Office Booking</h1>
+  <p style="color:var(--text-muted);margin-bottom:1.5rem;">Book the SWA office space for meetings and events.</p>
+
+  <div id="booking-app">
+    <div class="card">
+      <h2>New Booking</h2>
+      <form id="booking-form" style="margin-top:1rem;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+          <div class="form-group">
+            <label class="form-label" for="booker-name">Name</label>
+            <input type="text" id="booker-name" class="form-input" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="booker-email">Email</label>
+            <input type="email" id="booker-email" class="form-input" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="purpose">Purpose</label>
+          <input type="text" id="purpose" class="form-input" required />
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;">
+          <div class="form-group">
+            <label class="form-label" for="start-datetime">Start</label>
+            <input type="datetime-local" id="start-datetime" class="form-input" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="end-datetime">End</label>
+            <input type="datetime-local" id="end-datetime" class="form-input" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="attendees">Attendees</label>
+            <input type="number" id="attendees" class="form-input" value="1" min="1" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="notes">Notes (optional)</label>
+          <textarea id="notes" class="form-input" rows="2"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Submit Booking</button>
+        <p id="booking-form-error" class="form-error" style="display:none;"></p>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Existing Bookings</h2>
+      <table class="data-table" style="margin-top:1rem;">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Name</th>
+            <th>Purpose</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="bookings-list"></tbody>
+      </table>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { requireAuth } from '../scripts/auth-gate';
+
+  async function loadBookings() {
+    try {
+      const res = await fetch('/api/bookings?status=all');
+      const data = await res.json();
+      if (data.success) {
+        const tbody = document.getElementById('bookings-list')!;
+        tbody.innerHTML = data.bookings.map((b: any) => {
+          const start = new Date(b.start_datetime);
+          const end = new Date(b.end_datetime);
+          const dateStr = start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+          const timeStr = start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' - ' + end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+          const badgeClass = 'badge badge-' + b.status;
+          return `<tr>
+            <td>${dateStr}</td>
+            <td>${timeStr}</td>
+            <td>${b.booker_name}</td>
+            <td>${b.purpose}</td>
+            <td><span class="${badgeClass}">${b.status}</span></td>
+            <td>${b.status === 'pending' ? `<button class="btn btn-primary" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="approveBooking(${b.id})">Approve</button> <button class="btn btn-danger" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="rejectBooking(${b.id})">Reject</button>` : ''}</td>
+          </tr>`;
+        }).join('');
+      }
+    } catch (err) {
+      console.error('Failed to load bookings', err);
+    }
+  }
+
+  // @ts-ignore
+  window.approveBooking = async (id: number) => {
+    await fetch(`/api/bookings/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'approved' }),
+    });
+    loadBookings();
+  };
+
+  // @ts-ignore
+  window.rejectBooking = async (id: number) => {
+    await fetch(`/api/bookings/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'rejected' }),
+    });
+    loadBookings();
+  };
+
+  document.getElementById('booking-form')!.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('booking-form-error')!;
+    errEl.style.display = 'none';
+
+    const payload = {
+      booker_name: (document.getElementById('booker-name') as HTMLInputElement).value,
+      booker_email: (document.getElementById('booker-email') as HTMLInputElement).value,
+      purpose: (document.getElementById('purpose') as HTMLInputElement).value,
+      start_datetime: (document.getElementById('start-datetime') as HTMLInputElement).value,
+      end_datetime: (document.getElementById('end-datetime') as HTMLInputElement).value,
+      attendees: Number((document.getElementById('attendees') as HTMLInputElement).value),
+      notes: (document.getElementById('notes') as HTMLTextAreaElement).value,
+    };
+
+    try {
+      const res = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.success) {
+        (e.target as HTMLFormElement).reset();
+        loadBookings();
+      } else {
+        errEl.textContent = data.message || 'Booking failed.';
+        errEl.style.display = '';
+      }
+    } catch {
+      errEl.textContent = 'Network error. Please try again.';
+      errEl.style.display = '';
+    }
+  });
+
+  requireAuth({ requireAdmin: true, onAuthenticated: loadBookings });
+</script>

@@ -1,0 +1,149 @@
+---
+import '../styles/admin.css';
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Login — SWA Portal</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="login-wrapper">
+    <div class="login-card">
+      <div class="login-header">
+        <h1><span>SWA</span> Portal</h1>
+        <p>Admin access — login with email</p>
+      </div>
+      <div class="login-body">
+        <div id="step-email">
+          <div class="form-group">
+            <label class="form-label" for="email-input">Email Address</label>
+            <input type="email" id="email-input" class="form-input" placeholder="you@singaporewomenassociation.org" autocomplete="email" />
+          </div>
+          <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;font-size:0.8rem;color:var(--text-muted);cursor:pointer;">
+            <input type="checkbox" id="remember-me" style="accent-color:var(--swa-3);" />
+            Remember me (30 days)
+          </label>
+          <p style="font-size:0.7rem;color:var(--text-muted);margin-bottom:1rem;">Sessions expire after 12 hours by default. Tick "Remember me" to stay logged in for 30 days. Do not use this option on a shared computer.</p>
+          <button class="btn btn-primary" id="btn-send-otp" style="width:100%;">Send Login Code</button>
+          <p id="email-error" class="form-error" style="display:none;"></p>
+        </div>
+
+        <div id="step-otp" style="display:none;">
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:1.5rem;">A 6-digit code has been sent to <strong id="otp-email-display"></strong>. It expires in 10 minutes.</p>
+          <div class="form-group">
+            <label class="form-label" for="otp-input">Enter Code</label>
+            <input type="text" id="otp-input" class="form-input" maxlength="6" inputmode="numeric" pattern="\d{6}" placeholder="000000" autocomplete="one-time-code" style="font-family:'Courier New',monospace;font-size:1.4rem;letter-spacing:0.5em;text-align:center;" />
+          </div>
+          <button class="btn btn-primary" id="btn-verify-otp" style="width:100%;">Verify</button>
+          <p id="otp-error" class="form-error" style="display:none;"></p>
+          <button class="btn btn-secondary" id="btn-back" style="width:100%;margin-top:0.5rem;">Use a different email</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+
+<script>
+  import { redirectIfAuthenticated } from '../scripts/auth-gate';
+  redirectIfAuthenticated();
+
+  const emailInput = document.getElementById('email-input') as HTMLInputElement;
+  const otpInput = document.getElementById('otp-input') as HTMLInputElement;
+  const stepEmail = document.getElementById('step-email')!;
+  const stepOtp = document.getElementById('step-otp')!;
+  const emailError = document.getElementById('email-error')!;
+  const otpError = document.getElementById('otp-error')!;
+  const otpEmailDisplay = document.getElementById('otp-email-display')!;
+  const btnSendOtp = document.getElementById('btn-send-otp') as HTMLButtonElement;
+  const btnVerifyOtp = document.getElementById('btn-verify-otp') as HTMLButtonElement;
+  const btnBack = document.getElementById('btn-back') as HTMLButtonElement;
+
+  const redirect = new URLSearchParams(window.location.search).get('redirect') || '/';
+
+  btnSendOtp.addEventListener('click', async () => {
+    const email = emailInput.value.trim();
+    if (!email) { emailError.textContent = 'Please enter your email address.'; emailError.style.display = ''; return; }
+
+    emailError.style.display = 'none';
+    btnSendOtp.disabled = true;
+    btnSendOtp.textContent = 'Sending...';
+
+    try {
+      const res = await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        otpEmailDisplay.textContent = email;
+        stepEmail.style.display = 'none';
+        stepOtp.style.display = '';
+        otpInput.focus();
+      } else {
+        emailError.textContent = json.message || 'Could not send code.';
+        emailError.style.display = '';
+      }
+    } catch {
+      emailError.textContent = 'Network error. Please try again.';
+      emailError.style.display = '';
+    }
+    btnSendOtp.disabled = false;
+    btnSendOtp.textContent = 'Send Login Code';
+  });
+
+  emailInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') btnSendOtp.click(); });
+
+  otpInput.addEventListener('input', function () {
+    this.value = this.value.replace(/\D/g, '').slice(0, 6);
+  });
+
+  btnVerifyOtp.addEventListener('click', async () => {
+    const email = emailInput.value.trim();
+    const otp = otpInput.value.trim();
+    if (!otp || otp.length < 6) { otpError.textContent = 'Please enter the 6-digit code.'; otpError.style.display = ''; return; }
+
+    otpError.style.display = 'none';
+    btnVerifyOtp.disabled = true;
+    btnVerifyOtp.textContent = 'Verifying...';
+
+    try {
+      const res = await fetch('/api/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp, remember: (document.getElementById('remember-me') as HTMLInputElement).checked }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        window.location.href = redirect;
+      } else {
+        otpError.textContent = json.message || 'Verification failed.';
+        otpError.style.display = '';
+      }
+    } catch {
+      otpError.textContent = 'Network error. Please try again.';
+      otpError.style.display = '';
+    }
+    btnVerifyOtp.disabled = false;
+    btnVerifyOtp.textContent = 'Verify';
+  });
+
+  otpInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') btnVerifyOtp.click(); });
+
+  btnBack.addEventListener('click', () => {
+    stepOtp.style.display = 'none';
+    stepEmail.style.display = '';
+    otpInput.value = '';
+    otpError.style.display = 'none';
+    emailInput.focus();
+  });
+</script>

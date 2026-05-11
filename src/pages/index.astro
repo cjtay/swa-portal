@@ -1,0 +1,23 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Dashboard — SWA Portal" currentPath="/">
+  <h1>Dashboard</h1>
+  <p style="color:var(--text-muted);margin-bottom:2rem;">Welcome to the SWA Admin Portal.</p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;">
+    <a href="/office-booking" class="card" style="text-decoration:none;color:inherit;display:block;">
+      <h2>Office Booking</h2>
+      <p style="color:var(--text-muted);font-size:0.85rem;">Book the SWA office space and manage reservations.</p>
+    </a>
+    <a href="/namecards" class="card" style="text-decoration:none;color:inherit;display:block;">
+      <h2>Namecards</h2>
+      <p style="color:var(--text-muted);font-size:0.85rem;">Manage member namecards and sync to the public website.</p>
+    </a>
+    <a href="/members" class="card" style="text-decoration:none;color:inherit;display:block;">
+      <h2>Members</h2>
+      <p style="color:var(--text-muted);font-size:0.85rem;">View and manage the member directory.</p>
+    </a>
+  </div>
+</AdminLayout>
