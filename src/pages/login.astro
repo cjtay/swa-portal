@@ -7,18 +7,19 @@ import '../styles/admin.css';
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="robots" content="noindex, nofollow" />
-  <title>Login — SWA Portal</title>
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, notranslate, noimageindex" />
+  <title>Login — SWA Admin Portal</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
 <body>
   <div class="login-wrapper">
     <div class="login-card">
       <div class="login-header">
-        <h1><span>SWA</span> Portal</h1>
+        <h1><img src="/swalogo.svg" alt="SWA" style="height:28px;width:28px;vertical-align:middle;margin-right:0.4rem;border-radius:3px;" /><span>SWA</span> Admin Portal</h1>
         <p>Admin access — login with email</p>
       </div>
       <div class="login-body">
@@ -32,7 +33,8 @@ import '../styles/admin.css';
             Remember me (30 days)
           </label>
           <p style="font-size:0.7rem;color:var(--text-muted);margin-bottom:1rem;">Sessions expire after 12 hours by default. Tick "Remember me" to stay logged in for 30 days. Do not use this option on a shared computer.</p>
-          <button class="btn btn-primary" id="btn-send-otp" style="width:100%;">Send Login Code</button>
+          <button class="btn btn-primary" id="btn-send-otp" style="width:100%;" disabled>Send Login Code</button>
+          <div id="turnstile-container" style="display:flex;justify-content:center;margin-top:0.75rem;"></div>
           <p id="email-error" class="form-error" style="display:none;"></p>
         </div>
 
@@ -66,12 +68,59 @@ import '../styles/admin.css';
   const btnSendOtp = document.getElementById('btn-send-otp') as HTMLButtonElement;
   const btnVerifyOtp = document.getElementById('btn-verify-otp') as HTMLButtonElement;
   const btnBack = document.getElementById('btn-back') as HTMLButtonElement;
+  const turnstileContainer = document.getElementById('turnstile-container')!;
+
+  let turnstileToken: string | null = null;
+  let turnstileWidgetId: string | null = null;
+  let turnstileSiteKey = '';
+
+  async function initTurnstile() {
+    try {
+      const res = await fetch('/api/turnstile-config');
+      const data = await res.json();
+      turnstileSiteKey = data.siteKey;
+    } catch {
+      emailError.textContent = 'Could not load security configuration.';
+      emailError.style.display = '';
+      return;
+    }
+
+    if (!turnstileSiteKey || !(window as any).turnstile) {
+      emailError.textContent = 'Security verification unavailable. Please refresh.';
+      emailError.style.display = '';
+      return;
+    }
+
+    turnstileWidgetId = (window as any).turnstile.render('#turnstile-container', {
+      sitekey: turnstileSiteKey,
+      callback: (token: string) => {
+        turnstileToken = token;
+        btnSendOtp.disabled = false;
+      },
+      'error-callback': () => {
+        emailError.textContent = 'Security verification failed. Please refresh.';
+        emailError.style.display = '';
+      },
+      'expired-callback': () => {
+        turnstileToken = null;
+        btnSendOtp.disabled = true;
+      },
+    });
+  }
+
+  initTurnstile();
 
   const redirect = new URLSearchParams(window.location.search).get('redirect') || '/';
 
   btnSendOtp.addEventListener('click', async () => {
     const email = emailInput.value.trim();
     if (!email) { emailError.textContent = 'Please enter your email address.'; emailError.style.display = ''; return; }
+
+    if (!turnstileToken) {
+      emailError.textContent = 'Please complete the security verification.';
+      emailError.style.display = '';
+      return;
+    }
 
     emailError.style.display = 'none';
     btnSendOtp.disabled = true;
@@ -81,7 +130,7 @@ import '../styles/admin.css';
       const res = await fetch('/api/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, turnstileToken }),
       });
       const json = await res.json();
       if (json.success) {
@@ -92,12 +141,17 @@ import '../styles/admin.css';
       } else {
         emailError.textContent = json.message || 'Could not send code.';
         emailError.style.display = '';
+        if ((window as any).turnstile && turnstileWidgetId) {
+          (window as any).turnstile.reset(turnstileWidgetId);
+        }
+        turnstileToken = null;
+        btnSendOtp.disabled = true;
       }
     } catch {
       emailError.textContent = 'Network error. Please try again.';
       emailError.style.display = '';
+      btnSendOtp.disabled = false;
     }
-    btnSendOtp.disabled = false;
     btnSendOtp.textContent = 'Send Login Code';
   });
 
@@ -145,5 +199,10 @@ import '../styles/admin.css';
     otpInput.value = '';
     otpError.style.display = 'none';
     emailInput.focus();
+    if ((window as any).turnstile && turnstileWidgetId) {
+      (window as any).turnstile.reset(turnstileWidgetId);
+      turnstileToken = null;
+      btnSendOtp.disabled = true;
+    }
   });
 </script>

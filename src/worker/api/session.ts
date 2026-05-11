@@ -53,3 +53,9 @@ export async function handleSession(c: Context<{ Bindings: Env }>) {
     is_it_admin: (IT_ADMIN_EMAILS as readonly string[]).includes(session.email),
   });
 }
+
+export async function handleLogout(c: Context<{ Bindings: Env }>) {
+  return c.json({ success: true }, 200, {
+    'Set-Cookie': `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`,
+  });
+}

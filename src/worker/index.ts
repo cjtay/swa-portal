@@ -18,6 +18,11 @@ app.get('/api/health', (c) => {
   return c.json({ status: 'ok', service: 'swa-portal', timestamp: new Date().toISOString() });
 });
 
+app.get('/api/turnstile-config', (c) => {
+  const siteKey = c.env.TURNSTILE_SITE_KEY || '';
+  return c.json({ siteKey });
+});
+
 // Auth
 app.get('/api/session', handleSession);
 app.post('/api/send-otp', handleSendOtp);

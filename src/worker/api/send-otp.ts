@@ -3,7 +3,7 @@ import type { Env } from '../types';
 import { buildOtpEmail } from '../lib/email-otp';
 import { signHmac } from '../lib/crypto';
 import { handleApiError } from '../lib/error-handler';
-import { OTP_TTL_SECONDS, IT_ADMIN_EMAILS } from '../../constants/portal';
+import { OTP_TTL_SECONDS, OTP_RATE_LIMIT_WINDOW_SECONDS, OTP_RATE_LIMIT_MAX_REQUESTS } from '../../constants/portal';
 
 function generateOtp(): string {
   const bytes = new Uint8Array(3);
@@ -12,15 +12,72 @@ function generateOtp(): string {
   return String(num % 1000000).padStart(6, '0');
 }
 
+async function verifyTurnstile(token: string, secret: string, ip: string): Promise<boolean> {
+  try {
+    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret, response: token, remoteip: ip }),
+    });
+    const data = await res.json() as { success: boolean };
+    return data.success === true;
+  } catch {
+    return false;
+  }
+}
+
+async function checkRateLimit(kv: KVNamespace, ip: string): Promise<{ allowed: boolean; remaining: number }> {
+  const key = `swa:rl:otp:${ip}`;
+  const now = Math.floor(Date.now() / 1000);
+  const windowStart = now - (now % OTP_RATE_LIMIT_WINDOW_SECONDS);
+
+  const raw = await kv.get(key);
+  let records: number[] = raw ? JSON.parse(raw) : [];
+  records = records.filter((t) => t > windowStart);
+
+  if (records.length >= OTP_RATE_LIMIT_MAX_REQUESTS) {
+    return { allowed: false, remaining: 0 };
+  }
+
+  records.push(now);
+  await kv.put(key, JSON.stringify(records), { expirationTtl: OTP_RATE_LIMIT_WINDOW_SECONDS + 60 });
+  return { allowed: true, remaining: OTP_RATE_LIMIT_MAX_REQUESTS - records.length };
+}
+
 export async function handleSendOtp(c: Context<{ Bindings: Env }>) {
   const endpoint = 'send-otp';
   const env = c.env;
+
+  const ip = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || 'unknown';
+
+  const rlResult = await checkRateLimit(env.SWA_SESSION, ip);
+  if (!rlResult.allowed) {
+    return c.json(
+      { success: false, error_code: 'RATE_LIMITED', message: 'Too many requests. Please try again later.' },
+      429,
+    );
+  }
 
   let body: Record<string, unknown>;
   try {
     body = await c.req.json();
   } catch {
     return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid request body.' }, 400);
+  }
+
+  const turnstileToken = typeof body.turnstileToken === 'string' ? body.turnstileToken.trim() : '';
+  if (!turnstileToken) {
+    return c.json({ success: false, error_code: 'TURNSTILE_MISSING', message: 'Security verification required.' }, 400);
+  }
+
+  if (env.TURNSTILE_SECRET) {
+    const turnstileValid = await verifyTurnstile(turnstileToken, env.TURNSTILE_SECRET, ip);
+    if (!turnstileValid) {
+      return c.json(
+        { success: false, error_code: 'TURNSTILE_FAILED', message: 'Security verification failed. Please try again.' },
+        403,
+      );
+    }
   }
 
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
@@ -31,7 +88,6 @@ export async function handleSendOtp(c: Context<{ Bindings: Env }>) {
   const adminDomain = env.SWA_ADMIN_DOMAIN || 'singaporewomenassociation.org';
   const isAdmin = email.endsWith(`@${adminDomain}`);
 
-  // Non-admin users must be in D1 members table with can_login = 1
   if (!isAdmin) {
     const member = await env.DB.prepare(
       'SELECT id FROM members WHERE email = ? AND can_login = 1'

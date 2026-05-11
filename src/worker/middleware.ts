@@ -8,6 +8,7 @@ const PUBLIC_PATHS = new Set([
   '/api/session',
   '/api/send-otp',
   '/api/verify-otp',
+  '/api/turnstile-config',
 ]);
 
 const ADMIN_ONLY_API = new Set([

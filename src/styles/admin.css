@@ -57,11 +57,22 @@ body {
 }
 
 .sidebar-brand {
-  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.25rem 1rem;
   border-bottom: 1px solid rgba(255,255,255,0.12);
   font-weight: 700;
-  font-size: 1.1rem;
-  letter-spacing: 0.04em;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.sidebar-brand img {
+  height: 28px;
+  width: 28px;
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 
 .sidebar-brand span {
