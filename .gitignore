@@ -1,5 +1,6 @@
 # build output
 dist/
+.output/
 
 # generated types
 .astro/
@@ -9,12 +10,33 @@ node_modules/
 
 # environment
 .dev.vars
+.env
+.env.*
+!.env.example
+!.dev.vars.example
 
 # editor
 .vscode/
+.idea/
 
-# secrets
-.dev.vars.wrangler/
+# OS
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*
 
 # wrangler local state
 .wrangler/
+.mf/
+.dev.vars.wrangler/
+
+# TypeScript
+*.tsbuildinfo
+
+# coverage
+coverage/
+
+# npm cache
+.npm/
