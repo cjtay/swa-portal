@@ -85,20 +85,15 @@ export async function handleSendOtp(c: Context<{ Bindings: Env }>) {
     return c.json({ success: false, message: 'Valid email address required.' }, 400);
   }
 
-  const adminDomain = env.SWA_ADMIN_DOMAIN || 'singaporewomenassociation.org';
-  const isAdmin = email.endsWith(`@${adminDomain}`);
+  const member = await env.DB.prepare(
+    'SELECT id FROM members WHERE email = ? AND can_login = 1'
+  ).bind(email).first();
 
-  if (!isAdmin) {
-    const member = await env.DB.prepare(
-      'SELECT id FROM members WHERE email = ? AND can_login = 1'
-    ).bind(email).first();
-
-    if (!member) {
-      return c.json(
-        { success: false, error_code: 'NOT_REGISTERED', message: 'Not registered. Contact SWA admin for access.' },
-        403,
-      );
-    }
+  if (!member) {
+    return c.json(
+      { success: false, error_code: 'NOT_REGISTERED', message: 'Not registered. Contact SWA admin for access.' },
+      403,
+    );
   }
 
   const otp = generateOtp();

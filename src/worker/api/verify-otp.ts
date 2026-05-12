@@ -48,31 +48,22 @@ export async function handleVerifyOtp(c: Context<{ Bindings: Env }>) {
 
   await env.SWA_SESSION.delete(`swa:otp:${email}`);
 
-  // Determine role and get name from D1 members table or admin domain
-  const adminDomain = env.SWA_ADMIN_DOMAIN || 'singaporewomenassociation.org';
-  const isAdmin = email.endsWith(`@${adminDomain}`);
+  // Determine role and name from D1 members table
   const isItAdmin = (IT_ADMIN_EMAILS as readonly string[]).includes(email);
 
-  let role: string;
-  let name: string;
+  const member = await env.DB.prepare(
+    'SELECT name, category FROM members WHERE email = ? AND can_login = 1'
+  ).bind(email).first();
 
+  const name = (member && member.name) ? member.name as string : email.split('@')[0].replace(/[._-]/g, ' ');
+
+  let role: string;
   if (isItAdmin) {
     role = 'admin';
-  } else if (isAdmin) {
+  } else if (member && member.category === 'admin') {
     role = 'admin';
   } else {
     role = 'committee';
-  }
-
-  // Look up name from members table
-  const member = await env.DB.prepare(
-    'SELECT name FROM members WHERE email = ? AND can_login = 1'
-  ).bind(email).first();
-
-  if (member && member.name) {
-    name = member.name as string;
-  } else {
-    name = email.split('@')[0].replace(/[._-]/g, ' ');
   }
 
   const exp = remember

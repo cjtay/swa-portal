@@ -47,8 +47,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
   c.set('sessionRole', session.role);
 
   if (ADMIN_ONLY_API.has(path) || ADMIN_ONLY_API.has(basePath)) {
-    const adminDomain = c.env.SWA_ADMIN_DOMAIN || 'singaporewomenassociation.org';
-    if (!session.email.endsWith(`@${adminDomain}`)) {
+    if (session.role !== 'admin') {
       return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Admin access required.' }, 403);
     }
   }
