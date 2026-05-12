@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS office_bookings (
   start_datetime TEXT NOT NULL,
   end_datetime TEXT NOT NULL,
   notes TEXT,
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled')),
+  status TEXT DEFAULT 'approved' CHECK (status IN ('approved', 'cancelled')),
+  created_by TEXT NOT NULL,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );

@@ -13,7 +13,6 @@ const PUBLIC_PATHS = new Set([
 
 const ADMIN_ONLY_API = new Set([
   '/api/members',
-  '/api/bookings/approve',
   '/api/sync-website',
 ]);
 

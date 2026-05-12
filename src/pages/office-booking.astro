@@ -8,9 +8,30 @@ import AdminLayout from '../layouts/AdminLayout.astro';
 
   <div id="booking-app">
     <div class="card">
+      <div class="calendar-header">
+        <div class="calendar-nav">
+          <button class="calendar-nav-btn" id="cal-prev" aria-label="Previous month">&larr;</button>
+          <h3 id="cal-title"></h3>
+          <button class="calendar-nav-btn" id="cal-next" aria-label="Next month">&rarr;</button>
+          <button class="calendar-today-btn" id="cal-today">Today</button>
+        </div>
+        <button class="new-booking-toggle" id="toggle-form-btn">+ New Booking</button>
+      </div>
+
+      <div class="calendar-grid" id="cal-grid"></div>
+    </div>
+
+    <div id="day-detail" class="day-detail" style="display:none;">
+      <div class="day-detail-header">
+        <h3 id="day-detail-title"></h3>
+      </div>
+      <div id="day-detail-list"></div>
+    </div>
+
+    <div class="card new-booking-form" id="new-booking-form" hidden>
       <h2>New Booking</h2>
       <form id="booking-form" style="margin-top:1rem;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+        <div class="form-row">
           <div class="form-group">
             <label class="form-label" for="booker-name">Name</label>
             <input type="text" id="booker-name" class="form-input" required />
@@ -24,7 +45,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
           <label class="form-label" for="purpose">Purpose</label>
           <input type="text" id="purpose" class="form-input" required />
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;">
+        <div class="form-row-3">
           <div class="form-group">
             <label class="form-label" for="start-datetime">Start</label>
             <input type="datetime-local" id="start-datetime" class="form-input" required />
@@ -42,26 +63,12 @@ import AdminLayout from '../layouts/AdminLayout.astro';
           <label class="form-label" for="notes">Notes (optional)</label>
           <textarea id="notes" class="form-input" rows="2"></textarea>
         </div>
-        <button type="submit" class="btn btn-primary">Submit Booking</button>
+        <div style="display:flex;gap:0.75rem;align-items:center;">
+          <button type="submit" class="btn btn-primary">Submit Booking</button>
+          <button type="button" class="btn btn-secondary" id="cancel-form-btn">Cancel</button>
+        </div>
         <p id="booking-form-error" class="form-error" style="display:none;"></p>
       </form>
-    </div>
-
-    <div class="card">
-      <h2>Existing Bookings</h2>
-      <table class="data-table" style="margin-top:1rem;">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Time</th>
-            <th>Name</th>
-            <th>Purpose</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="bookings-list"></tbody>
-      </table>
     </div>
   </div>
 </AdminLayout>
@@ -69,27 +76,168 @@ import AdminLayout from '../layouts/AdminLayout.astro';
 <script>
   import { requireAuth } from '../scripts/auth-gate';
 
+  let sessionEmail = '';
+  let sessionName = '';
+  let currentYear: number;
+  let currentMonth: number;
+  let selectedDate: string | null = null;
+  let allBookings: any[] = [];
+
+  const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+  const calGrid = document.getElementById('cal-grid')!;
+  const calTitle = document.getElementById('cal-title')!;
+  const dayDetail = document.getElementById('day-detail')!;
+  const dayDetailTitle = document.getElementById('day-detail-title')!;
+  const dayDetailList = document.getElementById('day-detail-list')!;
+  const formEl = document.getElementById('new-booking-form') as HTMLDivElement;
+  const toggleBtn = document.getElementById('toggle-form-btn')!;
+  const cancelFormBtn = document.getElementById('cancel-form-btn')!;
+  const form = document.getElementById('booking-form') as HTMLFormElement;
+  const errEl = document.getElementById('booking-form-error')!;
+  const nameInput = document.getElementById('booker-name') as HTMLInputElement;
+  const emailInput = document.getElementById('booker-email') as HTMLInputElement;
+
+  toggleBtn.addEventListener('click', () => {
+    if (formEl.hidden) {
+      formEl.hidden = false;
+      formEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else {
+      formEl.hidden = true;
+    }
+  });
+
+  cancelFormBtn.addEventListener('click', () => {
+    formEl.hidden = true;
+    form.reset();
+    errEl.style.display = 'none';
+    prefillForm();
+  });
+
+  function prefillForm() {
+    if (sessionName) nameInput.value = sessionName;
+    if (sessionEmail) emailInput.value = sessionEmail;
+  }
+
+  function renderCalendar() {
+    calGrid.innerHTML = '';
+
+    calTitle.textContent = `${MONTH_NAMES[currentMonth]} ${currentYear}`;
+
+    DAY_NAMES.forEach(d => {
+      const hdr = document.createElement('div');
+      hdr.className = 'calendar-day-header';
+      hdr.textContent = d;
+      calGrid.appendChild(hdr);
+    });
+
+    const firstDay = new Date(currentYear, currentMonth, 1);
+    const startDow = (firstDay.getDay() + 6) % 7;
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+    for (let i = 0; i < startDow; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'calendar-day calendar-day--empty';
+      calGrid.appendChild(cell);
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const cell = document.createElement('div');
+      cell.className = 'calendar-day';
+      if (dateStr === todayStr) cell.classList.add('calendar-day--today');
+      if (dateStr === selectedDate) cell.classList.add('calendar-day--selected');
+
+      const numEl = document.createElement('div');
+      numEl.className = 'calendar-day-number';
+      numEl.textContent = String(d);
+      cell.appendChild(numEl);
+
+      const dayBookings = allBookings.filter((b: any) => b.start_datetime && b.start_datetime.startsWith(dateStr));
+      if (dayBookings.length > 0) {
+        const dotsEl = document.createElement('div');
+        dotsEl.className = 'calendar-dots';
+        dayBookings.forEach((b: any) => {
+          const dot = document.createElement('div');
+          dot.className = 'calendar-dot';
+          if (b.status === 'cancelled') dot.classList.add('calendar-dot--cancelled');
+          dotsEl.appendChild(dot);
+        });
+        cell.appendChild(dotsEl);
+      }
+
+      cell.addEventListener('click', () => {
+        selectedDate = dateStr;
+        renderCalendar();
+        renderDayDetail(dateStr);
+      });
+
+      calGrid.appendChild(cell);
+    }
+  }
+
+  function renderDayDetail(dateStr: string) {
+    const dayBookings = allBookings.filter((b: any) => b.start_datetime && b.start_datetime.startsWith(dateStr));
+
+    const d = new Date(dateStr + 'T00:00:00');
+    dayDetailTitle.textContent = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+    const activeBookings = dayBookings.filter((b: any) => b.status !== 'cancelled');
+    const cancelledBookings = dayBookings.filter((b: any) => b.status === 'cancelled');
+
+    let html = '';
+
+    if (activeBookings.length === 0 && cancelledBookings.length === 0) {
+      html = '<p style="color:var(--text-muted);font-size:0.85rem;">No bookings for this day.</p>';
+    }
+
+    [...activeBookings, ...cancelledBookings].forEach((b: any) => {
+      const start = new Date(b.start_datetime);
+      const end = new Date(b.end_datetime);
+      const startTime = start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      const endTime = end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      const isCancelled = b.status === 'cancelled';
+      const canCancel = b.created_by === sessionEmail && !isCancelled;
+
+      html += `<div class="booking-card${isCancelled ? ' booking-card--cancelled' : ''}">
+        <div class="booking-time">
+          <div class="booking-time-start">${startTime}</div>
+          <div class="booking-time-end">${endTime}</div>
+        </div>
+        <div class="booking-info">
+          <h4>${esc(b.purpose)}</h4>
+          <p>${esc(b.booker_name)} &middot; ${b.attendees} attendee${b.attendees !== 1 ? 's' : ''}</p>
+          ${b.notes ? `<p style="margin-top:0.25rem;font-style:italic;">${esc(b.notes)}</p>` : ''}
+          ${isCancelled ? '<p style="color:var(--danger);margin-top:0.25rem;">Cancelled</p>' : ''}
+        </div>
+        <div class="booking-actions">
+          ${canCancel ? `<button class="btn-cancel" onclick="cancelBooking(${b.id})">Cancel</button>` : ''}
+          ${!isCancelled ? `<span class="badge badge-approved">Approved</span>` : `<span class="badge badge-cancelled">Cancelled</span>`}
+        </div>
+      </div>`;
+    });
+
+    dayDetailList.innerHTML = html;
+    dayDetail.style.display = '';
+  }
+
+  function esc(s: string): string {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
   async function loadBookings() {
     try {
-      const res = await fetch('/api/bookings?status=all');
+      const res = await fetch('/api/bookings');
       const data = await res.json();
       if (data.success) {
-        const tbody = document.getElementById('bookings-list')!;
-        tbody.innerHTML = data.bookings.map((b: any) => {
-          const start = new Date(b.start_datetime);
-          const end = new Date(b.end_datetime);
-          const dateStr = start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-          const timeStr = start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' - ' + end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-          const badgeClass = 'badge badge-' + b.status;
-          return `<tr>
-            <td>${dateStr}</td>
-            <td>${timeStr}</td>
-            <td>${b.booker_name}</td>
-            <td>${b.purpose}</td>
-            <td><span class="${badgeClass}">${b.status}</span></td>
-            <td>${b.status === 'pending' ? `<button class="btn btn-primary" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="approveBooking(${b.id})">Approve</button> <button class="btn btn-danger" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="rejectBooking(${b.id})">Reject</button>` : ''}</td>
-          </tr>`;
-        }).join('');
+        allBookings = data.bookings;
+        renderCalendar();
+        if (selectedDate) renderDayDetail(selectedDate);
       }
     } catch (err) {
       console.error('Failed to load bookings', err);
@@ -97,36 +245,45 @@ import AdminLayout from '../layouts/AdminLayout.astro';
   }
 
   // @ts-ignore
-  window.approveBooking = async (id: number) => {
-    await fetch(`/api/bookings/${id}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'approved' }),
-    });
-    loadBookings();
+  window.cancelBooking = async (id: number) => {
+    if (!confirm('Cancel this booking?')) return;
+    try {
+      const res = await fetch(`/api/bookings/${id}/cancel`, { method: 'PATCH' });
+      const data = await res.json();
+      if (data.success) {
+        await loadBookings();
+      } else {
+        alert(data.message || 'Failed to cancel booking.');
+      }
+    } catch {
+      alert('Network error. Please try again.');
+    }
   };
 
-  // @ts-ignore
-  window.rejectBooking = async (id: number) => {
-    await fetch(`/api/bookings/${id}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'rejected' }),
-    });
-    loadBookings();
-  };
-
-  document.getElementById('booking-form')!.addEventListener('submit', async (e) => {
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const errEl = document.getElementById('booking-form-error')!;
     errEl.style.display = 'none';
 
+    const startVal = (document.getElementById('start-datetime') as HTMLInputElement).value;
+    const endVal = (document.getElementById('end-datetime') as HTMLInputElement).value;
+
+    if (endVal && startVal && new Date(endVal) <= new Date(startVal)) {
+      errEl.textContent = 'End time must be after start time.';
+      errEl.style.display = '';
+      return;
+    }
+    if (startVal && new Date(startVal) < new Date()) {
+      errEl.textContent = 'Cannot book in the past.';
+      errEl.style.display = '';
+      return;
+    }
+
     const payload = {
-      booker_name: (document.getElementById('booker-name') as HTMLInputElement).value,
-      booker_email: (document.getElementById('booker-email') as HTMLInputElement).value,
+      booker_name: nameInput.value,
+      booker_email: emailInput.value,
       purpose: (document.getElementById('purpose') as HTMLInputElement).value,
-      start_datetime: (document.getElementById('start-datetime') as HTMLInputElement).value,
-      end_datetime: (document.getElementById('end-datetime') as HTMLInputElement).value,
+      start_datetime: startVal,
+      end_datetime: endVal,
       attendees: Number((document.getElementById('attendees') as HTMLInputElement).value),
       notes: (document.getElementById('notes') as HTMLTextAreaElement).value,
     };
@@ -139,8 +296,19 @@ import AdminLayout from '../layouts/AdminLayout.astro';
       });
       const data = await res.json();
       if (data.success) {
-        (e.target as HTMLFormElement).reset();
-        loadBookings();
+        form.reset();
+        errEl.style.display = 'none';
+        formEl.hidden = true;
+        prefillForm();
+        await loadBookings();
+        if (payload.start_datetime) {
+          const dt = new Date(payload.start_datetime);
+          selectedDate = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+          currentYear = dt.getFullYear();
+          currentMonth = dt.getMonth();
+          renderCalendar();
+          renderDayDetail(selectedDate);
+        }
       } else {
         errEl.textContent = data.message || 'Booking failed.';
         errEl.style.display = '';
@@ -151,5 +319,36 @@ import AdminLayout from '../layouts/AdminLayout.astro';
     }
   });
 
-  requireAuth({ requireAdmin: true, onAuthenticated: loadBookings });
+  document.getElementById('cal-prev')!.addEventListener('click', () => {
+    currentMonth--;
+    if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+    renderCalendar();
+  });
+
+  document.getElementById('cal-next')!.addEventListener('click', () => {
+    currentMonth++;
+    if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+    renderCalendar();
+  });
+
+  document.getElementById('cal-today')!.addEventListener('click', () => {
+    const now = new Date();
+    currentYear = now.getFullYear();
+    currentMonth = now.getMonth();
+    selectedDate = `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    renderCalendar();
+    renderDayDetail(selectedDate);
+  });
+
+  requireAuth({
+    onAuthenticated(data: any) {
+      sessionEmail = data.email || '';
+      sessionName = data.name || '';
+      prefillForm();
+      const now = new Date();
+      currentYear = now.getFullYear();
+      currentMonth = now.getMonth();
+      loadBookings();
+    },
+  });
 </script>

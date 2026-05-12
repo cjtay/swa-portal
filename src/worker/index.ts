@@ -4,7 +4,7 @@ import { authMiddleware } from './middleware';
 import { handleSession } from './api/session';
 import { handleSendOtp } from './api/send-otp';
 import { handleVerifyOtp } from './api/verify-otp';
-import { handleBookings, handleBookingById, handleBookingStatus } from './api/bookings';
+import { handleBookings, handleBookingById, handleBookingCancel } from './api/bookings';
 import { handleMembers, handleMemberById, handleMemberPhoto } from './api/members';
 
 const app = new Hono<{
@@ -32,7 +32,7 @@ app.post('/api/verify-otp', handleVerifyOtp);
 app.get('/api/bookings', handleBookings);
 app.post('/api/bookings', handleBookings);
 app.get('/api/bookings/:id', handleBookingById);
-app.patch('/api/bookings/:id/status', handleBookingStatus);
+app.patch('/api/bookings/:id/cancel', handleBookingCancel);
 
 // Members
 app.get('/api/members', handleMembers);
