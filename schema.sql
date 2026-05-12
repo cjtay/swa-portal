@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS members (
   role TEXT NOT NULL,
   email TEXT UNIQUE,
   mobile TEXT,
-  whatsapp TEXT,
   job_title TEXT,
   photo_url TEXT,
   photo_alt TEXT,

@@ -33,15 +33,14 @@ export async function handleMembers(c: Context<{ Bindings: Env }>) {
     }
 
     const result = await c.env.DB.prepare(
-      `INSERT INTO members (name, slug, role, email, mobile, whatsapp, job_title, description, category, can_login, show_on_website, has_namecard, address_line1, address_line2, address_postal_code, address_country, facebook, linkedin, instagram, tiktok, youtube, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+`INSERT INTO members (name, slug, role, email, mobile, job_title, description, category, can_login, show_on_website, has_namecard, address_line1, address_line2, address_postal_code, address_country, facebook, linkedin, instagram, tiktok, youtube, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       String(body.name || '').trim() || null,
       String(body.slug || '').trim() || null,
       String(body.role || '').trim() || null,
       String(body.email || '').trim().toLowerCase() || null,
       String(body.mobile || '').trim() || null,
-      String(body.whatsapp || '').trim() || null,
       String(body.job_title || '').trim() || null,
       String(body.description || '').trim() || null,
       String(body.category || 'committee').trim(),
@@ -85,7 +84,7 @@ export async function handleMemberById(c: Context<{ Bindings: Env }>) {
       return c.json({ success: false, message: 'Invalid request body.' }, 400);
     }
 
-    const allowedFields = ['name', 'slug', 'role', 'email', 'mobile', 'whatsapp', 'job_title', 'description', 'category', 'can_login', 'show_on_website', 'has_namecard', 'address_line1', 'address_line2', 'address_postal_code', 'address_country', 'facebook', 'linkedin', 'instagram', 'tiktok', 'youtube', 'sort_order', 'photo_url', 'photo_alt'];
+    const allowedFields = ['name', 'slug', 'role', 'email', 'mobile', 'job_title', 'description', 'category', 'can_login', 'show_on_website', 'has_namecard', 'address_line1', 'address_line2', 'address_postal_code', 'address_country', 'facebook', 'linkedin', 'instagram', 'tiktok', 'youtube', 'sort_order', 'photo_url', 'photo_alt'];
     const updates: string[] = [];
     const values: unknown[] = [];
 
