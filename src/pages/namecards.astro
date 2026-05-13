@@ -29,6 +29,9 @@ import AdminLayout from '../layouts/AdminLayout.astro';
 <script>
   import { requireAuth } from '../scripts/auth-gate';
 
+  let isAdmin = false;
+  let isItAdmin = false;
+
   async function loadMembers() {
     try {
       const res = await fetch('/api/members');
@@ -41,9 +44,12 @@ import AdminLayout from '../layouts/AdminLayout.astro';
             <td>${m.role || ''}</td>
             <td><span class="badge ${m.has_namecard ? 'badge-approved' : 'badge-cancelled'}">${m.has_namecard ? 'Yes' : 'No'}</span></td>
             <td><span class="badge ${m.show_on_website ? 'badge-approved' : 'badge-cancelled'}">${m.show_on_website ? 'Yes' : 'No'}</span></td>
-            <td><a href="/members" class="btn btn-secondary" style="padding:0.3rem 0.6rem;font-size:0.75rem;">Edit</a></td>
+            <td>${isAdmin ? `<a href="/members" class="btn btn-secondary" style="padding:0.3rem 0.6rem;font-size:0.75rem;">Edit</a>` : '—'}</td>
           </tr>`;
         }).join('');
+      } else if (data.error_code === 'FORBIDDEN') {
+        const tbody = document.getElementById('namecards-list')!;
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--danger);">You do not have permission to view namecards.</td></tr>';
       }
     } catch (err) {
       console.error('Failed to load members', err);
@@ -65,5 +71,13 @@ import AdminLayout from '../layouts/AdminLayout.astro';
     btn.disabled = false;
   });
 
-  requireAuth({ onAuthenticated: loadMembers });
+  requireAuth({
+    onAuthenticated(data: any) {
+      isAdmin = data.is_admin || false;
+      isItAdmin = data.is_it_admin || false;
+      const syncBtn = document.getElementById('sync-btn') as HTMLButtonElement;
+      if (syncBtn) syncBtn.style.display = isItAdmin ? '' : 'none';
+      loadMembers();
+    },
+  });
 </script>

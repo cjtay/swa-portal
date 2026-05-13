@@ -16,12 +16,26 @@ npm run cf-typegen       # Regenerate worker-configuration.d.ts
 
 See `docs/SWAPortal-Implementation-Plan.md` for full progress tracker.
 
+See `docs/SWAPortal-Functional-Specs.md` for role access matrix, API permissions, and feature specifications.
+
 ## Core Rules
 - **British English** spelling (organise, programme, colour)
 - **SWA brand colours** — purple palette: `swa-1 #70308c`, `swa-2 #450a5e`, `swa-3 #874ba1`, `swa-4 #f3d2ff`, `swa-5` (see `src/styles/admin.css`)
 - **Auth system** — OTP via email, HMAC-signed sessions in cookies (`swa_session`)
-- **Role tiers** — `admin` (IT_ADMIN_EMAILS or @singaporewomenassociation.org), `committee` (D1 `can_login=1`)
+- **Role tiers** — `admin` (D1 `category='admin'` or `IT_ADMIN_EMAILS`), `committee` (D1 `category='committee'` with `can_login=1`)
 - **No emoji icons** in professional components
+
+## Role Access
+
+Three tiers. See `docs/SWAPortal-Functional-Specs.md` for the full access matrix.
+
+| Role | How determined | What they can do |
+|------|---------------|------------------|
+| **IT Admin** | Email in `IT_ADMIN_EMAILS` (hardcoded) | Everything admin can do + infrastructure features (website sync, etc.) |
+| **Admin** | D1 `members.category = 'admin'` with `can_login=1` | Full CRUD on members, namecards, can cancel any booking |
+| **Committee** | D1 `members.category = 'committee'` with `can_login=1` | Read members/namecards, create/cancel own bookings |
+
+**Login eligibility**: `can_login = 1` in D1 members table. Email domain does not matter.
 
 ## Architecture
 - **Astro static build** for pages, **Hono worker** for API routes
@@ -51,7 +65,8 @@ Secrets: `OTP_SECRET`, `SESSION_SECRET`, `RESEND_API_KEY` (set interactively via
 | `src/worker/api/session.ts` | Read current session from `swa_session` cookie |
 | `src/worker/api/members.ts` | Member CRUD API (includes `slug`, `can_login` fields) |
 | `src/worker/api/bookings.ts` | Office booking CRUD API |
-| `src/constants/portal.ts` | `IT_ADMIN_EMAILS`, session config, OTP TTL |
+| `src/worker/lib/rate-limit.ts` | General-purpose authenticated endpoint rate limiting |
+| `src/constants/portal.ts` | `IT_ADMIN_EMAILS`, session config, OTP TTL, rate limit constants |
 | `src/pages/login.astro` | Standalone login (NO AdminLayout — avoids redirect loop) |
 | `src/layouts/AdminLayout.astro` | Sidebar nav with auth gate |
 | `schema.sql` | D1 schema with `can_login`, `slug`, `error_log` |

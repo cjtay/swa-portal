@@ -18,7 +18,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
           <option value="volunteer">Volunteer</option>
         </select>
       </div>
-      <button class="btn btn-primary" id="add-member-btn">Add Member</button>
+      <button class="btn btn-primary" id="add-member-btn" style="display:none;">Add Member</button>
     </div>
     <table class="data-table">
       <thead>
@@ -101,6 +101,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
   import { requireAuth } from '../scripts/auth-gate';
 
   let allMembers: any[] = [];
+  let isAdmin = false;
 
   async function loadMembers() {
     try {
@@ -109,6 +110,9 @@ import AdminLayout from '../layouts/AdminLayout.astro';
       if (data.success) {
         allMembers = data.members;
         renderMembers();
+      } else if (data.error_code === 'FORBIDDEN') {
+        const tbody = document.getElementById('members-list')!;
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--danger);">You do not have permission to view members.</td></tr>';
       }
     } catch (err) {
       console.error('Failed to load members', err);
@@ -134,7 +138,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
         <td>${m.category}</td>
         <td><span class="badge ${m.has_namecard ? 'badge-approved' : 'badge-cancelled'}">${m.has_namecard ? 'Yes' : 'No'}</span></td>
         <td><span class="badge ${m.can_login ? 'badge-approved' : 'badge-cancelled'}">${m.can_login ? 'Yes' : 'No'}</span></td>
-        <td><button class="btn btn-secondary" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="editMember(${m.id})">Edit</button></td>
+        <td>${isAdmin ? `<button class="btn btn-secondary" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="editMember(${m.id})">Edit</button>` : '—'}</td>
       </tr>`;
     }).join('');
   }
@@ -212,5 +216,12 @@ import AdminLayout from '../layouts/AdminLayout.astro';
     }
   });
 
-  requireAuth({ onAuthenticated: loadMembers });
+  requireAuth({
+    onAuthenticated(data: any) {
+      isAdmin = data.is_admin || false;
+      const addBtn = document.getElementById('add-member-btn') as HTMLButtonElement;
+      if (addBtn) addBtn.style.display = isAdmin ? '' : 'none';
+      loadMembers();
+    },
+  });
 </script>

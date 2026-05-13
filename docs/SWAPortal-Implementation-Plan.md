@@ -159,9 +159,12 @@ Ported from GTW and adapted, with additional security hardening:
 
 | Role | How determined | Access |
 |---|---|---|
-| `admin` | Email ends with `@singaporewomenassociation.org` OR is in `IT_ADMIN_EMAILS` | Full access: bookings, members, membership fees, settings |
-| `committee` | Email in D1 `members` table with `can_login = 1` | Bookings, namecard management, read-only member directory |
+| `IT Admin` | Email in `IT_ADMIN_EMAILS` | Everything admin can do + infrastructure features (website sync, etc.) |
+| `admin` | D1 `members.category = 'admin'` with `can_login = 1` | Full CRUD on members, namecards, can cancel any booking |
+| `committee` | D1 `members.category = 'committee'` with `can_login = 1` | Read members/namecards, create/cancel own bookings |
 | `member` | (Phase 2) Self-registration via OTP | View own membership status, pay fees |
+
+See `docs/SWAPortal-Functional-Specs.md` for the full access matrix.
 
 **IT Admin emails** (hardcoded in `src/constants/portal.ts`):
 - `cjtay@singaporewomenassociation.org`
@@ -518,6 +521,10 @@ Use this section to track implementation progress across sessions. Update checkb
 | 2026-05-12 | Turnstile bot protection on login | Prevents automated OTP requests; site key served via `/api/turnstile-config` endpoint |
 | 2026-05-12 | OTP + verify rate limiting | 5 OTP requests per 15 min; 10 verify attempts per IP, 5 per email per 15 min; 5 failures per OTP max |
 | 2026-05-12 | Remove `whatsapp` field from members | Not needed for SWA use case; simplifies schema |
+| 2026-05-13 | Method-based API access control | Committee can read members/namecards; admin-only for writes; IT-admin-only for sync |
+| 2026-05-13 | Role from D1 `category` field | Removes email domain check; `can_login` determines login eligibility exclusively |
+| 2026-05-13 | General-purpose authenticated rate limiting | Per-user per-endpoint: 10 requests / 15 min for all write endpoints (members, bookings, sync) |
+| 2026-05-13 | Role-based UI controls | Hide Add/Edit/Sync buttons client-side based on `is_admin` / `is_it_admin` from session |
 
 ---
 
@@ -531,7 +538,8 @@ These are non-obvious issues encountered during implementation that would be eas
 4. **Session cookie name** — `swa_session` (not `gtw_session`)
 5. **KV key prefix** — `swa:` (not `gtw:`)
 6. **`RESEND_API_KEY`** — Must be set via interactive `wrangler secret put`; piping values causes 502 errors
-7. **D1-based auth** — No KV allowlist needed; `send-otp.ts` queries `SELECT id FROM members WHERE email = ? AND can_login = 1` for non-admin emails; admin domain check remains in code
+7. **D1-based auth** — No KV allowlist needed; `send-otp.ts` queries `SELECT id FROM members WHERE email = ? AND can_login = 1` for all emails. Role is determined by D1 `category` field (`admin` vs `committee`). Email domain does not matter.
 8. **Booking status simplified** — Only `approved` and `cancelled` states exist (no `pending`/`rejected`); migration 001 recreated the table to enforce this
 9. **`/api/sync-website` not registered** — The namecard page's "Sync to Website" button calls this endpoint, but it's not in `src/worker/index.ts` route registration — will return 404
 10. **`SESSION_SECRET` required** — Not listed in original secrets section but is required by the auth system
+11. **Committee can read `/api/members`** — GET is allowed for all authenticated users; only POST/PATCH/DELETE require admin role
