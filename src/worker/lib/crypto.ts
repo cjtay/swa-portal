@@ -26,5 +26,12 @@ export async function verifyHmac(
   secret: string,
 ): Promise<boolean> {
   const expected = await signHmac(data, secret);
-  return expected === signature;
+  return timingSafeEqual(expected, signature);
+}
+
+export function timingSafeEqual(a: string, b: string): boolean {
+  const bufA = new TextEncoder().encode(a);
+  const bufB = new TextEncoder().encode(b);
+  if (bufA.byteLength !== bufB.byteLength) return false;
+  return (crypto.subtle as unknown as { timingSafeEqual: (a: Uint8Array, b: Uint8Array) => boolean }).timingSafeEqual(bufA, bufB);
 }

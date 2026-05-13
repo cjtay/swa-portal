@@ -15,7 +15,10 @@ import AdminLayout from '../layouts/AdminLayout.astro';
           <button class="calendar-nav-btn" id="cal-next" aria-label="Next month">&rarr;</button>
           <button class="calendar-today-btn" id="cal-today">Today</button>
         </div>
-        <button class="new-booking-toggle" id="toggle-form-btn">+ New Booking</button>
+        <div style="display:flex;gap:0.5rem;">
+          <button class="btn btn-secondary" id="view-toggle-btn" style="display:none;">List View</button>
+          <button class="new-booking-toggle" id="toggle-form-btn">+ New Booking</button>
+        </div>
       </div>
 
       <div class="calendar-grid" id="cal-grid"></div>
@@ -26,6 +29,33 @@ import AdminLayout from '../layouts/AdminLayout.astro';
         <h3 id="day-detail-title"></h3>
       </div>
       <div id="day-detail-list"></div>
+    </div>
+
+    <div class="card" id="all-bookings-card" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h2>All Bookings</h2>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+          <select id="status-filter" class="form-input" style="width:auto;">
+            <option value="">All statuses</option>
+            <option value="approved">Approved</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Purpose</th>
+            <th>Booked by</th>
+            <th>Attendees</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="all-bookings-list"></tbody>
+      </table>
     </div>
 
     <div class="card new-booking-form" id="new-booking-form" hidden>
@@ -78,6 +108,8 @@ import AdminLayout from '../layouts/AdminLayout.astro';
 
   let sessionEmail = '';
   let sessionName = '';
+  let isAdmin = false;
+  let currentView: 'calendar' | 'list' = 'calendar';
   let currentYear: number;
   let currentMonth: number;
   let selectedDate: string | null = null;
@@ -98,6 +130,28 @@ import AdminLayout from '../layouts/AdminLayout.astro';
   const errEl = document.getElementById('booking-form-error')!;
   const nameInput = document.getElementById('booker-name') as HTMLInputElement;
   const emailInput = document.getElementById('booker-email') as HTMLInputElement;
+  const viewToggleBtn = document.getElementById('view-toggle-btn') as HTMLButtonElement;
+  const allBookingsCard = document.getElementById('all-bookings-card') as HTMLDivElement;
+  const allBookingsList = document.getElementById('all-bookings-list')!;
+  const statusFilter = document.getElementById('status-filter') as HTMLSelectElement;
+
+  viewToggleBtn.addEventListener('click', () => {
+    if (currentView === 'calendar') {
+      currentView = 'list';
+      viewToggleBtn.textContent = 'Calendar View';
+      calGrid.parentElement!.style.display = 'none';
+      dayDetail.style.display = 'none';
+      allBookingsCard.style.display = '';
+      renderAllBookings();
+    } else {
+      currentView = 'calendar';
+      viewToggleBtn.textContent = 'List View';
+      calGrid.parentElement!.style.display = '';
+      allBookingsCard.style.display = 'none';
+    }
+  });
+
+  statusFilter.addEventListener('change', renderAllBookings);
 
   toggleBtn.addEventListener('click', () => {
     if (formEl.hidden) {
@@ -200,7 +254,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
       const startTime = start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
       const endTime = end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
       const isCancelled = b.status === 'cancelled';
-      const canCancel = b.created_by === sessionEmail && !isCancelled;
+      const canCancel = (b.created_by === sessionEmail || isAdmin) && !isCancelled;
 
       html += `<div class="booking-card${isCancelled ? ' booking-card--cancelled' : ''}">
         <div class="booking-time">
@@ -230,6 +284,45 @@ import AdminLayout from '../layouts/AdminLayout.astro';
     return d.innerHTML;
   }
 
+  function renderAllBookings() {
+    const statusVal = statusFilter.value;
+    const now = new Date().toISOString();
+
+    let filtered = allBookings.filter((b: any) => b.start_datetime >= now.slice(0, 10) || b.end_datetime >= now);
+    if (statusVal) {
+      filtered = filtered.filter((b: any) => b.status === statusVal);
+    }
+    filtered.sort((a: any, b: any) => a.start_datetime.localeCompare(b.start_datetime));
+
+    if (filtered.length === 0) {
+      allBookingsList.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">No upcoming bookings.</td></tr>';
+      return;
+    }
+
+    allBookingsList.innerHTML = filtered.map((b: any) => {
+      const start = new Date(b.start_datetime);
+      const end = new Date(b.end_datetime);
+      const dateStr = start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const startTime = start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      const endTime = end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      const isCancelled = b.status === 'cancelled';
+      const canCancel = isAdmin && !isCancelled;
+      const statusBadge = isCancelled
+        ? '<span class="badge badge-cancelled">Cancelled</span>'
+        : '<span class="badge badge-approved">Approved</span>';
+
+      return `<tr${isCancelled ? ' style="opacity:0.5;"' : ''}>
+        <td>${dateStr}</td>
+        <td>${startTime} — ${endTime}</td>
+        <td>${esc(b.purpose)}</td>
+        <td>${esc(b.booker_name)}<br><span style="font-size:0.75rem;color:var(--text-muted);">${esc(b.booker_email)}</span></td>
+        <td>${b.attendees}</td>
+        <td>${statusBadge}</td>
+        <td>${canCancel ? `<button class="btn-cancel" onclick="cancelBooking(${b.id})">Cancel</button>` : ''}</td>
+      </tr>`;
+    }).join('');
+  }
+
   async function loadBookings() {
     try {
       const res = await fetch('/api/bookings');
@@ -238,6 +331,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
         allBookings = data.bookings;
         renderCalendar();
         if (selectedDate) renderDayDetail(selectedDate);
+        if (currentView === 'list') renderAllBookings();
       }
     } catch (err) {
       console.error('Failed to load bookings', err);
@@ -344,7 +438,11 @@ import AdminLayout from '../layouts/AdminLayout.astro';
     onAuthenticated(data: any) {
       sessionEmail = data.email || '';
       sessionName = data.name || '';
+      isAdmin = data.is_admin || false;
       prefillForm();
+      if (isAdmin) {
+        viewToggleBtn.style.display = '';
+      }
       const now = new Date();
       currentYear = now.getFullYear();
       currentMonth = now.getMonth();

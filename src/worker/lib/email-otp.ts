@@ -28,7 +28,7 @@ export function buildOtpEmail(otp: string): string {
           <td style="padding:24px;color:#1f2937;font-family:'Montserrat',Arial,sans-serif;">
             <p style="margin:0 0 16px;font-size:15px;color:#1f2937;">Hi,</p>
             <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#6b7280;">
-              Use the code below to log in to the SWA Admin Portal. This code expires in 10 minutes.
+              Use the code below to log in to the SWA Admin Portal. This code expires in 5 minutes.
             </p>
 
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 24px;">

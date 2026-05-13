@@ -1,8 +1,8 @@
 # SWA Admin Portal (`swa-portal`) — Implementation Plan
 
-> **Status**: Phase 1 partial complete. Auth, scaffold, and base pages done. Office booking UI, namecard management, and member directory UI still needed.
+> **Status**: Phase 1 mostly complete. Auth, scaffold, office booking (with admin view), member directory, and namecard base UI done. Pagination, sync-website route, and domain setup still needed.
 > **Date planned**: 2026-05-11
-> **Last updated**: 2026-05-11
+> **Last updated**: 2026-05-13
 > **Repo**: `swa-portal` (separate from `swa2024` and `gtw2026`)
 > **Domain**: `admin.singaporewomenassociation.org` (pending domain transfer, 5-7 days)
 > **Dev URL**: `swa-portal.cjtay-4e0.workers.dev` (live, tested)
@@ -44,7 +44,9 @@ Three Workers, one Cloudflare account, shared free tier.
 | R2 bucket | `swa-portal-uploads` | — | Photo uploads, payment receipts |
 | Worker | `swa-portal` | — | Hono API + static assets |
 
-Secrets set: `OTP_SECRET`, `RESEND_API_KEY` (set interactively via `wrangler secret put`).
+Secrets set: `OTP_SECRET`, `SESSION_SECRET`, `RESEND_API_KEY` (set interactively via `wrangler secret put`).
+
+Additional env vars: `TURNSTILE_SECRET`, `TURNSTILE_SITE_KEY`, `SWA_ADMIN_DOMAIN`.
 
 ---
 
@@ -76,9 +78,9 @@ swa-portal/
 │   ├── pages/
 │   │   ├── login.astro          # OTP login page (standalone, no AdminLayout)
 │   │   ├── index.astro          # Dashboard / landing after login
-│   │   ├── office-booking.astro # Placeholder — calendar UI not yet built
-│   │   ├── namecards.astro     # Placeholder — management UI not yet built
-│   │   └── members.astro        # Placeholder — directory UI not yet built
+│   │   ├── office-booking.astro # Calendar UI + booking form + cancel flow
+│   │   ├── namecards.astro     # Basic namecard table with Sync button
+│   │   └── members.astro        # Searchable directory + edit modal + add member
 │   ├── scripts/
 │   │   └── auth-gate.ts         # Client-side auth gate (ported from GTW)
 │   ├── styles/
@@ -91,10 +93,11 @@ swa-portal/
 │       │   ├── send-otp.ts      # Generate + email OTP (D1 can_login check)
 │       │   ├── verify-otp.ts    # Verify OTP + create session cookie
 │       │   ├── session.ts       # Read current session from cookie
-│       │   ├── bookings.ts      # CRUD for office bookings
-│       │   └── members.ts       # Member API (CRUD, includes slug + can_login)
+│       │   ├── bookings.ts      # CRUD for office bookings + confirmation email
+│       │   └── members.ts       # Member API (CRUD, photo upload, slug, can_login)
 │       └── lib/
 │           ├── crypto.ts        # HMAC sign/verify, base64url (ported from GTW)
+│           ├── email-booking.ts # Booking confirmation email HTML (SWA branded)
 │           ├── email-otp.ts     # OTP email HTML builder (SWA purple branded)
 │           ├── error-handler.ts # Unified API error responses
 │           └── log-error.ts     # D1 error logging
@@ -118,11 +121,13 @@ Applied to production D1. Key differences from original plan:
 
 | Table | Notes |
 |---|---|
-| `members` | Added `slug TEXT UNIQUE` and `can_login INTEGER DEFAULT 0` columns beyond original spec |
-| `office_bookings` | As planned |
+| `members` | Added `slug TEXT UNIQUE`, `can_login INTEGER DEFAULT 0`, `has_namecard`, `show_on_website`, social links, address fields. No `whatsapp` field (removed). |
+| `office_bookings` | Simplified to `approved`/`cancelled` only (no `pending`/`rejected`). Added `created_by` column via migration 001. |
 | `membership_types` | As planned |
 | `memberships` | As planned |
 | `error_log` | New table not in original spec — logs API errors to D1 |
+
+Migration `001_add_created_by.sql` recreated `office_bookings` table to add `created_by` column and simplify status constraint.
 
 Indexes: `idx_members_slug` (UNIQUE), `idx_members_email`, `idx_members_can_login`.
 
@@ -130,20 +135,25 @@ Indexes: `idx_members_slug` (UNIQUE), `idx_members_email`, `idx_members_can_logi
 
 ### 1D. Auth System ✅
 
-Ported from GTW and adapted:
+Ported from GTW and adapted, with additional security hardening:
 
 | Component | Status | Changes from GTW |
 |---|---|---|
 | `crypto.ts` | ✅ Done | No changes needed |
-| `send-otp.ts` | ✅ Done | KV prefix `swa:`; D1 query `SELECT id FROM members WHERE email = ? AND can_login = 1` replaces KV allowlist for non-admin emails |
-| `verify-otp.ts` | ✅ Done | Cookie `swa_session`; D1 query for name lookup; role logic: `@singaporewomenassociation.org` → admin, otherwise → committee |
+| `send-otp.ts` | ✅ Done | KV prefix `swa:`; D1 query `SELECT id FROM members WHERE email = ? AND can_login = 1` replaces KV allowlist for non-admin emails; OTP rate limiting (5 requests per 15 min) |
+| `verify-otp.ts` | ✅ Done | Cookie `swa_session`; D1 query for name lookup; role logic: `@singaporewomenassociation.org` → admin, otherwise → committee; verify rate limiting (10 per IP, 5 per email per 15 min; 5 failures per OTP) |
 | `session.ts` | ✅ Done | Cookie name `swa_session` |
-| `middleware.ts` | ✅ Done | Adapted role tiers |
+| `middleware.ts` | ✅ Done | Adapted role tiers; admin-only and IT-admin-only path restrictions |
 | `auth-gate.ts` | ✅ Done | Cookie name `swa_session`, redirect paths updated |
 | `email-otp.ts` | ✅ Done | Rebranded: "SWA Portal" with purple theme |
 | `error-handler.ts` | ✅ Done | Ported |
 | `log-error.ts` | ✅ Done | New — logs errors to D1 `error_log` table |
-| `login.astro` | ✅ Done | Standalone layout (no AdminLayout — avoids infinite redirect) |
+| `login.astro` | ✅ Done | Standalone layout (no AdminLayout — avoids infinite redirect); Turnstile bot protection |
+
+**Security additions (post-initial auth):**
+- Turnstile bot protection on login form (`/api/turnstile-config` endpoint for site key)
+- OTP rate limiting: 5 requests per 15 min window
+- Verify rate limiting: 10 attempts per IP / 5 per email per 15 min; max 5 failures per OTP
 
 **Role tiers for portal:**
 
@@ -166,34 +176,44 @@ Ported from GTW and adapted:
 
 ### 1E. Dashboard + Layout ✅
 
-- `index.astro` — portal dashboard landing page
-- `AdminLayout.astro` — sidebar nav (Dashboard, Office Booking, Namecards, Members) with auth gate showing user name from session
-- `login.astro` — standalone layout (no AdminLayout to avoid redirect loop)
+- `index.astro` — portal dashboard landing page with cards linking to Office Booking, Namecards, Members
+- `AdminLayout.astro` — sidebar nav (Dashboard, Office Booking, Namecards, Members) with auth gate, SWA logo, user name from session
+- `login.astro` — standalone layout (no AdminLayout to avoid redirect loop), Turnstile-protected
 - All pages use SWA purple theme (`swa-1` through `swa-5`)
+- `admin.css` includes calendar styles, booking card styles, form styles, responsive layout
 
-### 1F. Office Booking — Partial
+### 1F. Office Booking — Complete
 
-- [x] `bookings.ts` API routes (CRUD: GET, POST, PATCH status) ✅
-- [ ] `office-booking.astro` — currently placeholder, needs calendar UI
-- [ ] Time-conflict validation in booking form
-- [ ] Admin approval/rejection interface
-- [ ] Resend email templates (booking confirmed, booking rejected)
+- [x] `bookings.ts` API routes (GET list, POST create, GET by id, PATCH cancel) ✅
+- [x] Time-conflict validation (server-side in API, client-side in form) ✅
+- [x] Booking confirmation email via Resend (`email-booking.ts`, SWA-branded HTML) ✅
+- [x] Calendar UI with month navigation, day detail panel, booking dots ✅
+- [x] New booking form with session prefill (name, email) ✅
+- [x] Cancel own booking flow ✅
+- [x] `created_by` tracking on bookings (migration 001) ✅
+- [x] Auto-approve all bookings (simplified from pending/approved/rejected to approved/cancelled) ✅
+- [x] Admin view: cancel any booking (admins bypass creator-only check) ✅
+- [x] Admin view: List View toggle with all bookings table, status filter, cancel controls ✅
+
+**Design decision (2026-05-12):** Simplified booking status from `pending`/`approved`/`rejected`/`cancelled` to just `approved`/`cancelled`. All bookings are auto-approved — no admin approval flow needed for a small office. Admins can still cancel any booking.
 
 ### 1G. Namecard Admin — Partial
 
 - [x] `members.ts` API routes (CRUD, includes `slug` and `can_login` fields) ✅
-- [ ] `namecards.astro` — currently placeholder, needs management UI
-- [ ] Photo upload endpoint (`POST /api/members/:id/photo` → R2)
-- [ ] "Sync to Website" button (GitHub Actions webhook trigger)
+- [x] Photo upload endpoint (`POST /api/members/:id/photo` → R2) ✅
+- [x] `namecards.astro` — basic namecard table with has_namecard/show_on_website badges, Sync button ✅
+- [ ] `/api/sync-website` route — button exists in UI but route not registered in `index.ts`, will 404
 - [ ] GitHub Actions workflow in swa2024 repo for rebuild trigger
 - [ ] Bulk-import remaining member data from markdown frontmatter into D1
 
-### 1H. Member Directory — Placeholder
+### 1H. Member Directory — Mostly Complete
 
-- [x] `members.astro` placeholder page exists
-- [ ] Searchable/filterable table view
-- [ ] Pagination
-- [ ] Quick edit modal for contact details
+- [x] `members.astro` — searchable/filterable table with search input + category filter ✅
+- [x] Quick edit modal for contact details (name, role, category, email, mobile, job_title, show_on_website, has_namecard) ✅
+- [x] Add Member button with POST API ✅
+- [x] Delete member (DELETE /api/members/:id) ✅
+- [ ] Pagination (currently loads all members — will break at scale)
+- [ ] Photo upload UI in edit modal (API exists at POST /api/members/:id/photo → R2, no form element)
 
 ### 1I. Domain + DNS — Blocked
 
@@ -330,9 +350,10 @@ As part of this plan, also migrate `swa-gtw` from `swa-gtw.cjtay-4e0.workers.dev
 | `src/worker/api/send-otp.ts` | Generate + email OTP (D1 can_login check) |
 | `src/worker/api/verify-otp.ts` | Verify OTP + create session cookie (D1 name lookup) |
 | `src/worker/api/session.ts` | Read current session from `swa_session` cookie |
-| `src/worker/api/members.ts` | Member CRUD API (includes `slug`, `can_login` fields) |
-| `src/worker/api/bookings.ts` | Office booking CRUD API |
+| `src/worker/api/members.ts` | Member CRUD API + photo upload (includes `slug`, `can_login` fields) |
+| `src/worker/api/bookings.ts` | Office booking CRUD API + confirmation email |
 | `src/worker/lib/crypto.ts` | HMAC sign/verify, base64url |
+| `src/worker/lib/email-booking.ts` | Booking confirmation email HTML (SWA branded) |
 | `src/worker/lib/email-otp.ts` | OTP email HTML builder (SWA purple themed) |
 | `src/worker/lib/error-handler.ts` | Unified API error responses |
 | `src/worker/lib/log-error.ts` | D1 error logging |
@@ -392,26 +413,31 @@ Use this section to track implementation progress across sessions. Update checkb
   - [x] SWA purple theme applied to all pages
 
 - [ ] **1D. Office booking**
-  - [x] Create `bookings.ts` API routes (CRUD: GET, POST, PATCH status)
-  - [ ] Create `office-booking.astro` with calendar view (currently placeholder)
-  - [ ] Create booking form with time-conflict validation
-  - [ ] Create admin approval/rejection interface
-  - [ ] Create Resend email templates (booking confirmed, booking rejected)
-  - [ ] Test full booking flow
+  - [x] Create `bookings.ts` API routes (GET list, POST create, GET by id, PATCH cancel)
+  - [x] Create `office-booking.astro` with calendar view + day detail panel
+  - [x] Create booking form with session prefill + time-conflict validation (client + server)
+  - [x] Create booking confirmation email (`email-booking.ts`, sent via Resend on creation)
+  - [x] Simplify status to auto-approve (approved/cancelled only — no admin approval flow)
+  - [x] Cancel own booking flow (PATCH /api/bookings/:id/cancel)
+  - [x] Add `created_by` tracking via migration 001
+  - [x] Admin view: allow admins to cancel any booking (backend updated — admins bypass creator check)
+  - [x] Admin view: list all bookings with management controls (List View toggle, status filter, cancel button)
 
 - [ ] **1E. Namecard admin**
   - [x] Create `members.ts` API routes (CRUD, includes `slug` and `can_login`)
-  - [ ] Create namecard management UI on `namecards.astro` (currently placeholder)
-  - [ ] Create member directory UI on `members.astro` (currently placeholder)
-  - [ ] Add photo upload endpoint (`POST /api/members/:id/photo` → R2)
-  - [ ] Add "Sync to Website" button (GitHub Actions webhook trigger)
+  - [x] Add photo upload endpoint (`POST /api/members/:id/photo` → R2)
+  - [x] Create basic namecard management UI on `namecards.astro` (table with badges, Sync button)
+  - [ ] Implement `/api/sync-website` route (button exists but route not registered — will 404)
   - [ ] Set up GitHub Actions workflow in swa2024 repo for rebuild trigger
   - [ ] Bulk-import remaining member data from markdown frontmatter into D1
 
 - [ ] **1F. Member directory**
-  - [ ] Create searchable/filterable table view
-  - [ ] Add pagination
-  - [ ] Add quick edit modal for contact details
+  - [x] Create searchable/filterable table view (search input + category filter)
+  - [x] Add quick edit modal for contact details
+  - [x] Add "Add Member" button with POST API
+  - [x] Add delete member (DELETE /api/members/:id)
+  - [ ] Add pagination (currently loads all members)
+  - [ ] Add photo upload UI in edit modal (API exists, no form element)
 
 - [ ] **1G. Domain + DNS**
   - [ ] Wait for domain transfer to complete (5-7 days)
@@ -488,6 +514,10 @@ Use this section to track implementation progress across sessions. Update checkb
 | 2026-05-11 | `RESEND_API_KEY` must be set interactively | Piping empty/placeholder values causes 502 from Resend API; must use `wrangler secret put` interactively |
 | 2026-05-11 | `error_log` table in D1 | Centralised error logging for API endpoints; helps debug production issues |
 | 2026-05-11 | SWA purple theme (not GTW gold) | Portal is SWA-branded; colours: `swa-1 #70308c`, `swa-2 #450a5e`, `swa-3 #874ba1`, `swa-4 #f3d2ff` |
+| 2026-05-12 | Simplify booking status to approved/cancelled only | Small office doesn't need approval flow; auto-approve simplifies UX and removes admin bottleneck; migration 001 recreated table with new CHECK constraint |
+| 2026-05-12 | Turnstile bot protection on login | Prevents automated OTP requests; site key served via `/api/turnstile-config` endpoint |
+| 2026-05-12 | OTP + verify rate limiting | 5 OTP requests per 15 min; 10 verify attempts per IP, 5 per email per 15 min; 5 failures per OTP max |
+| 2026-05-12 | Remove `whatsapp` field from members | Not needed for SWA use case; simplifies schema |
 
 ---
 
@@ -502,3 +532,6 @@ These are non-obvious issues encountered during implementation that would be eas
 5. **KV key prefix** — `swa:` (not `gtw:`)
 6. **`RESEND_API_KEY`** — Must be set via interactive `wrangler secret put`; piping values causes 502 errors
 7. **D1-based auth** — No KV allowlist needed; `send-otp.ts` queries `SELECT id FROM members WHERE email = ? AND can_login = 1` for non-admin emails; admin domain check remains in code
+8. **Booking status simplified** — Only `approved` and `cancelled` states exist (no `pending`/`rejected`); migration 001 recreated the table to enforce this
+9. **`/api/sync-website` not registered** — The namecard page's "Sync to Website" button calls this endpoint, but it's not in `src/worker/index.ts` route registration — will return 404
+10. **`SESSION_SECRET` required** — Not listed in original secrets section but is required by the auth system

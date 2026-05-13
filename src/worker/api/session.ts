@@ -22,7 +22,7 @@ export async function getSession(c: Context<{ Bindings: Env }>): Promise<Session
   const payload = cookieValue.substring(0, dotIndex);
   const signature = cookieValue.substring(dotIndex + 1);
 
-  const valid = await verifyHmac(payload, signature, c.env.OTP_SECRET);
+  const valid = await verifyHmac(payload, signature, c.env.SESSION_SECRET);
   if (!valid) return null;
 
   try {

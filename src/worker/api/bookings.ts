@@ -140,6 +140,7 @@ export async function handleBookingById(c: AppContext) {
 export async function handleBookingCancel(c: AppContext) {
   const id = c.req.param('id');
   const sessionEmail = c.get('sessionEmail') as string;
+  const sessionRole = c.get('sessionRole') as string;
 
   const booking = await c.env.DB.prepare('SELECT * FROM office_bookings WHERE id = ?').bind(id).first();
   if (!booking) {
@@ -151,8 +152,8 @@ export async function handleBookingCancel(c: AppContext) {
     return c.json({ success: false, message: 'Booking is already cancelled.' }, 400);
   }
 
-  if (b.created_by !== sessionEmail) {
-    return c.json({ success: false, message: 'Only the person who created this booking can cancel it.' }, 403);
+  if (b.created_by !== sessionEmail && sessionRole !== 'admin') {
+    return c.json({ success: false, message: 'Only the person who created this booking or an admin can cancel it.' }, 403);
   }
 
   await c.env.DB.prepare(

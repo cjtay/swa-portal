@@ -623,6 +623,13 @@ body {
   gap: 0.75rem;
 }
 
+/* All bookings list view */
+.all-bookings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .admin-sidebar {
@@ -635,5 +642,14 @@ body {
   }
   .admin-main {
     margin-left: 0;
+  }
+  .form-row, .form-row-3 {
+    grid-template-columns: 1fr;
+  }
+  .data-table {
+    font-size: 0.75rem;
+  }
+  .data-table th, .data-table td {
+    padding: 0.5rem 0.5rem;
   }
 }

@@ -4,6 +4,7 @@ export type Env = {
   SWA_SESSION: KVNamespace;
   ASSETS: Fetcher;
   OTP_SECRET: string;
+  SESSION_SECRET: string;
   RESEND_API_KEY: string;
   SWA_ADMIN_DOMAIN: string;
   TURNSTILE_SECRET: string;

@@ -38,7 +38,7 @@ See `docs/SWAPortal-Implementation-Plan.md` for full progress tracker.
 | R2 bucket | `swa-portal-uploads` | — |
 | Worker | `swa-portal` | — |
 
-Secrets: `OTP_SECRET`, `RESEND_API_KEY` (set interactively via `wrangler secret put`)
+Secrets: `OTP_SECRET`, `SESSION_SECRET`, `RESEND_API_KEY` (set interactively via `wrangler secret put`)
 
 ## Key Files
 
@@ -62,7 +62,7 @@ Secrets: `OTP_SECRET`, `RESEND_API_KEY` (set interactively via `wrangler secret 
 - **Deploy**: `npm run deploy`
 - **Dev URL**: `swa-portal.cjtay-4e0.workers.dev`
 - **Production**: `admin.singaporewomenassociation.org` (pending domain transfer)
-- **Secrets**: `npx wrangler secret put OTP_SECRET --name swa-portal` and `RESEND_API_KEY`
+- **Secrets**: `npx wrangler secret put OTP_SECRET --name swa-portal`, `SESSION_SECRET`, and `RESEND_API_KEY`
 
 ## Critical Gotchas
 1. **`workers_dev: true`** must be in `wrangler.jsonc` — without it, workers.dev returns error 1042

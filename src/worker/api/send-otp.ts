@@ -70,14 +70,16 @@ export async function handleSendOtp(c: Context<{ Bindings: Env }>) {
     return c.json({ success: false, error_code: 'TURNSTILE_MISSING', message: 'Security verification required.' }, 400);
   }
 
-  if (env.TURNSTILE_SECRET) {
-    const turnstileValid = await verifyTurnstile(turnstileToken, env.TURNSTILE_SECRET, ip);
-    if (!turnstileValid) {
-      return c.json(
-        { success: false, error_code: 'TURNSTILE_FAILED', message: 'Security verification failed. Please try again.' },
-        403,
-      );
-    }
+  if (!env.TURNSTILE_SECRET) {
+    return c.json({ success: false, error_code: 'CONFIG_ERROR', message: 'Server configuration error.' }, 500);
+  }
+
+  const turnstileValid = await verifyTurnstile(turnstileToken, env.TURNSTILE_SECRET, ip);
+  if (!turnstileValid) {
+    return c.json(
+      { success: false, error_code: 'TURNSTILE_FAILED', message: 'Security verification failed. Please try again.' },
+      403,
+    );
   }
 
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
@@ -90,16 +92,13 @@ export async function handleSendOtp(c: Context<{ Bindings: Env }>) {
   ).bind(email).first();
 
   if (!member) {
-    return c.json(
-      { success: false, error_code: 'NOT_REGISTERED', message: 'Not registered. Contact SWA admin for access.' },
-      403,
-    );
+    return c.json({ success: true, message: 'If this email is registered, a code has been sent.' });
   }
 
   const otp = generateOtp();
   const otpSignature = await signHmac(`${otp}:${email.toLowerCase()}`, env.OTP_SECRET);
 
-  await env.SWA_SESSION.put(`swa:otp:${email}`, JSON.stringify({ otp, sig: otpSignature }), { expirationTtl: OTP_TTL_SECONDS });
+  await env.SWA_SESSION.put(`swa:otp:${email}`, JSON.stringify({ sig: otpSignature }), { expirationTtl: OTP_TTL_SECONDS });
 
   const emailHtml = buildOtpEmail(otp);
 
@@ -123,7 +122,7 @@ export async function handleSendOtp(c: Context<{ Bindings: Env }>) {
       throw new Error(`Resend returned ${resendRes.status}: ${errText}`);
     }
 
-    return c.json({ success: true, message: 'OTP sent.' });
+    return c.json({ success: true, message: 'If this email is registered, a code has been sent.' });
   } catch (err) {
     return handleApiError(c, endpoint, err, 'Could not send OTP email. Please try again.', { error_type: 'RESEND_OTP', http_status: 502 });
   }

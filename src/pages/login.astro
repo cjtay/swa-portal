@@ -36,10 +36,11 @@ import '../styles/admin.css';
           <button class="btn btn-primary" id="btn-send-otp" style="width:100%;" disabled>Send Login Code</button>
           <div id="turnstile-container" style="display:flex;justify-content:center;margin-top:0.75rem;"></div>
           <p id="email-error" class="form-error" style="display:none;"></p>
+          <p style="font-size:0.7rem;color:var(--text-muted);margin-top:0.75rem;text-align:center;">Only members with login access can receive a code. If you don't receive one, contact an admin.</p>
         </div>
 
         <div id="step-otp" style="display:none;">
-          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:1.5rem;">A 6-digit code has been sent to <strong id="otp-email-display"></strong>. It expires in 10 minutes.</p>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:1.5rem;">A 6-digit code has been sent to <strong id="otp-email-display"></strong>. It expires in 5 minutes.</p>
           <div class="form-group">
             <label class="form-label" for="otp-input">Enter Code</label>
             <input type="text" id="otp-input" class="form-input" maxlength="6" inputmode="numeric" pattern="\d{6}" placeholder="000000" autocomplete="one-time-code" style="font-family:'Courier New',monospace;font-size:1.4rem;letter-spacing:0.5em;text-align:center;" />
