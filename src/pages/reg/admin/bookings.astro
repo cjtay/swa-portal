@@ -167,16 +167,12 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 
   async function loadTableConfig() {
     try {
-      const res = await fetch('/api/reg/admin/bookings');
-      if (!res.ok) return;
+      const res = await fetch('/api/reg/tables');
+      const data = await res.json();
+      if (data.success && data.tables) {
+        tables = data.tables;
+      }
     } catch {}
-
-    tables = [
-      { id: '01', label: 'Table 1', ticketPrefix: '01', capacity: 10, isVIP: false },
-      { id: '02', label: 'Table 2', ticketPrefix: '02', capacity: 10, isVIP: false },
-      { id: 'VIP-1', label: 'VIP-1', ticketPrefix: 'V1', capacity: 10, isVIP: true },
-      { id: 'VIP-2', label: 'VIP-2', ticketPrefix: 'V2', capacity: 10, isVIP: true },
-    ];
 
     tableFilter.innerHTML = '<option value="">All tables</option>';
     tableSelect.innerHTML = '<option value="">Select table</option>';

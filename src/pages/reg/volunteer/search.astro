@@ -125,13 +125,14 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     }
   };
 
-  function loadTableConfig() {
-    tables = [
-      { id: '01', label: 'Table 1', isVIP: false },
-      { id: '02', label: 'Table 2', isVIP: false },
-      { id: 'VIP-1', label: 'VIP-1', isVIP: true },
-      { id: 'VIP-2', label: 'VIP-2', isVIP: true },
-    ];
+  async function loadTableConfig() {
+    try {
+      const res = await fetch('/api/reg/tables');
+      const data = await res.json();
+      if (data.success && data.tables) {
+        tables = data.tables;
+      }
+    } catch {}
     tableFilter.innerHTML = '<option value="">All tables</option>';
     tables.forEach(t => {
       tableFilter.innerHTML += `<option value="${t.id}">${t.label}${t.isVIP ? ' (VIP)' : ''}</option>`;
@@ -139,7 +140,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   }
 
   requireRegVolunteer(async () => {
-    loadTableConfig();
+    await loadTableConfig();
     searchInput.focus();
   });
 </script>

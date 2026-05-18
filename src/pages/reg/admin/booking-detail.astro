@@ -336,12 +336,13 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   });
 
   async function loadTableConfig() {
-    tables = [
-      { id: '01', label: 'Table 1', ticketPrefix: '01', capacity: 10, isVIP: false },
-      { id: '02', label: 'Table 2', ticketPrefix: '02', capacity: 10, isVIP: false },
-      { id: 'VIP-1', label: 'VIP-1', ticketPrefix: 'V1', capacity: 10, isVIP: true },
-      { id: 'VIP-2', label: 'VIP-2', ticketPrefix: 'V2', capacity: 10, isVIP: true },
-    ];
+    try {
+      const res = await fetch('/api/reg/tables');
+      const data = await res.json();
+      if (data.success && data.tables) {
+        tables = data.tables;
+      }
+    } catch {}
 
     newGuestTable.innerHTML = '';
     tables.forEach(t => {

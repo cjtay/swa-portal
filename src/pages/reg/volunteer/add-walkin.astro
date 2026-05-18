@@ -39,16 +39,22 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   const errEl = document.getElementById('form-error')!;
   const tableSelect = document.getElementById('table-select') as HTMLSelectElement;
 
-  const tables = [
-    { id: '01', label: 'Table 1', isVIP: false },
-    { id: '02', label: 'Table 2', isVIP: false },
-    { id: 'VIP-1', label: 'VIP-1', isVIP: true },
-    { id: 'VIP-2', label: 'VIP-2', isVIP: true },
-  ];
+  let tables: { id: string; label: string; isVIP: boolean }[] = [];
 
-  tables.forEach(t => {
-    tableSelect.innerHTML += `<option value="${t.id}">${t.label}${t.isVIP ? ' (VIP)' : ''}</option>`;
-  });
+  async function loadTableConfig() {
+    try {
+      const res = await fetch('/api/reg/tables');
+      const data = await res.json();
+      if (data.success && data.tables) {
+        tables = data.tables;
+      }
+    } catch {}
+
+    tableSelect.innerHTML = '<option value="">Select table</option>';
+    tables.forEach(t => {
+      tableSelect.innerHTML += `<option value="${t.id}">${t.label}${t.isVIP ? ' (VIP)' : ''}</option>`;
+    });
+  }
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -85,5 +91,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     }
   });
 
-  requireRegVolunteer();
+  requireRegVolunteer(async () => {
+    await loadTableConfig();
+  });
 </script>
