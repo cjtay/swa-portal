@@ -18,6 +18,18 @@ The SWA Admin Portal (`swa-portal`) is an internal management tool for the Singa
 | Admin | SWA board members and senior committee with member management privileges |
 | Committee | SWA committee members with read access and limited write access |
 
+### Registration Roles
+
+Registration access is controlled by a separate `reg_role` column on the `members` table, independent of the portal `category`/`role`.
+
+| reg_role | Description |
+|----------|-------------|
+| `reg_admin` | Full registration management: create bookings, edit guests, send magic links, export data, check-in guests |
+| `reg_volunteer` | Event-night operations only: search guests, mark arrived, add walk-ins |
+| `NULL` | No registration access (sidebar Registration section hidden or limited to dashboard only) |
+
+Portal `admin` role always has access to all registration features, regardless of `reg_role`.
+
 ### Architecture Summary
 
 - **Frontend**: Astro static build (`output: 'static'`)
@@ -47,6 +59,8 @@ else if (member.category = 'admin') → role = 'admin', is_it_admin = false
 else → role = 'committee', is_it_admin = false
 ```
 
+**reg_role assignment**: Read from `member.reg_role` column. Values: `reg_admin`, `reg_volunteer`, or NULL. Added to session cookie as `regRole`.
+
 **Member categories in D1**:
 | Category | Default can_login | Portal Access |
 |----------|-------------------|---------------|
@@ -65,6 +79,7 @@ The `swa_session` cookie contains a HMAC-signed payload:
   "email": "user@example.com",
   "name": "Full Name",
   "role": "admin" | "committee",
+  "regRole": "reg_admin" | "reg_volunteer" | null,
   "exp": 1715600000000
 }
 ```
@@ -76,6 +91,7 @@ The `/api/session` endpoint returns:
   "email": "user@example.com",
   "name": "Full Name",
   "role": "admin",
+  "regRole": "reg_admin",
   "is_admin": true,
   "is_it_admin": false
 }
@@ -100,6 +116,15 @@ The `/api/session` endpoint returns:
 | **Namecards — View list** | Yes | Yes | Yes |
 | **Namecards — Edit** | No | Yes | Yes |
 | **Website Sync** | No | No | Yes |
+| **Registration — Manage bookings** | No (`reg_admin` only) | Yes | Yes |
+| **Registration — Export CSV** | No (`reg_admin` only) | Yes | Yes |
+| **Registration — Send magic links** | No (`reg_admin` only) | Yes | Yes |
+| **Registration — Check-in guests** | No (`reg_volunteer` only) | Yes | Yes |
+| **Registration — Add walk-ins** | No (`reg_volunteer` only) | Yes | Yes |
+| **Registration — View dashboard** | No (any auth) | Yes | Yes |
+| **Registration — Buyer form** | Public (token-gated) | Public (token-gated) | Public (token-gated) |
+
+> **Note**: Registration access is controlled by `reg_role` on the `members` table, independent of the portal `category`/`role`. A committee member with `reg_role='reg_volunteer'` can check in guests. A committee member with `reg_role='reg_admin'` can manage bookings. Portal `admin` role always has full registration access regardless of `reg_role`.
 
 ### 3.2 API Access Matrix
 
@@ -122,7 +147,28 @@ The `/api/session` endpoint returns:
 | `POST /api/members/:id/photo` | POST | No | Yes | Yes |
 | `POST /api/sync-website` | POST | No | No | Yes |
 
-> **Own only** for booking cancel: the backend checks `created_by === sessionEmail`.
+### 3.3 Registration API Access Matrix
+
+Registration endpoints use a separate auth layer based on `reg_role` (and `role` for portal admins).
+
+| Endpoint | Method | Auth | Purpose |
+|----------|--------|------|---------|
+| `GET /api/reg/admin/bookings` | GET | `role=admin` or `reg_role=reg_admin` | List all bookings |
+| `POST /api/reg/admin/bookings` | POST | `role=admin` or `reg_role=reg_admin` | Create booking + guest slots |
+| `GET /api/reg/admin/bookings/:id` | GET | `role=admin` or `reg_role=reg_admin` | Booking detail with guests |
+| `POST /api/reg/admin/guests` | POST | `role=admin` or `reg_role=reg_admin` | Add guest to booking |
+| `PATCH /api/reg/admin/guests/:id` | PATCH | `role=admin` or `reg_role=reg_admin` | Edit guest name/notes |
+| `DELETE /api/reg/admin/guests/:id` | DELETE | `role=admin` or `reg_role=reg_admin` | Remove guest |
+| `GET /api/reg/admin/export` | GET | `role=admin` or `reg_role=reg_admin` | CSV export of all guests |
+| `POST /api/reg/admin/send-magic-link/:bookingId` | POST | `role=admin` or `reg_role=reg_admin` | Generate token + send email |
+| `GET /api/reg/volunteer/search` | GET | `role=admin` or `reg_role=reg_admin` or `reg_role=reg_volunteer` | Search guests |
+| `POST /api/reg/volunteer/arrive/:id` | POST | `role=admin` or `reg_role=reg_admin` or `reg_role=reg_volunteer` | Mark guest arrived |
+| `POST /api/reg/volunteer/walkin` | POST | `role=admin` or `reg_role=reg_admin` or `reg_role=reg_volunteer` | Add walk-in + mark arrived |
+| `GET /api/reg/dashboard/stats` | GET | Any valid session | Dashboard arrival stats |
+| `GET /api/reg/buyer` | GET | Token only (no session) | Load buyer form data |
+| `PATCH /api/reg/buyer/guests/:id` | PATCH | Token only (no session) | Update guest name via buyer form |
+
+> **Token auth**: Buyer endpoints bypass session auth entirely. A valid `reg_tokens` row is required, and the form must not be past the configured cutoff time.
 
 ---
 
@@ -149,7 +195,19 @@ The `/api/session` endpoint returns:
 | `POST /api/verify-otp` | Per OTP | OTP lifetime | 5 failures |
 | Authenticated writes* | Per user per endpoint | 15 min | 10 |
 
-> *Authenticated writes include: `POST /api/bookings`, `PATCH /api/bookings/:id/cancel`, `POST /api/members`, `PATCH /api/members/:id`, `DELETE /api/members/:id`, `POST /api/members/:id/photo`, `POST /api/sync-website`.
+> *Authenticated writes include: `POST /api/bookings`, `PATCH /api/bookings/:id/cancel`, `POST /api/members`, `PATCH /api/members/:id`, `DELETE /api/members/:id`, `POST /api/members/:id/photo`, `POST /api/sync-website`, `POST /api/reg/admin/bookings`, `POST /api/reg/admin/guests`, `PATCH /api/reg/admin/guests/:id`, `DELETE /api/reg/admin/guests/:id`, `PATCH /api/reg/buyer/guests/:id`, `POST /api/reg/volunteer/arrive/:id`, `POST /api/reg/volunteer/walkin`.
+
+### 4.3 Magic Link Auth
+
+Buyer-facing endpoints (`/api/reg/buyer/*`) bypass session auth entirely. They use a token-based system:
+
+1. Admin clicks "Send Magic Link" or "Copy Link" on booking detail page
+2. System generates a random 32-char hex token, stores in `reg_tokens` table with expiry = `formCutoffTime` from KV
+3. Email sent to buyer via Resend with link: `/reg/buyer/?token={token}`
+4. Buyer opens link. Frontend calls `GET /api/reg/buyer` with `?token={token}` in query string
+5. Backend validates token exists and has not expired
+6. Buyer submits guest names via `PATCH /api/reg/buyer/guests/:id` with token in query string
+7. After `formCutoffTime`, all buyer endpoints return `{ closed: true, reason: 'cutoff' }`
 
 ---
 
@@ -230,6 +288,59 @@ The `/api/session` endpoint returns:
 
 **Current status**: Not yet implemented (returns 404). When implemented, it will likely trigger a GitHub Actions workflow.
 
+### 5.6 Gala Registration — Admin (`/reg/admin`)
+
+**Visibility**: `role=admin` or `reg_role=reg_admin`
+
+**Features**:
+- **Bookings list** (`/reg/admin/bookings`): Table of all bookings with buyer name, table, pax, named/unnamed guest count (colour-coded). Search by buyer name, filter by table.
+- **Booking detail** (`/reg/admin/booking-detail?id=...`): Guest rows for a single booking. Add guest, edit guest name/notes, delete guest. "Send Magic Link" button (sends email via Resend). "Copy Link" button (copies buyer form URL to clipboard).
+- **CSV export**: Downloads all guests as CSV. Columns: `ticket_code,guest_name,table_label,is_buyer,is_walk_in,booking_ref,buyer_name,buyer_email,arrived_at,notes`.
+
+### 5.7 Gala Registration — Volunteer (`/reg/volunteer`)
+
+**Visibility**: `role=admin` or `reg_role=reg_admin` or `reg_role=reg_volunteer`
+
+**Features**:
+- **Search** (`/reg/volunteer/search`): Phone-optimised page with large search input (autofocus). Search by guest name or ticket code. Table filter dropdown.
+- **Mark arrived**: One-tap "Mark Arrived" button per result. Shows grey "Arrived at HH:mm" if already checked in.
+- **Walk-in** (`/reg/volunteer/add-walkin`): Minimal form to add a guest at the door. Name (required), table (required), notes (optional). Walk-in guests have `booking_id = NULL` and are immediately marked arrived.
+
+### 5.8 Gala Registration — Dashboard (`/reg/dashboard`)
+
+**Visibility**: Any authenticated user
+
+**Features**:
+- Stats strip: Total Expected / Total Arrived / Arrival Percentage
+- VIP tables section (shown above general tables)
+- Per-table row with label, arrived/expected, visual fill bar
+- Recent arrivals panel (last 10)
+- Auto-refresh every 15 seconds via client-side polling
+
+### 5.9 Gala Registration — Buyer Form (`/reg/buyer`)
+
+**Visibility**: Public (token-gated, no session required)
+
+**Features**:
+- Access via magic link: `/reg/buyer/?token=xxx`
+- Shows all guest slots for the buyer's booking
+- Buyer can fill in guest names and dietary/accessibility notes per slot
+- Each slot saves individually
+- Saved slots display ticket code (e.g. "Ticket reference: 04-03")
+- Form closes at configured cutoff time
+- Invalid or expired tokens show a closed/error page
+- No sidebar, no auth gate (public page with SWA branding)
+
+### 5.10 Gala Registration — Magic Links
+
+**How it works**:
+- Admin clicks "Send Magic Link" on booking detail page
+- System generates a random token, stores in `reg_tokens` table with expiry set to `formCutoffTime` from KV config
+- Email sent via Resend with unique link to buyer form
+- Admin can also click "Copy Link" to copy the URL for manual sharing (WhatsApp etc)
+- Tokens are per-booking. One booking = one token.
+- After cutoff time, the buyer form shows a "registration closed" message
+
 ---
 
 ## 6. UI Visibility Rules
@@ -270,6 +381,64 @@ The `/api/session` endpoint returns:
 | Cancel button (day detail) | `created_by === sessionEmail \|\| is_admin` |
 | Cancel button (list view) | `created_by === sessionEmail \|\| is_admin` |
 
+### 6.5 Registration Section (Sidebar)
+
+The Registration section is visible to any user with `reg_role` set, or `role=admin`. Items within are gated by reg_role.
+
+| Sidebar Item | Visible When |
+|-------------|-------------|
+| Bookings | `role=admin` or `regRole=reg_admin` |
+| Check-in (Search) | `role=admin` or `regRole=reg_admin` or `regRole=reg_volunteer` |
+| Arrivals Dashboard | Any valid session (including `reg_volunteer`) |
+
+Users without `reg_role` and without `role=admin` see only the dashboard link (not Bookings or Check-in).
+
+### 6.6 Registration — Bookings Page (`/reg/admin/bookings`)
+
+| Element | Visible When |
+|---------|-------------|
+| Booking table | `role=admin` or `regRole=reg_admin` |
+| Add Booking button | `role=admin` or `regRole=reg_admin` |
+| Download CSV button | `role=admin` or `regRole=reg_admin` |
+| Search input | Always (within reg admin) |
+| Table filter | Always (within reg admin) |
+| Named/unnamed count badges | Always (grey=0 named, amber=partial, green=all named) |
+
+### 6.7 Registration — Booking Detail (`/reg/admin/booking-detail`)
+
+| Element | Visible When |
+|---------|-------------|
+| Guest list | `role=admin` or `regRole=reg_admin` |
+| Add Guest inline form | `role=admin` or `regRole=reg_admin` |
+| Edit guest name | `role=admin` or `regRole=reg_admin` |
+| Delete guest | `role=admin` or `regRole=reg_admin` |
+| Send Magic Link button | Booking has a `buyer_email` |
+| Copy Link button | Always (generates/retrieves token) |
+| Staff note highlight | When guest has `notes` (amber background) |
+| Arrived status | "Arrived at HH:mm" or "Not yet" |
+
+### 6.8 Registration — Volunteer Search (`/reg/volunteer/search`)
+
+| Element | Visible When |
+|---------|-------------|
+| Search input (autofocus) | `role=admin` or `regRole=reg_admin` or `regRole=reg_volunteer` |
+| Table filter dropdown | Always (within reg volunteer/admin) |
+| Mark Arrived button | Guest not yet arrived |
+| "Arrived at HH:mm" label | Guest already arrived |
+| Add Walk-in Guest button | Always |
+| Staff note banner | When guest has `notes` |
+
+### 6.9 Registration — Buyer Form (`/reg/buyer`)
+
+| Element | Visible When |
+|---------|-------------|
+| Buyer form (all elements) | Valid, non-expired token AND before form cutoff time |
+| "Registration closed" message | Token valid but past cutoff time |
+| "Invalid link" message | Token invalid or expired |
+| Save button per guest slot | Always (within form) |
+| Ticket code display | After guest name is saved |
+| Edit button | On previously saved guest names |
+
 ---
 
 ## 7. Database Schema Reference
@@ -290,6 +459,7 @@ The `/api/session` endpoint returns:
 | `description` | TEXT | — | |
 | `category` | TEXT | `'committee'` | `admin`, `committee`, `member`, `volunteer` |
 | `can_login` | INTEGER | `0` | `1` = can log in |
+| `reg_role` | TEXT | NULL | `reg_admin`, `reg_volunteer`, or NULL |
 | `show_on_website` | INTEGER | `1` | `1` = visible on public site |
 | `has_namecard` | INTEGER | `0` | `1` = has namecard data |
 | `address_line1` | TEXT | — | |
@@ -322,6 +492,67 @@ The `/api/session` endpoint returns:
 | `created_by` | TEXT | — | Session email |
 | `created_at` | TEXT | `datetime('now')` | |
 | `updated_at` | TEXT | `datetime('now')` | |
+
+### 7.3 `reg_bookings` Table
+
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| `id` | TEXT | — | PK, UUID |
+| `booking_ref` | TEXT | NOT NULL | UNIQUE, human-readable (e.g. `REG-ABC12`) |
+| `buyer_name` | TEXT | NOT NULL | Person who made the reservation |
+| `buyer_email` | TEXT | — | Buyer email for magic link |
+| `buyer_phone` | TEXT | — | |
+| `table_id` | TEXT | NOT NULL | Must match a table ID in KV config |
+| `pax` | INTEGER | NOT NULL DEFAULT 1 | Total seats reserved |
+| `notes` | TEXT | — | Staff-only operational notes |
+| `created_by` | TEXT | NOT NULL | Session email of admin who created |
+| `created_at` | TEXT | `datetime('now')` | |
+| `updated_at` | TEXT | `datetime('now')` | |
+
+### 7.4 `reg_guests` Table
+
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| `id` | TEXT | — | PK, UUID |
+| `booking_id` | TEXT | — | FK to `reg_bookings`, NULL for walk-ins |
+| `table_id` | TEXT | NOT NULL | Must match a table ID in KV config |
+| `seat_counter` | INTEGER | NOT NULL | Seat position within table |
+| `ticket_code` | TEXT | NOT NULL | UNIQUE, format `{prefix}-{counter}` e.g. `04-07`, `V1-03` |
+| `guest_name` | TEXT | — | NULL until filled by buyer or admin |
+| `is_buyer` | INTEGER | NOT NULL DEFAULT 0 | 1 for the booking buyer |
+| `is_walk_in` | INTEGER | NOT NULL DEFAULT 0 | 1 if added at the door |
+| `notes` | TEXT | — | Staff-only (dietary, accessibility) |
+| `arrived_at` | TEXT | — | Set when volunteer marks arrival |
+| `arrived_by` | TEXT | — | Session email of volunteer |
+| `created_at` | TEXT | `datetime('now')` | |
+| `updated_at` | TEXT | `datetime('now')` | |
+
+### 7.5 `reg_tokens` Table
+
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| `token` | TEXT | — | PK, 32-char hex random string |
+| `booking_id` | TEXT | NOT NULL | FK to `reg_bookings` |
+| `created_at` | TEXT | `datetime('now')` | |
+| `expires_at` | TEXT | NOT NULL | Set to `formCutoffTime` from KV config |
+
+### 7.6 KV Configuration
+
+**Key**: `swa:reg_tables_config`
+
+```json
+{
+  "formCutoffTime": "2026-06-20T18:00:00+08:00",
+  "tables": [
+    { "id": "01", "label": "Table 1", "ticketPrefix": "01", "capacity": 10, "isVIP": false },
+    { "id": "02", "label": "Table 2", "ticketPrefix": "02", "capacity": 10, "isVIP": false },
+    { "id": "VIP-1", "label": "VIP-1", "ticketPrefix": "V1", "capacity": 10, "isVIP": true },
+    { "id": "VIP-2", "label": "VIP-2", "ticketPrefix": "V2", "capacity": 10, "isVIP": true }
+  ]
+}
+```
+
+Table config is always read from KV, never hardcoded. The `formCutoffTime` determines when the buyer form closes and when magic-link tokens expire.
 
 ---
 
@@ -376,16 +607,38 @@ When adding new features, use this guidance:
 | `TURNSTILE_FAILED` | 403 | Turnstile verification failed |
 | `VALIDATION_ERROR` | 400 | Invalid request body |
 | `CONFIG_ERROR` | 500 | Missing server config |
+| `TOKEN_INVALID` | 401 | Magic link token invalid or expired |
+| `FORM_CLOSED` | 403 | Buyer form past cutoff time |
 
 ---
 
 ## 10. Key Files Reference
+
+### Core Portal
 
 | File | Purpose |
 |------|---------|
 | `src/worker/middleware.ts` | Auth + access control + rate limiting |
 | `src/worker/lib/rate-limit.ts` | General-purpose authenticated endpoint rate limiting |
 | `src/constants/portal.ts` | `IT_ADMIN_EMAILS`, session config, rate limit constants |
-| `src/worker/api/verify-otp.ts` | Role assignment at login |
-| `src/worker/api/session.ts` | Session reading, returns `is_admin` and `is_it_admin` |
-| `src/scripts/auth-gate.ts` | Client-side auth gate, supports `requireAdmin` and `requireItAdmin` |
+| `src/worker/api/verify-otp.ts` | Role assignment at login (includes `regRole`) |
+| `src/worker/api/session.ts` | Session reading, returns `is_admin`, `is_it_admin`, `regRole` |
+| `src/scripts/auth-gate.ts` | Client-side auth gate, supports `requireAdmin`, `requireItAdmin`, `requireRegAdmin`, `requireRegVolunteer` |
+| `src/layouts/AdminLayout.astro` | Sidebar nav with role-gated Registration section |
+
+### Registration Module
+
+| File | Purpose |
+|------|---------|
+| `src/worker/lib/reg/tables.ts` | KV table config loader and helpers |
+| `src/worker/lib/reg/tickets.ts` | Ticket code generation with UNIQUE retry |
+| `src/worker/lib/reg/guests.ts` | Guest CRUD operations (D1) |
+| `src/worker/lib/reg/tokens.ts` | Magic-link token create and validate |
+| `src/worker/lib/reg/email.ts` | Magic-link email via Resend |
+| `src/worker/api/reg/` | All registration API handlers |
+| `src/pages/reg/admin/` | Admin pages (bookings, booking detail) |
+| `src/pages/reg/volunteer/` | Volunteer pages (search, add walk-in) |
+| `src/pages/reg/buyer/` | Public buyer form (token-gated) |
+| `src/pages/reg/dashboard.astro` | Live arrival dashboard |
+| `migrations/002_registration.sql` | D1 migration: reg_bookings, reg_guests, reg_tokens, reg_role column |
+| `scripts/seed-test-data.sql` | Test data for manual testing |
