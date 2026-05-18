@@ -50,13 +50,13 @@ npx wrangler d1 execute swa-portal --remote --command="UPDATE members SET reg_ro
 Run the interactive script. It fetches the current config from production, lets you add/edit/remove tables and change the cutoff time, then pushes the update for you:
 
 ```bash
-node scripts/update-tables.js
+node scripts/update-tables.cjs
 ```
 
 To preview changes without pushing:
 
 ```bash
-node scripts/update-tables.js --dry-run
+node scripts/update-tables.cjs --dry-run
 ```
 
 The script will:
