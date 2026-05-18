@@ -9,6 +9,7 @@ import { handleMembers, handleMemberById, handleMemberPhoto } from './api/member
 import { handleAdminBookings, handleAdminBookingById } from './api/reg/admin-bookings';
 import { handleAdminGuests, handleAdminGuestById } from './api/reg/admin-guests';
 import { handleAdminExport } from './api/reg/admin-export';
+import { handleAdminGuestList } from './api/reg/admin-guest-list';
 import { handleVolunteerSearch, handleVolunteerArrive, handleVolunteerWalkin } from './api/reg/volunteer-search';
 import { handleRegDashboard } from './api/reg/reg-dashboard';
 import { handleBuyerForm, handleBuyerUpdateGuest } from './api/reg/buyer-form';
@@ -57,6 +58,7 @@ app.post('/api/reg/admin/guests', handleAdminGuests);
 app.patch('/api/reg/admin/guests/:id', handleAdminGuestById);
 app.delete('/api/reg/admin/guests/:id', handleAdminGuestById);
 app.get('/api/reg/admin/export', handleAdminExport);
+app.get('/api/reg/admin/guest-list', handleAdminGuestList);
 
 // Registration — Volunteer
 app.get('/api/reg/volunteer/search', handleVolunteerSearch);

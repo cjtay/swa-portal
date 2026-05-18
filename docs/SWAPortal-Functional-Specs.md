@@ -160,6 +160,7 @@ Registration endpoints use a separate auth layer based on `reg_role` (and `role`
 | `PATCH /api/reg/admin/guests/:id` | PATCH | `role=admin` or `reg_role=reg_admin` | Edit guest name/notes |
 | `DELETE /api/reg/admin/guests/:id` | DELETE | `role=admin` or `reg_role=reg_admin` | Remove guest |
 | `GET /api/reg/admin/export` | GET | `role=admin` or `reg_role=reg_admin` | CSV export of all guests |
+| `GET /api/reg/admin/guest-list` | GET | `role=admin` or `reg_role=reg_admin` | JSON guest list grouped by table (for print) |
 | `POST /api/reg/admin/send-magic-link/:bookingId` | POST | `role=admin` or `reg_role=reg_admin` | Generate token + send email |
 | `GET /api/reg/volunteer/search` | GET | `role=admin` or `reg_role=reg_admin` or `reg_role=reg_volunteer` | Search guests |
 | `POST /api/reg/volunteer/arrive/:id` | POST | `role=admin` or `reg_role=reg_admin` or `reg_role=reg_volunteer` | Mark guest arrived |
@@ -296,6 +297,7 @@ Buyer-facing endpoints (`/api/reg/buyer/*`) bypass session auth entirely. They u
 - **Bookings list** (`/reg/admin/bookings`): Table of all bookings with buyer name, table, pax, named/unnamed guest count (colour-coded). Search by buyer name, filter by table.
 - **Booking detail** (`/reg/admin/booking-detail?id=...`): Guest rows for a single booking. Add guest, edit guest name/notes, delete guest. "Send Magic Link" button (sends email via Resend). "Copy Link" button (copies buyer form URL to clipboard).
 - **CSV export**: Downloads all guests as CSV. Columns: `ticket_code,guest_name,table_label,is_buyer,is_walk_in,booking_ref,buyer_name,buyer_email,arrived_at,notes`.
+- **Print guest list**: Generates a print-optimised guest list (A4 landscape) with columns: Ticket Code, Guest Name, Flags (Buyer/Walk-in), Arrived (tick if arrived), Signature (blank), Remarks (blank). Grouped by table with continuous flow. If printed before the event, all arrival columns are blank (clean checklist). If printed during the event, arrived guests show a tick mark. Business continuity fallback: download CSV or print this list for manual check-in at reception.
 
 ### 5.7 Gala Registration — Volunteer (`/reg/volunteer`)
 
@@ -400,6 +402,7 @@ Users without `reg_role` and without `role=admin` see only the dashboard link (n
 | Booking table | `role=admin` or `regRole=reg_admin` |
 | Add Booking button | `role=admin` or `regRole=reg_admin` |
 | Download CSV button | `role=admin` or `regRole=reg_admin` |
+| Print Guest List button | `role=admin` or `regRole=reg_admin` |
 | Search input | Always (within reg admin) |
 | Table filter | Always (within reg admin) |
 | Named/unnamed count badges | Always (grey=0 named, amber=partial, green=all named) |
@@ -636,6 +639,7 @@ When adding new features, use this guidance:
 | `src/worker/lib/reg/tokens.ts` | Magic-link token create and validate |
 | `src/worker/lib/reg/email.ts` | Magic-link email via Resend |
 | `src/worker/api/reg/` | All registration API handlers |
+| `src/worker/api/reg/admin-guest-list.ts` | JSON guest list for print (grouped by table) |
 | `src/pages/reg/admin/` | Admin pages (bookings, booking detail) |
 | `src/pages/reg/volunteer/` | Volunteer pages (search, add walk-in) |
 | `src/pages/reg/buyer/` | Public buyer form (token-gated) |
