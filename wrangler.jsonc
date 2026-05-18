@@ -32,7 +32,7 @@
   ],
   "workers_dev": true,
   "vars": {
-    "SWA_ADMIN_DOMAIN": "singaporewomenassociation.org",
+    "SWA_ADMIN_DOMAIN": "admin.singaporewomenassociation.org",
     "TURNSTILE_SITE_KEY": "0x4AAAAAADNT4-Bm-rzslbrc"
   }
 }
