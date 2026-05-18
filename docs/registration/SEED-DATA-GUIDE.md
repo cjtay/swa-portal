@@ -47,29 +47,22 @@ npx wrangler d1 execute swa-portal --remote --command="UPDATE members SET reg_ro
 
 ## Update Table Configuration
 
-Run the interactive script. It fetches the current config from production, lets you add/edit/remove tables and change the cutoff time, then pushes the update for you:
+Open `scripts/table-config-builder.html` in your browser. It starts with the current table layout pre-filled. Add, edit, or remove tables. The JSON updates live. Click Copy, then paste into Cloudflare KV.
 
-```bash
-node scripts/update-tables.cjs
-```
+### Step by step
 
-To preview changes without pushing:
-
-```bash
-node scripts/update-tables.cjs --dry-run
-```
-
-The script will:
-1. Show you the current tables and cutoff time
-2. Let you add, edit, or remove tables
-3. Auto-generate ticket prefixes (e.g. `VIP-3` becomes `V3`)
-4. Validate the config before pushing
-5. Show you the final JSON and ask you to confirm
-6. Push to production KV
+1. Open `scripts/table-config-builder.html` in a browser (just double-click the file)
+2. Edit the cutoff time, add/remove/edit tables as needed
+3. The generated JSON at the bottom updates automatically
+4. Click **Copy** to copy the JSON
+5. Go to Cloudflare Dashboard → Workers & Pages → KV → **SWA_SESSION** namespace
+6. Find the key `swa:reg_tables_config` and click **Edit**
+7. Replace the value with the copied JSON
+8. Click **Save**
 
 Changes take effect immediately.
 
-**Important:** Never remove a table ID that has existing bookings or guests. The script will warn you, but check with:
+**Important:** Never remove a table ID that has existing bookings or guests. Check first:
 
 ```bash
 npx wrangler d1 execute swa-portal --remote --command="SELECT DISTINCT table_id FROM reg_bookings;"
@@ -90,20 +83,6 @@ CSV columns: `ticket_code,guest_name,table_label,is_buyer,is_walk_in,booking_ref
 ---
 
 ## Reference
-
-### Manual KV Update (Advanced)
-
-If you prefer to update KV directly without the script:
-
-```bash
-npx wrangler kv:key put --namespace-id=ddb93996417c4476ac0f90ddf1eb332d --remote \
-  "swa:reg_tables_config" \
-  '{"formCutoffTime":"2026-06-20T18:00:00+08:00","tables":[{"id":"01","label":"Table 1","ticketPrefix":"01","capacity":10,"isVIP":false}]}'
-```
-
-You must provide the complete JSON object. Any missing table will be removed from the config.
-
-### Table Schema
 
 Key columns in `reg_bookings`:
 

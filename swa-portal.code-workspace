@@ -7,5 +7,7 @@
 			"path": "../swa2024",
 		},
 	],
-	"settings": {},
+	"settings": {
+		"liveServer.settings.multiRootWorkspaceName": "swa-portal",
+	},
 }
