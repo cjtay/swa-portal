@@ -1,0 +1,242 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Registration Bookings — SWA Admin Portal" currentPath="/reg/admin/bookings">
+  <h1>Registration Bookings</h1>
+  <p style="color:var(--text-muted);margin-bottom:1.5rem;">Manage gala dinner table reservations and guest lists.</p>
+
+  <div id="bookings-app">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.75rem;">
+        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+          <input type="search" id="search-input" class="form-input" placeholder="Search by buyer name..." style="width:220px;" />
+          <select id="table-filter" class="form-input" style="width:auto;">
+            <option value="">All tables</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:0.5rem;">
+          <a href="/api/reg/admin/export" class="btn btn-secondary" id="export-btn">Download CSV</a>
+          <button class="btn btn-primary" id="add-booking-btn">+ New Booking</button>
+        </div>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Ref</th>
+            <th>Buyer</th>
+            <th>Table</th>
+            <th>Pax</th>
+            <th>Named</th>
+            <th>Created</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="bookings-list"></tbody>
+      </table>
+    </div>
+
+    <div class="card" id="new-booking-form" hidden>
+      <h2>New Booking</h2>
+      <form id="booking-form" style="margin-top:1rem;">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="buyer-name">Buyer Name *</label>
+            <input type="text" id="buyer-name" class="form-input" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="buyer-email">Buyer Email</label>
+            <input type="email" id="buyer-email" class="form-input" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="table-select">Table *</label>
+            <select id="table-select" class="form-input" required></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="pax-count">Number of Guests *</label>
+            <input type="number" id="pax-count" class="form-input" value="10" min="1" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="buyer-phone">Buyer Phone</label>
+          <input type="text" id="buyer-phone" class="form-input" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="booking-notes">Notes <span style="color:var(--text-muted);font-weight:normal;">(staff only, not visible to buyer)</span></label>
+          <textarea id="booking-notes" class="form-input" rows="2"></textarea>
+        </div>
+        <div style="display:flex;gap:0.75rem;align-items:center;">
+          <button type="submit" class="btn btn-primary">Create Booking</button>
+          <button type="button" class="btn btn-secondary" id="cancel-form-btn">Cancel</button>
+        </div>
+        <p id="form-error" class="form-error" style="display:none;"></p>
+      </form>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { requireRegAdmin } from '../../../scripts/auth-gate';
+
+  let tables: { id: string; label: string; ticketPrefix: string; capacity: number; isVIP: boolean }[] = [];
+
+  const tableFilter = document.getElementById('table-filter') as HTMLSelectElement;
+  const tableSelect = document.getElementById('table-select') as HTMLSelectElement;
+  const searchInput = document.getElementById('search-input') as HTMLInputElement;
+  const bookingsList = document.getElementById('bookings-list')!;
+  const addBtn = document.getElementById('add-booking-btn')!;
+  const cancelBtn = document.getElementById('cancel-form-btn')!;
+  const formEl = document.getElementById('new-booking-form') as HTMLDivElement;
+  const form = document.getElementById('booking-form') as HTMLFormElement;
+  const errEl = document.getElementById('form-error')!;
+
+  addBtn.addEventListener('click', () => {
+    formEl.hidden = !formEl.hidden;
+    if (!formEl.hidden) formEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+
+  cancelBtn.addEventListener('click', () => {
+    formEl.hidden = true;
+    form.reset();
+    errEl.style.display = 'none';
+  });
+
+  function esc(s: string): string {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  function completionClass(named: number, total: number): string {
+    if (total === 0) return '';
+    if (named === total) return 'badge badge-approved';
+    if (named > 0) return 'badge badge-warning';
+    return '';
+  }
+
+  function completionText(named: number, total: number): string {
+    return `${named}/${total}`;
+  }
+
+  async function loadBookings() {
+    const search = searchInput.value.trim();
+    const tableId = tableFilter.value;
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (tableId) params.set('table', tableId);
+
+    try {
+      const res = await fetch(`/api/reg/admin/bookings?${params.toString()}`);
+      const data = await res.json();
+      if (data.success && data.bookings) {
+        renderBookings(data.bookings);
+      }
+    } catch (err) {
+      console.error('Failed to load bookings', err);
+    }
+  }
+
+  function renderBookings(bookings: any[]) {
+    if (bookings.length === 0) {
+      bookingsList.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">No bookings yet. Create one to get started.</td></tr>';
+      return;
+    }
+
+    bookingsList.innerHTML = bookings.map((b: any) => {
+      const named = Number(b.named_guests || 0);
+      const total = Number(b.total_guests || 0);
+      const badge = completionClass(named, total);
+      return `<tr>
+        <td><a href="/reg/admin/booking-detail?id=${b.id}" style="color:var(--swa-3);font-weight:600;">${esc(b.booking_ref)}</a></td>
+        <td>${esc(b.buyer_name)}${b.buyer_email ? `<br><span style="font-size:0.75rem;color:var(--text-muted);">${esc(b.buyer_email)}</span>` : ''}</td>
+        <td>${esc(b.table_id)}</td>
+        <td>${b.pax}</td>
+        <td>${badge ? `<span class="${badge}">${completionText(named, total)}</span>` : completionText(named, total)}</td>
+        <td style="font-size:0.8rem;color:var(--text-muted);">${new Date(b.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</td>
+        <td><a href="/reg/admin/booking-detail?id=${b.id}" class="btn btn-secondary" style="font-size:0.8rem;padding:0.25rem 0.5rem;">View</a></td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function loadTableConfig() {
+    try {
+      const res = await fetch('/api/reg/admin/bookings');
+      if (!res.ok) return;
+    } catch {}
+
+    tables = [
+      { id: '01', label: 'Table 1', ticketPrefix: '01', capacity: 10, isVIP: false },
+      { id: '02', label: 'Table 2', ticketPrefix: '02', capacity: 10, isVIP: false },
+      { id: 'VIP-1', label: 'VIP-1', ticketPrefix: 'V1', capacity: 10, isVIP: true },
+      { id: 'VIP-2', label: 'VIP-2', ticketPrefix: 'V2', capacity: 10, isVIP: true },
+    ];
+
+    tableFilter.innerHTML = '<option value="">All tables</option>';
+    tableSelect.innerHTML = '<option value="">Select table</option>';
+    tables.forEach(t => {
+      tableFilter.innerHTML += `<option value="${t.id}">${t.label}${t.isVIP ? ' (VIP)' : ''}</option>`;
+      tableSelect.innerHTML += `<option value="${t.id}">${t.label}${t.isVIP ? ' (VIP)' : ''} — ${t.capacity} seats</option>`;
+    });
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errEl.style.display = 'none';
+
+    const payload = {
+      buyer_name: (document.getElementById('buyer-name') as HTMLInputElement).value.trim(),
+      buyer_email: (document.getElementById('buyer-email') as HTMLInputElement).value.trim() || undefined,
+      buyer_phone: (document.getElementById('buyer-phone') as HTMLInputElement).value.trim() || undefined,
+      table_id: tableSelect.value,
+      pax: Number((document.getElementById('pax-count') as HTMLInputElement).value),
+      notes: (document.getElementById('booking-notes') as HTMLTextAreaElement).value.trim() || undefined,
+    };
+
+    if (!payload.buyer_name || !payload.table_id) {
+      errEl.textContent = 'Buyer name and table are required.';
+      errEl.style.display = '';
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/reg/admin/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.success) {
+        formEl.hidden = true;
+        form.reset();
+        await loadBookings();
+      } else {
+        errEl.textContent = data.message || 'Failed to create booking.';
+        errEl.style.display = '';
+      }
+    } catch {
+      errEl.textContent = 'Network error. Please try again.';
+      errEl.style.display = '';
+    }
+  });
+
+  let searchTimeout: ReturnType<typeof setTimeout>;
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(loadBookings, 300);
+  });
+  tableFilter.addEventListener('change', loadBookings);
+
+  requireRegAdmin(async () => {
+    await loadTableConfig();
+    await loadBookings();
+  });
+</script>
+
+<style>
+  .badge-warning {
+    background: var(--warning);
+    color: #fff;
+  }
+</style>

@@ -1,0 +1,109 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Arrival Dashboard — SWA Registration" currentPath="/reg/dashboard">
+  <div id="dashboard-app">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+      <h1 style="margin:0;">Arrival Dashboard</h1>
+      <span id="last-refresh" style="color:var(--text-muted);font-size:0.8rem;"></span>
+    </div>
+
+    <div id="stats-strip" style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem;">
+      <div class="card" style="text-align:center;padding:1rem;">
+        <div style="font-size:2rem;font-weight:700;color:var(--swa-1);" id="stat-expected">0</div>
+        <div style="font-size:0.85rem;color:var(--text-muted);">Expected</div>
+      </div>
+      <div class="card" style="text-align:center;padding:1rem;">
+        <div style="font-size:2rem;font-weight:700;color:var(--success);" id="stat-arrived">0</div>
+        <div style="font-size:0.85rem;color:var(--text-muted);">Arrived</div>
+      </div>
+      <div class="card" style="text-align:center;padding:1rem;">
+        <div style="font-size:2rem;font-weight:700;color:var(--swa-3);" id="stat-pct">0%</div>
+        <div style="font-size:0.85rem;color:var(--text-muted);">Arrival %</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:1.5rem;">
+      <h2 style="font-size:1rem;margin-bottom:0.75rem;">Tables</h2>
+      <div id="tables-list"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:1rem;margin-bottom:0.75rem;">Recent Arrivals</h2>
+      <div id="recent-list"></div>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { requireAuth } from '../../scripts/auth-gate';
+
+  const statExpected = document.getElementById('stat-expected')!;
+  const statArrived = document.getElementById('stat-arrived')!;
+  const statPct = document.getElementById('stat-pct')!;
+  const tablesList = document.getElementById('tables-list')!;
+  const recentList = document.getElementById('recent-list')!;
+  const lastRefresh = document.getElementById('last-refresh')!;
+
+  function esc(s: string): string {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  async function loadDashboard() {
+    try {
+      const res = await fetch('/api/reg/dashboard/stats');
+      const data = await res.json();
+      if (data.success) {
+        renderDashboard(data);
+      }
+    } catch (err) {
+      console.error('Failed to load dashboard', err);
+    }
+  }
+
+  function renderDashboard(data: any) {
+    statExpected.textContent = String(data.totalExpected);
+    statArrived.textContent = String(data.totalArrived);
+    statPct.textContent = data.arrivalPct + '%';
+    lastRefresh.textContent = 'Last refreshed: ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+    if (data.tables && data.tables.length > 0) {
+      tablesList.innerHTML = data.tables.map((t: any) => {
+        const pct = t.capacity > 0 ? Math.round((t.arrivedCount / t.capacity) * 100) : 0;
+        const barColor = pct === 100 ? 'var(--success)' : pct > 0 ? 'var(--warning)' : 'var(--border)';
+        const vipLabel = t.isVIP ? ' <span style="background:var(--swa-1);color:#fff;font-size:0.65rem;padding:0.1rem 0.3rem;border-radius:3px;">VIP</span>' : '';
+        return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+          <div style="min-width:80px;font-weight:500;font-size:0.9rem;">${esc(t.tableLabel)}${vipLabel}</div>
+          <div style="flex:1;background:var(--border);border-radius:4px;height:8px;overflow:hidden;">
+            <div style="width:${pct}%;background:${barColor};height:100%;border-radius:4px;transition:width 0.3s;"></div>
+          </div>
+          <div style="min-width:60px;text-align:right;font-size:0.85rem;color:var(--text-muted);">${t.arrivedCount}/${t.capacity}</div>
+        </div>`;
+      }).join('');
+    } else {
+      tablesList.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">No table data yet.</p>';
+    }
+
+    if (data.recentArrivals && data.recentArrivals.length > 0) {
+      recentList.innerHTML = data.recentArrivals.map((r: any) => {
+        const time = new Date(r.arrivedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        return `<div style="display:flex;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid var(--border);font-size:0.9rem;">
+          <div><strong>${esc(r.guestName || 'Guest')}</strong> <span style="color:var(--text-muted);">&middot; ${esc(r.tableLabel)}</span></div>
+          <div style="color:var(--text-muted);font-size:0.8rem;">${time}</div>
+        </div>`;
+      }).join('');
+    } else {
+      recentList.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">No arrivals yet.</p>';
+    }
+  }
+
+  requireAuth({
+    onAuthenticated: () => {
+      loadDashboard();
+      setInterval(loadDashboard, 15000);
+    },
+  });
+</script>

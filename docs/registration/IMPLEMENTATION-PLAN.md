@@ -105,10 +105,14 @@ src/
     tokens.ts                  # Magic-link token generator and validator
     email.ts                   # Magic-link email via Resend
 migrations/
-  002_registration.sql         # New tables: reg_bookings, reg_guests, reg_tokens
+  002_registration.sql           # New tables: reg_bookings, reg_guests, reg_tokens + reg_role column
 scripts/
-  seed-bookings.ts             # Bulk create bookings + guests from CSV/JSON
-  seed-magic-links.ts          # Generate tokens + send magic-link emails
+  seed-bookings.ts               # Bulk create bookings + guests from CSV/JSON
+  seed-magic-links.ts            # Generate tokens + send magic-link emails
+e-tickets-v2/
+  generate_tickets.py            # e-Ticket generator v2 (CSV input, ticket_code format)
+  e-ticket-2026.pptx            # Updated PPTX template (no [pax], ticket_code format)
+  AGENTS.md                      # v2 instructions
 ```
 
 ### Modifications to existing files
@@ -592,15 +596,54 @@ type RecentArrival = {
 
 ---
 
-### Phase 6: Polish and Integration
+### Phase 6: e-Ticket Generator v2
 
-**What:** CSV export for PNG generator, seed scripts, sidebar navigation integration
+**What:** e-Ticket generator that works with the registration module's per-guest ticket codes and CSV export format.
 
-**Why:** Integration tooling for CJ's e-ticket PNG generator and bulk data operations. Done last because column headers must be confirmed with CJ and the system must be fully working before bulk imports.
+**Why:** The current v1 generator (in `e-tickets/`) uses sequential 3-digit ticket numbers and "for N pax" which doesn't match the registration module's per-guest ticket codes (e.g. `04-07`, `V1-03`) and individual e-tickets. v2 must exist before Phase 7 so the CSV export endpoint has a known column schema to target. v2 is a standalone Python tool that can be built and tested with Phase 2 data.
 
 **How:**
 
-- Advanced CSV export with column headers matching CJ's PNG generator input schema (confirm column names before building this)
+1. **Create `e-tickets-v2/` as a sibling folder to `e-tickets/`** (not inside swa-portal). The v1 project stays untouched for backward compatibility.
+
+2. **Copy `e-ticket-2026.pptx` to `e-tickets-v2/`** and modify TextBox 27 from `"Ticket: [number]    Table [table] for [pax] pax"` to `"Ticket: [number]    [table]"`. Remove the `[pax]` placeholder entirely.
+
+3. **Rewrite `generate_tickets.py`** with these changes:
+   - Input: CSV files instead of XLSX. Column headers: `ticket_code,guest_name,table_label,is_buyer,is_walk_in`
+   - `[number]` receives `ticket_code` (e.g. `04-07`, `V1-03`)
+   - `[name]` receives `guest_name`
+   - `[table]` receives `table_label` (e.g. `Table 4`, `VIP-1`)
+   - `[pax]` placeholder removed from template and script
+   - Rows with blank `guest_name` are skipped with a warning
+   - No sequential counter — `ticket_code` from CSV is used directly
+   - Output naming: `{Name}_Table{Label}_{TicketCode}.png` (e.g. `Jane_Doe_Table4_04-07.png`)
+   - Register format: `ticket-register.csv` with columns `ticket_code,guest_name,table_label,generated_on`
+
+4. **PPTX template changes summary:**
+   - TextBox 27: `"Ticket: [number]    [table]"`
+   - `[number]` = `ticket_code`, `[table]` = `table_label`
+   - `[pax]` removed — each ticket is for one individual guest
+   - `[name]` scaling logic retained from v1 (28-char threshold, 70% minimum)
+
+**Files:**
+
+- `e-tickets-v2/generate_tickets.py` — new, rewritten for CSV input and ticket_code format
+- `e-tickets-v2/e-ticket-2026.pptx` — modified copy of v1 template
+- `e-tickets-v2/AGENTS.md` — updated instructions for v2 workflow
+
+**Gate:** Script reads a test CSV with `ticket_code,guest_name,table_label` columns, generates correct PNGs with ticket codes (e.g. `04-07`, `V1-03`) on the ticket face, skips blank guest names with warnings, produces expected output filenames.
+
+---
+
+### Phase 7: Polish and Integration
+
+**What:** CSV export for PNG generator, seed scripts, sidebar navigation integration
+
+**Why:** Integration tooling for e-ticket v2 generator and bulk data operations. Done last because the system must be fully working before bulk imports. Column headers confirmed: `ticket_code,guest_name,table_label,is_buyer,is_walk_in`.
+
+**How:**
+
+- CSV export endpoint produces columns: `ticket_code,guest_name,table_label,is_buyer,is_walk_in` matching e-tickets-v2 input format
 - Seed script: bulk-create bookings + guests from a JSON/CSV source file
 - Magic-link backfill: generate tokens and send emails for all existing bookings
 - Add "Registration" section to AdminLayout sidebar nav
@@ -616,7 +659,7 @@ type RecentArrival = {
 - `src/layouts/AdminLayout.astro` — Add "Registration" nav section with sub-items: Bookings, Dashboard
 - `src/pages/index.astro` — Add registration card to dashboard (links to `/reg/admin/bookings` and `/reg/dashboard`)
 
-**Gate:** CSV column headers confirmed with CJ. Seed script runs with `--dry-run` and produces correct output. Magic links send correctly. Navigation shows registration links. All existing portal features still work.
+**Gate:** CSV export column headers match e-tickets-v2 input format. Seed script runs with `--dry-run` and produces correct output. Magic links send correctly. Navigation shows registration links. All existing portal features still work.
 
 ---
 
@@ -625,14 +668,15 @@ type RecentArrival = {
 ```
 Phase 1 (Foundation)
   ├── Phase 2 (Admin Interface) — needs tables, auth, services
-  │     └── Phase 4 (Buyer Self-Service) — needs bookings + guests to exist
-  │           └── Phase 6 (Polish) — needs full system working
+  │     ├── Phase 4 (Buyer Self-Service) — needs bookings + guests to exist
+  │     └── Phase 6 (e-Ticket v2) — needs booking data for testing
   ├── Phase 3 (Volunteer Reception) — needs tables, auth, services
   │     └── Phase 5 (Live Dashboard) — needs arrivals flowing
-  └── Phase 5 (Live Dashboard) — needs guest data, can build in parallel with 2-4
+  ├── Phase 5 (Live Dashboard) — needs guest data, can build in parallel with 2-4
+  └── Phase 7 (Polish) — needs full system working
 ```
 
-Phases 2, 3, and 5 are independent after Phase 1 — build whichever is most urgent first. Phase 4 depends on Phase 2 (bookings must exist). Phase 6 depends on everything else.
+Phases 2, 3, and 5 are independent after Phase 1 — build whichever is most urgent first. Phase 4 depends on Phase 2 (bookings must exist). Phase 6 (e-ticket v2) depends on Phase 2 (needs booking data for testing) and must be done before Phase 7 (export format must match v2 input). Phase 7 depends on everything else.
 
 ---
 
@@ -641,5 +685,5 @@ Phases 2, 3, and 5 are independent after Phase 1 — build whichever is most urg
 1. **Table layout** — CJ to confirm all table IDs, labels, prefixes, capacities, VIP flags. Needed before Phase 1.
 2. **Volunteer reg_role assignments** — Which members get `reg_admin` vs `reg_volunteer` vs no reg access. Needed before Phase 1.
 3. **Form cutoff time** — What date/time the buyer form closes. Needed before Phase 4.
-4. **CSV column headers** — CJ to confirm what the PNG generator expects. Needed before Phase 6.
+4. **CSV column headers** — Confirmed: `ticket_code,guest_name,table_label,is_buyer,is_walk_in`. Matches e-tickets-v2 input format. Resolved.
 5. **Buyer email availability** — When admin creates a booking, do they always have the buyer's email? If not, magic links can't be sent for that booking. Is this acceptable? Needed before Phase 4.

@@ -7,6 +7,7 @@ interface SessionData {
   email: string;
   name: string;
   role: string;
+  regRole: string | null;
   exp: number;
 }
 
@@ -27,9 +28,17 @@ export async function getSession(c: Context<{ Bindings: Env }>): Promise<Session
 
   try {
     const json = base64urlDecode(payload);
-    const data: SessionData = JSON.parse(json);
+    const parsed = JSON.parse(json);
 
-    if (data.exp && data.exp < Date.now()) return null;
+    if (parsed.exp && parsed.exp < Date.now()) return null;
+
+    const data: SessionData = {
+      email: parsed.email,
+      name: parsed.name,
+      role: parsed.role,
+      regRole: parsed.regRole ?? null,
+      exp: parsed.exp,
+    };
 
     return data;
   } catch {
@@ -41,7 +50,7 @@ export async function handleSession(c: Context<{ Bindings: Env }>) {
   const session = await getSession(c);
 
   if (!session) {
-    return c.json({ authenticated: false, email: null, name: null, role: null, is_admin: false, is_it_admin: false });
+    return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false });
   }
 
   return c.json({
@@ -49,6 +58,7 @@ export async function handleSession(c: Context<{ Bindings: Env }>) {
     email: session.email,
     name: session.name,
     role: session.role,
+    regRole: session.regRole,
     is_admin: session.role === 'admin',
     is_it_admin: (IT_ADMIN_EMAILS as readonly string[]).includes(session.email),
   });

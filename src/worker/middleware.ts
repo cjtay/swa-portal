@@ -20,6 +20,18 @@ const ADMIN_WRITE_API = new Set([
   '/api/members',
 ]);
 
+const REG_BUYER_API = new Set([
+  '/api/reg/buyer',
+]);
+
+const REG_VOLUNTEER_API = new Set([
+  '/api/reg/volunteer',
+]);
+
+const REG_ADMIN_API = new Set([
+  '/api/reg/admin',
+]);
+
 function getBasePath(path: string): string {
   const parts = path.split('/');
   return '/' + parts.slice(1, 3).join('/');
@@ -40,7 +52,12 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     return next();
   }
 
-  // 3. Require authentication for all remaining API routes
+  // 3. Registration buyer routes — bypass session auth, token validation in handler
+  if (REG_BUYER_API.has(basePath)) {
+    return next();
+  }
+
+  // 4. Require authentication for all remaining API routes
   const session = await getSession(c);
   if (!session) {
     return c.json({ success: false, error_code: 'UNAUTHORIZED', message: 'Login required.' }, 401);
@@ -50,6 +67,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
   c.set('sessionEmail', session.email);
   c.set('sessionName', session.name);
   c.set('sessionRole', session.role);
+  c.set('sessionRegRole', session.regRole ?? null);
 
   // 4. IT Admin only — all methods
   if (IT_ADMIN_ONLY_API.has(path) || IT_ADMIN_ONLY_API.has(basePath)) {
@@ -65,7 +83,23 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     }
   }
 
-  // 6. General-purpose rate limiting for authenticated write endpoints
+  // 6. Registration volunteer routes — require reg_volunteer, reg_admin, or admin
+  if (REG_VOLUNTEER_API.has(basePath)) {
+    const regRole = session.regRole ?? null;
+    if (session.role !== 'admin' && regRole !== 'reg_admin' && regRole !== 'reg_volunteer') {
+      return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Registration volunteer access required.' }, 403);
+    }
+  }
+
+  // 7. Registration admin routes — require reg_admin or admin
+  if (REG_ADMIN_API.has(basePath)) {
+    const regRole = session.regRole ?? null;
+    if (session.role !== 'admin' && regRole !== 'reg_admin') {
+      return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Registration admin access required.' }, 403);
+    }
+  }
+
+  // 8. General-purpose rate limiting for authenticated write endpoints
   const endpointKey = getEndpointKey(path, method);
   if (endpointKey) {
     const rlResult = await checkApiRateLimit(c.env.SWA_SESSION, endpointKey, session.email);

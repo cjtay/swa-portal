@@ -3,6 +3,7 @@ interface SessionResponse {
   email: string | null;
   name: string | null;
   role: string | null;
+  regRole: string | null;
   is_admin: boolean;
   is_it_admin: boolean;
 }
@@ -64,4 +65,32 @@ export function redirectIfAuthenticated(): void {
       }
     })
     .catch(() => {});
+}
+
+export function requireRegAdmin(onAuthenticated?: (data: SessionResponse) => void): void {
+  requireAuth({
+    onAuthenticated: (data) => {
+      if (data.role !== 'admin' && data.regRole !== 'reg_admin') {
+        window.location.href = '/';
+        return;
+      }
+      onAuthenticated?.(data);
+    },
+  });
+}
+
+export function requireRegVolunteer(onAuthenticated?: (data: SessionResponse) => void): void {
+  requireAuth({
+    onAuthenticated: (data) => {
+      if (
+        data.role !== 'admin' &&
+        data.regRole !== 'reg_admin' &&
+        data.regRole !== 'reg_volunteer'
+      ) {
+        window.location.href = '/';
+        return;
+      }
+      onAuthenticated?.(data);
+    },
+  });
 }

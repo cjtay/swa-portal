@@ -10,3 +10,5 @@ export type Env = {
   TURNSTILE_SECRET: string;
   TURNSTILE_SITE_KEY: string;
 };
+
+export type RegRole = 'reg_admin' | 'reg_volunteer' | null;

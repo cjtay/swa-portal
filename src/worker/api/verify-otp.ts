@@ -97,7 +97,7 @@ export async function handleVerifyOtp(c: Context<{ Bindings: Env }>) {
   const isItAdmin = (IT_ADMIN_EMAILS as readonly string[]).includes(email);
 
   const member = await env.DB.prepare(
-    'SELECT name, category FROM members WHERE email = ? AND can_login = 1'
+    'SELECT name, category, reg_role FROM members WHERE email = ? AND can_login = 1'
   ).bind(email).first();
 
   const name = (member && member.name) ? member.name as string : email.split('@')[0].replace(/[._-]/g, ' ');
@@ -111,10 +111,12 @@ export async function handleVerifyOtp(c: Context<{ Bindings: Env }>) {
     role = 'committee';
   }
 
+  const regRole = (member && member.reg_role) ? member.reg_role as string : null;
+
   const exp = remember
     ? Date.now() + SESSION_EXTENDED_EXPIRY_MS
     : Date.now() + SESSION_DEFAULT_EXPIRY_MS;
-  const payload = base64urlEncode(JSON.stringify({ email, name, role, exp }));
+  const payload = base64urlEncode(JSON.stringify({ email, name, role, regRole, exp }));
   const signature = await signHmac(payload, env.SESSION_SECRET);
   const cookieValue = `${payload}.${signature}`;
 
@@ -123,7 +125,7 @@ export async function handleVerifyOtp(c: Context<{ Bindings: Env }>) {
     : Math.max(0, Math.floor(SESSION_DEFAULT_EXPIRY_MS / 1000));
 
   return c.json(
-    { success: true, email, name, role },
+    { success: true, email, name, role, regRole },
     200,
     {
       'Set-Cookie': `${SESSION_COOKIE_NAME}=${cookieValue}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`,

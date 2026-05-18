@@ -1,0 +1,330 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Booking Detail — SWA Admin Portal" currentPath="/reg/admin/bookings">
+  <div id="detail-app">
+    <a href="/reg/admin/bookings" style="color:var(--swa-3);font-size:0.9rem;">&larr; Back to Bookings</a>
+    <div id="booking-header" style="margin-top:1rem;"></div>
+
+    <div style="margin-top:1rem;margin-bottom:0.5rem;">
+      <button class="btn btn-secondary" id="send-magic-link-btn" style="display:none;">Send Magic Link</button>
+      <span id="magic-link-status" style="font-size:0.85rem;color:var(--success);margin-left:0.5rem;"></span>
+    </div>
+
+    <div class="card" style="margin-top:1.5rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h2>Guest List</h2>
+        <button class="btn btn-primary" id="add-guest-btn">+ Add Guest</button>
+      </div>
+
+      <div id="add-guest-form" style="display:none;margin-bottom:1rem;padding:1rem;background:var(--bg);border-radius:6px;border:1px solid var(--border);">
+        <div style="display:flex;gap:0.75rem;align-items:end;flex-wrap:wrap;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label" for="new-guest-name">Guest Name</label>
+            <input type="text" id="new-guest-name" class="form-input" placeholder="Enter guest name" />
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label" for="new-guest-table">Table</label>
+            <select id="new-guest-table" class="form-input" style="width:auto;"></select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label" for="new-guest-notes">Notes</label>
+            <input type="text" id="new-guest-notes" class="form-input" placeholder="Optional" style="width:150px;" />
+          </div>
+          <button class="btn btn-primary" id="save-new-guest-btn">Add</button>
+          <button class="btn btn-secondary" id="cancel-guest-btn">Cancel</button>
+        </div>
+        <p id="add-guest-error" class="form-error" style="display:none;"></p>
+      </div>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Ticket</th>
+            <th>Name</th>
+            <th>Table</th>
+            <th>Buyer</th>
+            <th>Walk-in</th>
+            <th>Arrived</th>
+            <th>Notes</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="guests-list"></tbody>
+      </table>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  function esc(s: string): string {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  let bookingId = '';
+  let currentTableId = '';
+  let tables: { id: string; label: string; ticketPrefix: string; capacity: number; isVIP: boolean }[] = [];
+  let editingGuestId: string | null = null;
+
+  const headerEl = document.getElementById('booking-header')!;
+  const guestsList = document.getElementById('guests-list')!;
+  const addGuestBtn = document.getElementById('add-guest-btn')!;
+  const addGuestForm = document.getElementById('add-guest-form')!;
+  const saveNewGuestBtn = document.getElementById('save-new-guest-btn')!;
+  const cancelGuestBtn = document.getElementById('cancel-guest-btn')!;
+  const addGuestError = document.getElementById('add-guest-error')!;
+  const newGuestName = document.getElementById('new-guest-name') as HTMLInputElement;
+  const newGuestTable = document.getElementById('new-guest-table') as HTMLSelectElement;
+  const newGuestNotes = document.getElementById('new-guest-notes') as HTMLInputElement;
+  const sendMagicLinkBtn = document.getElementById('send-magic-link-btn') as HTMLButtonElement;
+  const magicLinkStatus = document.getElementById('magic-link-status')!;
+
+  addGuestBtn.addEventListener('click', () => {
+    addGuestForm.style.display = addGuestForm.style.display === 'none' ? '' : 'none';
+    newGuestName.focus();
+  });
+
+  cancelGuestBtn.addEventListener('click', () => {
+    addGuestForm.style.display = 'none';
+    newGuestName.value = '';
+    newGuestNotes.value = '';
+    addGuestError.style.display = 'none';
+  });
+
+  function getTableLabel(tableId: string): string {
+    const t = tables.find(t => t.id === tableId);
+    return t ? t.label : tableId;
+  }
+
+  async function loadBooking() {
+    if (!bookingId) return;
+    try {
+      const res = await fetch(`/api/reg/admin/bookings/${bookingId}`);
+      const data = await res.json();
+      if (!data.success) {
+        headerEl.innerHTML = '<p style="color:var(--danger);">Booking not found.</p>';
+        return;
+      }
+
+      const b = data.booking;
+      currentTableId = b.table_id;
+      const namedCount = data.guests.filter((g: any) => g.guest_name).length;
+      const totalCount = data.guests.length;
+
+      headerEl.innerHTML = `
+        <h1 style="margin-bottom:0.25rem;">${esc(b.buyer_name)}</h1>
+        <p style="color:var(--text-muted);margin-bottom:0.5rem;">
+          Ref: <strong>${esc(b.booking_ref)}</strong> &middot;
+          Table: <strong>${esc(b.table_id)}</strong> &middot;
+          ${totalCount} guest${totalCount !== 1 ? 's' : ''} &middot;
+          ${namedCount}/${totalCount} named
+          ${b.buyer_email ? ` &middot; ${esc(b.buyer_email)}` : ''}
+        </p>
+        ${b.notes ? `<div style="background:var(--warning);color:#fff;padding:0.5rem 0.75rem;border-radius:4px;margin-bottom:0.5rem;font-size:0.85rem;">Staff note: ${esc(b.notes)}</div>` : ''}
+      `;
+
+      newGuestTable.value = currentTableId;
+      renderGuests(data.guests);
+
+      if (b.buyer_email) {
+        sendMagicLinkBtn.style.display = '';
+      } else {
+        sendMagicLinkBtn.style.display = 'none';
+      }
+    } catch (err) {
+      console.error('Failed to load booking', err);
+    }
+  }
+
+  function renderGuests(guests: any[]) {
+    if (guests.length === 0) {
+      guestsList.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);">No guests yet.</td></tr>';
+      return;
+    }
+
+    guestsList.innerHTML = guests.map((g: any) => {
+      const isEditing = editingGuestId === g.id;
+      const arrivedBadge = g.arrived_at
+        ? `<span class="badge badge-approved">Arrived ${new Date(g.arrived_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>`
+        : '<span style="color:var(--text-muted);">Not yet</span>';
+      const noteHtml = g.notes
+        ? `<div style="background:rgba(217,119,6,0.15);padding:0.25rem 0.5rem;border-radius:3px;font-size:0.8rem;">Staff note: ${esc(g.notes)}</div>`
+        : '';
+
+      if (isEditing) {
+        return `<tr>
+          <td>${esc(g.ticket_code)}</td>
+          <td><input type="text" id="edit-name-${g.id}" class="form-input" value="${esc(g.guest_name || '')}" style="width:150px;" /></td>
+          <td>${getTableLabel(g.table_id)}</td>
+          <td>${g.is_buyer ? '<span class="badge badge-approved">Buyer</span>' : ''}</td>
+          <td>${g.is_walk_in ? 'Yes' : ''}</td>
+          <td>${arrivedBadge}</td>
+          <td><input type="text" id="edit-notes-${g.id}" class="form-input" value="${esc(g.notes || '')}" style="width:120px;" placeholder="Optional" /></td>
+          <td>
+            <button class="btn btn-primary" style="font-size:0.8rem;padding:0.2rem 0.5rem;" onclick="saveEdit('${g.id}')">Save</button>
+            <button class="btn btn-secondary" style="font-size:0.8rem;padding:0.2rem 0.5rem;" onclick="cancelEdit()">Cancel</button>
+          </td>
+        </tr>`;
+      }
+
+      return `<tr>
+        <td style="font-family:monospace;font-weight:600;">${esc(g.ticket_code)}</td>
+        <td>${g.guest_name ? esc(g.guest_name) : '<span style="color:var(--text-muted);font-style:italic;">Empty</span>'}</td>
+        <td>${getTableLabel(g.table_id)}</td>
+        <td>${g.is_buyer ? '<span class="badge badge-approved">Buyer</span>' : ''}</td>
+        <td>${g.is_walk_in ? 'Yes' : ''}</td>
+        <td>${arrivedBadge}</td>
+        <td>${noteHtml}</td>
+        <td>
+          <button class="btn btn-secondary" style="font-size:0.75rem;padding:0.15rem 0.4rem;" onclick="startEdit('${g.id}')">Edit</button>
+          <button class="btn-cancel" style="font-size:0.75rem;padding:0.15rem 0.4rem;" onclick="deleteGuest('${g.id}')">Remove</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  // @ts-ignore
+  window.startEdit = (id: string) => {
+    editingGuestId = id;
+    loadBooking();
+  };
+
+  // @ts-ignore
+  window.cancelEdit = () => {
+    editingGuestId = null;
+    loadBooking();
+  };
+
+  // @ts-ignore
+  window.saveEdit = async (id: string) => {
+    const nameInput = document.getElementById(`edit-name-${id}`) as HTMLInputElement;
+    const notesInput = document.getElementById(`edit-notes-${id}`) as HTMLInputElement;
+
+    try {
+      const res = await fetch(`/api/reg/admin/guests/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guest_name: nameInput.value.trim(),
+          notes: notesInput.value.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        editingGuestId = null;
+        await loadBooking();
+      } else {
+        alert(data.message || 'Failed to update guest.');
+      }
+    } catch {
+      alert('Network error.');
+    }
+  };
+
+  // @ts-ignore
+  window.deleteGuest = async (id: string) => {
+    if (!confirm('Remove this guest slot?')) return;
+    try {
+      const res = await fetch(`/api/reg/admin/guests/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        await loadBooking();
+      } else {
+        alert(data.message || 'Failed to remove guest.');
+      }
+    } catch {
+      alert('Network error.');
+    }
+  };
+
+  saveNewGuestBtn.addEventListener('click', async () => {
+    addGuestError.style.display = 'none';
+    const name = newGuestName.value.trim();
+    const tableId = newGuestTable.value || currentTableId;
+    const notes = newGuestNotes.value.trim();
+
+    try {
+      const res = await fetch('/api/reg/admin/guests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          booking_id: bookingId,
+          guest_name: name || undefined,
+          table_id: tableId,
+          notes: notes || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        newGuestName.value = '';
+        newGuestNotes.value = '';
+        addGuestForm.style.display = 'none';
+        await loadBooking();
+      } else {
+        addGuestError.textContent = data.message || 'Failed to add guest.';
+        addGuestError.style.display = '';
+      }
+    } catch {
+      addGuestError.textContent = 'Network error.';
+      addGuestError.style.display = '';
+    }
+  });
+
+  sendMagicLinkBtn.addEventListener('click', async () => {
+    if (!confirm('Send a magic link email to this buyer?')) return;
+    sendMagicLinkBtn.disabled = true;
+    sendMagicLinkBtn.textContent = 'Sending...';
+    magicLinkStatus.textContent = '';
+
+    try {
+      const res = await fetch(`/api/reg/admin/send-magic-link/${bookingId}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        magicLinkStatus.textContent = data.message;
+        magicLinkStatus.style.color = 'var(--success)';
+      } else {
+        magicLinkStatus.textContent = data.message || 'Failed to send.';
+        magicLinkStatus.style.color = 'var(--danger)';
+      }
+    } catch {
+      magicLinkStatus.textContent = 'Network error.';
+      magicLinkStatus.style.color = 'var(--danger)';
+    }
+
+    sendMagicLinkBtn.disabled = false;
+    sendMagicLinkBtn.textContent = 'Send Magic Link';
+  });
+
+  async function loadTableConfig() {
+    tables = [
+      { id: '01', label: 'Table 1', ticketPrefix: '01', capacity: 10, isVIP: false },
+      { id: '02', label: 'Table 2', ticketPrefix: '02', capacity: 10, isVIP: false },
+      { id: 'VIP-1', label: 'VIP-1', ticketPrefix: 'V1', capacity: 10, isVIP: true },
+      { id: 'VIP-2', label: 'VIP-2', ticketPrefix: 'V2', capacity: 10, isVIP: true },
+    ];
+
+    newGuestTable.innerHTML = '';
+    tables.forEach(t => {
+      newGuestTable.innerHTML += `<option value="${t.id}">${t.label}${t.isVIP ? ' (VIP)' : ''}</option>`;
+    });
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  bookingId = params.get('id') || '';
+
+  import { requireRegAdmin } from '../../../scripts/auth-gate';
+  requireRegAdmin(async () => {
+    await loadTableConfig();
+    await loadBooking();
+  });
+</script>
+
+<style>
+  .badge-warning {
+    background: var(--warning);
+    color: #fff;
+  }
+</style>
