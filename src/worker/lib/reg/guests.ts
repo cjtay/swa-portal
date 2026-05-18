@@ -115,5 +115,11 @@ export async function getRecentArrivals(db: D1Database, limit = 10): Promise<Rec
   )
     .bind(limit)
     .all();
-  return result.results as unknown as RecentArrival[];
+  return (result.results as Record<string, unknown>[]).map((row) => ({
+    guestName: row.guest_name as string | null,
+    ticketCode: row.ticket_code as string,
+    tableId: row.table_id as string,
+    arrivedAt: row.arrived_at as string,
+    arrivedBy: row.arrived_by as string | null,
+  }));
 }
