@@ -82,20 +82,20 @@ src/
   pages/reg/
     admin/
       bookings.astro           # Booking list with completion status
-      booking-detail.astro     # Booking detail: guest rows, add/edit/delete
+      booking-detail.astro     # Booking detail: guest rows, add/edit/delete + Send Magic Link + Copy Link
     volunteer/
       search.astro             # Search + mark arrived (phone-optimised)
       add-walkin.astro         # Add walk-in guest form
     buyer/
-      form.astro               # Buyer guest name entry (token-gated)
+      index.astro              # Buyer guest name entry (token-gated, query param ?token=)
       closed.astro             # Form cutoff / invalid token message
     dashboard.astro            # Live arrival dashboard (read-only)
   worker/api/reg/
     admin-bookings.ts          # List bookings, create booking, booking detail
     admin-guests.ts            # Add/edit/delete guest, assign to booking
     admin-export.ts            # CSV export
-    volunteer-search.ts        # Search guests, mark arrived
-    volunteer-walkin.ts        # Add walk-in guest
+    admin-magic-link.ts        # Generate/retrieve magic-link token, send email via Resend
+    volunteer-search.ts        # Search guests, mark arrived, add walk-in
     buyer-form.ts              # Token validation, guest name update
     reg-dashboard.ts           # JSON stats for live dashboard
   worker/lib/reg/
@@ -113,17 +113,19 @@ e-tickets-v2/
   generate_tickets.py            # e-Ticket generator v2 (CSV input, ticket_code format)
   e-ticket-2026.pptx            # Updated PPTX template (no [pax], ticket_code format)
   AGENTS.md                      # v2 instructions
+layouts/
+  AdminLayout.astro              # Expanded sidebar: Registration section with role-gated sub-items
 ```
 
 ### Modifications to existing files
 
 - `src/worker/index.ts` — import and mount registration API routes under `/api/reg/*`
-- `src/worker/middleware.ts` — add registration path auth checks (buyer routes bypass auth; volunteer routes require `reg_volunteer` or `admin`; admin routes require `admin` or `reg_admin`)
+- `src/worker/middleware.ts` — add registration path auth checks (buyer routes bypass auth; volunteer routes require `reg_volunteer`; admin routes require `reg_admin`)
 - `src/worker/api/verify-otp.ts` — include `regRole` in session cookie payload (derived from `reg_role` column in members table)
 - `src/worker/api/session.ts` — return `regRole` in session JSON response
-- `src/worker/types.ts` — add `sessionRegRole` to Hono Variables type
-- `src/scripts/auth-gate.ts` — add `requireRegAdmin()` and `requireRegVolunteer()` helper functions
-- `src/layouts/AdminLayout.astro` — add "Registration" nav item in sidebar
+- `src/worker/types.ts` — add `RegRole` type to Hono Variables type
+- `src/scripts/auth-gate.ts` — add `requireRegAdmin()` and `requireRegVolunteer()` helper functions, add `regRole` to `SessionResponse` interface
+- `src/layouts/AdminLayout.astro` — add "Registration" nav section with role-gated sub-items (Bookings, Check-in, Arrivals Dashboard)
 - `src/pages/index.astro` — add registration card to dashboard
 
 ---
@@ -408,7 +410,7 @@ Admin creates a booking by specifying: buyer name, buyer email, table, pax count
 **Pages:**
 
 - **`src/pages/reg/admin/bookings.astro`** — Booking list page. Shows each booking with: buyer name, table, pax, named/unnamed count (colour-coded: grey=0 named, amber=partial, green=all named). Search by buyer name. Filter by table dropdown (populated from KV config). "Add Booking" button. "Download CSV" button. Footer: "Download since last run" link with date pre-filled. Uses AdminLayout.
-- **`src/pages/reg/admin/booking-detail.astro`** — Single booking detail. Header: buyer name, table label, pax, named/unnamed count. "Add Guest" inline form at top: name input, notes input, table selector (defaults to this booking's table), save button. Guest list: ticket code, name, notes, walk-in flag, arrived status. Edit (inline form toggle) and delete per row. Notes displayed in amber/yellow highlight labelled "Staff note - not on e-ticket". Arrived status: timestamp if arrived, "Not yet" otherwise. Uses AdminLayout.
+- **`src/pages/reg/admin/booking-detail.astro`** — Single booking detail. Header: buyer name, table label, pax, named/unnamed count. "Send Magic Link" button (if buyer email exists) and "Copy Link" button (generates/retrieves token and copies buyer form URL to clipboard for manual sharing via WhatsApp etc). "Add Guest" inline form at top: name input, notes input, table selector (defaults to this booking's table), save button. Guest list: ticket code, name, notes, walk-in flag, arrived status. Edit (inline form toggle) and delete per row. Notes displayed in amber/yellow highlight labelled "Staff note - not on e-ticket". Arrived status: timestamp if arrived, "Not yet" otherwise. Uses AdminLayout.
 
 **Gate:** Admin can create a booking, see guest slots auto-generated with ticket codes, edit guest names, remove a guest, and download a CSV. Existing portal features still work.
 
@@ -512,7 +514,7 @@ Body: `guestName` (required), `notes` (optional, labelled as dietary or accessib
 
 **Pages:**
 
-- **`src/pages/reg/buyer/form.astro`** — Public page (NO AdminLayout). SWA branding header. Title: "49th Annual Charity Dinner 2026 - Guest Registration". Instruction text: "Please add the names of your guests below. You can return to this page any time before [formCutoffTime formatted as human-readable date and time] to make changes." Guest list: one row per seat. Buyer row (pre-filled, editable). Remaining rows: name input + notes input ("Dietary or accessibility requirements - optional") + Save button per row. Saved rows show name with small "Saved" tick + ticket code (label: "Ticket reference: 04-03"). Edit button to toggle back to input mode. Unsaved rows show placeholder "Enter guest name". Footer: "Your guest list was last updated [timestamp]." Small text: "These details are used for event registration. Individual e-tickets will be sent separately by SWA." Has its own minimal layout with SWA logo and footer.
+- **`src/pages/reg/buyer/index.astro`** — Public page (NO AdminLayout). SWA branding header. Token passed via query parameter (`/reg/buyer/?token=xxx`). Title: "49th Annual Charity Dinner 2026 - Guest Registration". Instruction text: "Please add the names of your guests below. You can return to this page any time before [formCutoffTime formatted as human-readable date and time] to make changes." Guest list: one row per seat. Buyer row (pre-filled, editable). Remaining rows: name input + notes input ("Dietary or accessibility requirements - optional") + Save button per row. Saved rows show name with small "Saved" tick + ticket code (label: "Ticket reference: 04-03"). Edit button to toggle back to input mode. Unsaved rows show placeholder "Enter guest name". Footer: "Your guest list was last updated [timestamp]." Small text: "These details are used for event registration. Individual e-tickets will be sent separately by SWA." Has its own minimal layout with SWA logo and footer.
 - **`src/pages/reg/buyer/closed.astro`** — Public page (NO AdminLayout). Shows either "This link is invalid or has expired." or "Guest registration has closed for this event. If you have any questions, please contact SWA directly." with SWA contact info.
 
 **Email template** (`src/worker/lib/reg/email.ts`):
@@ -541,6 +543,11 @@ Email content:
 - Sent via `waitUntil()` (non-blocking), errors logged via `logError()` but don't fail the request
 
 **Gate:** Admin can trigger a magic-link email from booking detail page. Buyer receives email, opens link, fills in guest names, sees ticket codes after saving. Form shows closed message after cutoff. Invalid token shows error page. Existing portal features still work.
+
+**Additional features:**
+
+- **"Copy Link" button** on booking detail page — Allows admin to copy the buyer form URL to clipboard for sharing via WhatsApp or in person, without sending an email. Generates/retrieves a token if one doesn't exist yet.
+- **Admin direct-edit fallback** — Admins can always edit guest names directly in the booking detail page. The buyer form is a convenience to reduce admin workload; if a buyer refuses to self-serve, the admin simply edits names manually.
 
 ---
 
@@ -656,7 +663,7 @@ type RecentArrival = {
 
 **Modified files:**
 
-- `src/layouts/AdminLayout.astro` — Add "Registration" nav section with sub-items: Bookings, Dashboard
+- `src/layouts/AdminLayout.astro` — Add "Registration" nav section with sub-items: Bookings (reg_admin), Check-in (reg_volunteer), Arrivals Dashboard (any logged-in). Sub-items are role-gated: admin sees all, reg_admin sees Bookings + Dashboard, reg_volunteer sees Check-in + Dashboard. Non-reg users see only Dashboard.
 - `src/pages/index.astro` — Add registration card to dashboard (links to `/reg/admin/bookings` and `/reg/dashboard`)
 
 **Gate:** CSV export column headers match e-tickets-v2 input format. Seed script runs with `--dry-run` and produces correct output. Magic links send correctly. Navigation shows registration links. All existing portal features still work.

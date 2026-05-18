@@ -106,6 +106,21 @@ body {
   border-left: 3px solid var(--swa-3);
 }
 
+.sidebar-heading {
+  padding: 0.75rem 1.5rem 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.35);
+}
+
+.sidebar-group + .sidebar-group {
+  border-top: 1px solid rgba(255,255,255,0.08);
+  margin-top: 0.25rem;
+  padding-top: 0.25rem;
+}
+
 .sidebar-user {
   padding: 1rem 1.5rem;
   border-top: 1px solid rgba(255,255,255,0.12);

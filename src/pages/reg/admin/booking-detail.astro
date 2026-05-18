@@ -9,6 +9,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 
     <div style="margin-top:1rem;margin-bottom:0.5rem;">
       <button class="btn btn-secondary" id="send-magic-link-btn" style="display:none;">Send Magic Link</button>
+      <button class="btn btn-secondary" id="copy-link-btn" style="display:none;margin-left:0.5rem;">Copy Link</button>
       <span id="magic-link-status" style="font-size:0.85rem;color:var(--success);margin-left:0.5rem;"></span>
     </div>
 
@@ -80,6 +81,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   const newGuestTable = document.getElementById('new-guest-table') as HTMLSelectElement;
   const newGuestNotes = document.getElementById('new-guest-notes') as HTMLInputElement;
   const sendMagicLinkBtn = document.getElementById('send-magic-link-btn') as HTMLButtonElement;
+  const copyLinkBtn = document.getElementById('copy-link-btn') as HTMLButtonElement;
   const magicLinkStatus = document.getElementById('magic-link-status')!;
 
   addGuestBtn.addEventListener('click', () => {
@@ -131,8 +133,10 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 
       if (b.buyer_email) {
         sendMagicLinkBtn.style.display = '';
+        copyLinkBtn.style.display = '';
       } else {
         sendMagicLinkBtn.style.display = 'none';
+        copyLinkBtn.style.display = 'none';
       }
     } catch (err) {
       console.error('Failed to load booking', err);
@@ -296,6 +300,39 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 
     sendMagicLinkBtn.disabled = false;
     sendMagicLinkBtn.textContent = 'Send Magic Link';
+  });
+
+  let cachedToken: string | null = null;
+
+  copyLinkBtn.addEventListener('click', async () => {
+    copyLinkBtn.disabled = true;
+
+    try {
+      if (!cachedToken) {
+        const res = await fetch(`/api/reg/admin/send-magic-link/${bookingId}`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success && data.token) {
+          cachedToken = data.token;
+        } else {
+          magicLinkStatus.textContent = data.message || 'Failed to generate link.';
+          magicLinkStatus.style.color = 'var(--danger)';
+          copyLinkBtn.disabled = false;
+          return;
+        }
+      }
+
+      const baseUrl = window.location.origin;
+      const link = `${baseUrl}/reg/buyer/?token=${cachedToken}`;
+
+      await navigator.clipboard.writeText(link);
+      magicLinkStatus.textContent = 'Link copied to clipboard.';
+      magicLinkStatus.style.color = 'var(--success)';
+    } catch {
+      magicLinkStatus.textContent = 'Failed to copy link.';
+      magicLinkStatus.style.color = 'var(--danger)';
+    }
+
+    copyLinkBtn.disabled = false;
   });
 
   async function loadTableConfig() {

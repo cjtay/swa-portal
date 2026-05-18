@@ -8,12 +8,37 @@ interface Props {
 
 const { title, currentPath = '' } = Astro.props;
 
-const navItems = [
-  { href: '/', label: 'Dashboard' },
-  { href: '/office-booking', label: 'Office Booking' },
-  { href: '/namecards', label: 'Namecards' },
-  { href: '/members', label: 'Members' },
-  { href: '/reg/admin/bookings', label: 'Registration' },
+type NavItem = {
+  href: string;
+  label: string;
+  regRole?: string | null;
+};
+
+type NavGroup = {
+  heading: string;
+  items: NavItem[];
+  regRole?: string | null;
+};
+
+const navGroups: NavGroup[] = [
+  {
+    heading: '',
+    items: [
+      { href: '/', label: 'Dashboard' },
+      { href: '/office-booking', label: 'Office Booking' },
+      { href: '/namecards', label: 'Namecards' },
+      { href: '/members', label: 'Members' },
+    ],
+  },
+  {
+    heading: 'Registration',
+    items: [
+      { href: '/reg/admin/bookings', label: 'Bookings', regRole: 'reg_admin' },
+      { href: '/reg/volunteer/search', label: 'Check-in', regRole: 'reg_volunteer' },
+      { href: '/reg/dashboard', label: 'Arrivals Dashboard' },
+    ],
+    regRole: 'reg_volunteer',
+  },
 ];
 ---
 
@@ -33,11 +58,18 @@ const navItems = [
 <div class="admin-layout">
   <aside class="admin-sidebar">
     <div class="sidebar-brand"><img src="/swalogo.svg" alt="SWA" /><span>SWA</span> Admin Portal</div>
-    <nav class="sidebar-nav">
-      {navItems.map((item) => (
-        <a href={item.href} aria-current={currentPath === item.href ? 'page' : undefined}>
-          {item.label}
-        </a>
+    <nav class="sidebar-nav" id="sidebar-nav">
+      {navGroups.map((group) => (
+        <div class="sidebar-group" data-reg-role={group.regRole ?? ''}>
+          {group.heading && <div class="sidebar-heading">{group.heading}</div>}
+          {group.items.map((item) => (
+            <a href={item.href}
+               aria-current={currentPath === item.href ? 'page' : undefined}
+               data-reg-role={item.regRole ?? ''}>
+              {item.label}
+            </a>
+          ))}
+        </div>
       ))}
     </nav>
     <div class="sidebar-user" id="sidebar-user" style="display:none;">
@@ -49,19 +81,54 @@ const navItems = [
   </main>
 </div>
 </body>
-</html>
 
 <script>
-  import { requireAuth } from '../scripts/auth-gate';
+  import { requireAuth, type SessionResponse } from '../scripts/auth-gate';
+
+  function updateNavVisibility(data: SessionResponse) {
+    const nav = document.getElementById('sidebar-nav');
+    if (!nav) return;
+
+    const role = data.role;
+    const regRole = data.regRole;
+    const isAdmin = role === 'admin';
+
+    nav.querySelectorAll('a[data-reg-role]').forEach((el) => {
+      const itemRegRole = (el as HTMLElement).dataset.regRole || '';
+      if (!itemRegRole) return;
+      if (isAdmin || itemRegRole === 'reg_admin') {
+        (el as HTMLElement).style.display = '';
+      } else if (itemRegRole === 'reg_volunteer' && regRole === 'reg_volunteer') {
+        (el as HTMLElement).style.display = '';
+      } else {
+        (el as HTMLElement).style.display = 'none';
+      }
+    });
+
+    nav.querySelectorAll('.sidebar-group[data-reg-role]').forEach((el) => {
+      const groupRegRole = (el as HTMLElement).dataset.regRole || '';
+      if (!groupRegRole) return;
+      if (isAdmin) {
+        (el as HTMLElement).style.display = '';
+      } else if (groupRegRole === 'reg_volunteer' && (regRole === 'reg_volunteer' || regRole === 'reg_admin')) {
+        (el as HTMLElement).style.display = '';
+      } else if (groupRegRole === 'reg_admin' && regRole === 'reg_admin') {
+        (el as HTMLElement).style.display = '';
+      } else {
+        (el as HTMLElement).style.display = 'none';
+      }
+    });
+  }
 
   requireAuth({
-    onAuthenticated(data) {
+    onAuthenticated(data: SessionResponse) {
       const userEl = document.getElementById('sidebar-user');
       const nameEl = document.getElementById('sidebar-user-name');
       if (userEl && nameEl) {
         nameEl.textContent = data.name || data.email || '';
         userEl.style.display = '';
       }
+      updateNavVisibility(data);
     },
   });
 </script>
