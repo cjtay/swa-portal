@@ -101,7 +101,7 @@ const navGroups: NavGroup[] = [
       if (!itemRegRole) return;
       if (isAdmin || itemRegRole === 'reg_admin') {
         (el as HTMLElement).style.display = '';
-      } else if (itemRegRole === 'reg_volunteer' && regRole === 'reg_volunteer') {
+      } else if (itemRegRole === 'reg_volunteer' && (regRole === 'reg_volunteer' || regRole === 'reg_admin' || role === 'committee')) {
         (el as HTMLElement).style.display = '';
       } else {
         (el as HTMLElement).style.display = 'none';
@@ -121,7 +121,7 @@ const navGroups: NavGroup[] = [
       if (!groupRegRole) return;
       if (isAdmin) {
         (el as HTMLElement).style.display = '';
-      } else if (groupRegRole === 'reg_volunteer' && (regRole === 'reg_volunteer' || regRole === 'reg_admin')) {
+      } else if (groupRegRole === 'reg_volunteer' && (regRole === 'reg_volunteer' || regRole === 'reg_admin' || role === 'committee')) {
         (el as HTMLElement).style.display = '';
       } else if (groupRegRole === 'reg_admin' && regRole === 'reg_admin') {
         (el as HTMLElement).style.display = '';

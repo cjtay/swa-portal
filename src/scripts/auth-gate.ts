@@ -84,6 +84,7 @@ export function requireRegVolunteer(onAuthenticated?: (data: SessionResponse) =>
     onAuthenticated: (data) => {
       if (
         data.role !== 'admin' &&
+        data.role !== 'committee' &&
         data.regRole !== 'reg_admin' &&
         data.regRole !== 'reg_volunteer'
       ) {

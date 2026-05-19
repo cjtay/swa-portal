@@ -10,9 +10,11 @@ The settings page (`src/pages/admin/settings.astro`) currently has one card: **R
 |---|---|
 | `reg_admin` | Manage bookings/guests, send magic links (`/api/reg/admin/*`) |
 | `reg_volunteer` | Search guests, mark arrivals, add walk-ins (`/api/reg/volunteer/*`) |
-| `null` (none) | No registration access |
+| `null` (none) | No registration admin access. All committee members can still check-in guests regardless of this value. |
 
 Data flow: D1 `members.reg_role` → `verify-otp.ts` reads it → session cookie → `middleware.ts` enforces API access → `AdminLayout.astro` controls sidebar nav visibility → `auth-gate.ts` client-side gates.
+
+**Note:** All committee members (`category='committee'` with `can_login=1`) can access check-in features (search, mark arrived, add walk-ins) regardless of their `reg_role` value. `reg_role` only gates registration **admin** features (bookings, exports, magic links).
 
 ### Current Gap
 

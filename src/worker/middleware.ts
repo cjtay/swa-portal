@@ -94,7 +94,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
   // 6. Registration volunteer routes — require reg_volunteer, reg_admin, or admin
   if (pathStartsWithAny(path, REG_VOLUNTEER_API)) {
     const regRole = session.regRole ?? null;
-    if (session.role !== 'admin' && regRole !== 'reg_admin' && regRole !== 'reg_volunteer') {
+    if (session.role !== 'admin' && session.role !== 'committee' && regRole !== 'reg_admin' && regRole !== 'reg_volunteer') {
       return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Registration volunteer access required.' }, 403);
     }
   }

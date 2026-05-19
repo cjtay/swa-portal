@@ -24,9 +24,9 @@ Registration access is controlled by a separate `reg_role` column on the `member
 
 | reg_role | Description |
 |----------|-------------|
-| `reg_admin` | Full registration management: create bookings, edit guests, send magic links, export data, check-in guests |
+| `reg_admin` | Full registration management: create bookings, edit guests, send magic links, export data, check-in guests. All committee members (regardless of `reg_role`) can also check-in guests. |
 | `reg_volunteer` | Event-night operations only: search guests, mark arrived, add walk-ins |
-| `NULL` | No registration access (sidebar Registration section hidden or limited to dashboard only) |
+| `NULL` | No registration access. Sidebar Registration section still visible to all committee and admin members. |
 
 Portal `admin` role always has access to all registration features, regardless of `reg_role`.
 
@@ -119,12 +119,12 @@ The `/api/session` endpoint returns:
 | **Registration — Manage bookings** | No (`reg_admin` only) | Yes | Yes |
 | **Registration — Export CSV** | No (`reg_admin` only) | Yes | Yes |
 | **Registration — Send magic links** | No (`reg_admin` only) | Yes | Yes |
-| **Registration — Check-in guests** | No (`reg_volunteer` only) | Yes | Yes |
-| **Registration — Add walk-ins** | No (`reg_volunteer` only) | Yes | Yes |
+| **Registration — Check-in guests** | Yes (all committee members) | Yes | Yes |
+| **Registration — Add walk-ins** | Yes (all committee members) | Yes | Yes |
 | **Registration — View dashboard** | No (any auth) | Yes | Yes |
 | **Registration — Buyer form** | Public (token-gated) | Public (token-gated) | Public (token-gated) |
 
-> **Note**: Registration access is controlled by `reg_role` on the `members` table, independent of the portal `category`/`role`. A committee member with `reg_role='reg_volunteer'` can check in guests. A committee member with `reg_role='reg_admin'` can manage bookings. Portal `admin` role always has full registration access regardless of `reg_role`.
+> **Note**: Registration admin access is controlled by `reg_role` on the `members` table. All committee and admin members can check in guests regardless of `reg_role`. A committee member with `reg_role='reg_admin'` can also manage bookings (create, edit, export, send magic links). Portal `admin` role always has full registration access.
 
 ### 3.2 API Access Matrix
 
@@ -162,9 +162,9 @@ Registration endpoints use a separate auth layer based on `reg_role` (and `role`
 | `GET /api/reg/admin/export` | GET | `role=admin` or `reg_role=reg_admin` | CSV export of all guests |
 | `GET /api/reg/admin/guest-list` | GET | `role=admin` or `reg_role=reg_admin` | JSON guest list grouped by table (for print) |
 | `POST /api/reg/admin/send-magic-link/:bookingId` | POST | `role=admin` or `reg_role=reg_admin` | Generate token + send email |
-| `GET /api/reg/volunteer/search` | GET | `role=admin` or `reg_role=reg_admin` or `reg_role=reg_volunteer` | Search guests |
-| `POST /api/reg/volunteer/arrive/:id` | POST | `role=admin` or `reg_role=reg_admin` or `reg_role=reg_volunteer` | Mark guest arrived |
-| `POST /api/reg/volunteer/walkin` | POST | `role=admin` or `reg_role=reg_admin` or `reg_role=reg_volunteer` | Add walk-in + mark arrived |
+| `GET /api/reg/volunteer/search` | GET | `role=admin` or `role=committee` or `reg_role=reg_admin` or `reg_role=reg_volunteer` | Search guests |
+| `POST /api/reg/volunteer/arrive/:id` | POST | `role=admin` or `role=committee` or `reg_role=reg_admin` or `reg_role=reg_volunteer` | Mark guest arrived |
+| `POST /api/reg/volunteer/walkin` | POST | `role=admin` or `role=committee` or `reg_role=reg_admin` or `reg_role=reg_volunteer` | Add walk-in + mark arrived |
 | `GET /api/reg/dashboard/stats` | GET | Any valid session | Dashboard arrival stats |
 | `GET /api/reg/buyer` | GET | Token only (no session) | Load buyer form data |
 | `PATCH /api/reg/buyer/guests/:id` | PATCH | Token only (no session) | Update guest name via buyer form |
@@ -301,7 +301,7 @@ Buyer-facing endpoints (`/api/reg/buyer/*`) bypass session auth entirely. They u
 
 ### 5.7 Gala Registration — Volunteer (`/reg/volunteer`)
 
-**Visibility**: `role=admin` or `reg_role=reg_admin` or `reg_role=reg_volunteer`
+**Visibility**: `role=admin` or `role=committee` or `reg_role=reg_admin` or `reg_role=reg_volunteer`
 
 **Features**:
 - **Search** (`/reg/volunteer/search`): Phone-optimised page with large search input (autofocus). Search by guest name or ticket code. Table filter dropdown.
@@ -385,15 +385,15 @@ Buyer-facing endpoints (`/api/reg/buyer/*`) bypass session auth entirely. They u
 
 ### 6.5 Registration Section (Sidebar)
 
-The Registration section is visible to any user with `reg_role` set, or `role=admin`. Items within are gated by reg_role.
+The Registration section is visible to all committee and admin members, plus any user with `reg_role` set. Items within are gated by role or reg_role.
 
 | Sidebar Item | Visible When |
 |-------------|-------------|
 | Bookings | `role=admin` or `regRole=reg_admin` |
-| Check-in (Search) | `role=admin` or `regRole=reg_admin` or `regRole=reg_volunteer` |
+| Check-in (Search) | `role=admin` or `role=committee` or `regRole=reg_admin` or `regRole=reg_volunteer` |
 | Arrivals Dashboard | Any valid session (including `reg_volunteer`) |
 
-Users without `reg_role` and without `role=admin` see only the dashboard link (not Bookings or Check-in).
+All committee and admin members see the Check-in link. Non-committee/non-admin users without `reg_role` see only the dashboard link.
 
 ### 6.6 Registration — Bookings Page (`/reg/admin/bookings`)
 
@@ -424,7 +424,7 @@ Users without `reg_role` and without `role=admin` see only the dashboard link (n
 
 | Element | Visible When |
 |---------|-------------|
-| Search input (autofocus) | `role=admin` or `regRole=reg_admin` or `regRole=reg_volunteer` |
+| Search input (autofocus) | `role=admin` or `role=committee` or `regRole=reg_admin` or `regRole=reg_volunteer` |
 | Table filter dropdown | Always (within reg volunteer/admin) |
 | Mark Arrived button | Guest not yet arrived |
 | "Arrived at HH:mm" label | Guest already arrived |

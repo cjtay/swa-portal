@@ -17,7 +17,7 @@ Four audiences, four access patterns:
 | Audience | Pages | Auth |
 |---|---|---|
 | SWA admin staff | `/reg/admin/*` | Existing session + `admin` role or `reg_role='reg_admin'` |
-| SWA volunteers | `/reg/volunteer/*` | Existing session + `reg_role='reg_volunteer'` (or admin) |
+| SWA volunteers | `/reg/volunteer/*` | Existing session + `reg_role='reg_volunteer'` (or admin, or any committee member) |
 | SWA committee (read-only) | `/reg/dashboard` | Existing session + any valid role |
 | Buyers (external) | `/reg/buyer/:token` | Magic-link token only, no session required |
 
@@ -120,7 +120,7 @@ layouts/
 ### Modifications to existing files
 
 - `src/worker/index.ts` — import and mount registration API routes under `/api/reg/*`
-- `src/worker/middleware.ts` — add registration path auth checks (buyer routes bypass auth; volunteer routes require `reg_volunteer`; admin routes require `reg_admin`)
+- `src/worker/middleware.ts` — add registration path auth checks (buyer routes bypass auth; volunteer routes require committee, `reg_volunteer`, or admin; admin routes require `reg_admin` or admin)
 - `src/worker/api/verify-otp.ts` — include `regRole` in session cookie payload (derived from `reg_role` column in members table)
 - `src/worker/api/session.ts` — return `regRole` in session JSON response
 - `src/worker/types.ts` — add `RegRole` type to Hono Variables type
@@ -294,7 +294,7 @@ Add three new path sets:
 // Buyer routes: token-gated, bypass session auth entirely
 const REG_BUYER_API = new Set(['/api/reg/buyer']);
 
-// Volunteer routes: session required + reg_volunteer or admin
+// Volunteer routes: session required + committee, admin, reg_admin, or reg_volunteer
 const REG_VOLUNTEER_API = new Set(['/api/reg/volunteer']);
 
 // Admin routes: session required + reg_admin (or admin role)
@@ -304,7 +304,7 @@ const REG_ADMIN_API = new Set(['/api/reg/admin']);
 Auth flow for registration paths:
 
 1. **`/api/reg/buyer/*`** — Skip session check. Token validation happens inside the handler.
-2. **`/api/reg/volunteer/*`** — Session required. Check `sessionRole === 'admin'` OR `sessionRegRole === 'reg_admin'` OR `sessionRegRole === 'reg_volunteer'`.
+2. **`/api/reg/volunteer/*`** — Session required. Check `sessionRole === 'admin'` OR `sessionRole === 'committee'` OR `sessionRegRole === 'reg_admin'` OR `sessionRegRole === 'reg_volunteer'`.
 3. **`/api/reg/admin/*`** — Session required. Check `sessionRole === 'admin'` OR `sessionRegRole === 'reg_admin'`.
 4. **`/api/reg/dashboard`** — Session required. Any valid session (same as `/api/bookings` today).
 
@@ -430,9 +430,9 @@ Volunteer opens the search page. Large auto-focused search input. Results show g
 
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
-| `/api/reg/volunteer/search` | GET | reg_volunteer+ | Search guests by name/ticket code |
-| `/api/reg/volunteer/arrive/:id` | POST | reg_volunteer+ | Mark guest arrived |
-| `/api/reg/volunteer/walkin` | POST | reg_volunteer+ | Add walk-in + mark arrived |
+| `/api/reg/volunteer/search` | GET | committee, reg_volunteer+ | Search guests by name/ticket code |
+| `/api/reg/volunteer/arrive/:id` | POST | committee, reg_volunteer+ | Mark guest arrived |
+| `/api/reg/volunteer/walkin` | POST | committee, reg_volunteer+ | Add walk-in + mark arrived |
 
 **Route specs:**
 
@@ -663,7 +663,7 @@ type RecentArrival = {
 
 **Modified files:**
 
-- `src/layouts/AdminLayout.astro` — Add "Registration" nav section with sub-items: Bookings (reg_admin), Check-in (reg_volunteer), Arrivals Dashboard (any logged-in). Sub-items are role-gated: admin sees all, reg_admin sees Bookings + Dashboard, reg_volunteer sees Check-in + Dashboard. Non-reg users see only Dashboard.
+- `src/layouts/AdminLayout.astro` — Add "Registration" nav section with sub-items: Bookings (reg_admin), Check-in (all committee/admin), Arrivals Dashboard (any logged-in). Sub-items are role-gated: admin sees all, committee sees Check-in + Dashboard, reg_admin sees Bookings + Dashboard, reg_volunteer sees Check-in + Dashboard.
 - `src/pages/index.astro` — Add registration card to dashboard (links to `/reg/admin/bookings` and `/reg/dashboard`)
 
 **Gate:** CSV export column headers match e-tickets-v2 input format. Seed script runs with `--dry-run` and produces correct output. Magic links send correctly. Navigation shows registration links. All existing portal features still work.
