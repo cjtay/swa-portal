@@ -327,7 +327,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   });
 </script>
 
-<style>
+<style is:global>
   .badge-warning {
     background: var(--warning);
     color: #fff;
@@ -337,9 +337,8 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 
   @media print {
     .admin-sidebar,
-    .admin-main > h1,
-    .admin-main > p,
-    #bookings-app,
+    .admin-layout > *:not(.admin-main),
+    .admin-main > *:not(#print-area),
     .no-print {
       display: none !important;
     }
@@ -433,26 +432,25 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       margin-bottom: 3mm;
     }
 
+    .print-guest-table th,
+    .print-guest-table td {
+      border: 0.5pt solid #333;
+      padding: 2mm 2mm;
+      vertical-align: middle;
+    }
+
     .print-guest-table th {
-      background: #f3d2ff !important;
-      color: #450a5e !important;
+      background: #f0f0f0 !important;
+      color: #000 !important;
       font-size: 7.5pt;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      padding: 2mm 2mm;
-      border-bottom: 1pt solid #70308c;
       text-align: left;
     }
 
-    .print-guest-table td {
-      padding: 2mm 2mm;
-      border-bottom: 0.5pt solid #ddd;
-      vertical-align: middle;
-    }
-
-    .print-guest-table tbody tr:last-child td {
-      border-bottom: 1pt solid #aaa;
+    .print-guest-table tr {
+      page-break-inside: avoid;
     }
 
     .col-ticket {
@@ -479,7 +477,6 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 
     .col-signature {
       width: 80px;
-      border-right: 1pt solid #ccc !important;
     }
 
     .col-remarks {
