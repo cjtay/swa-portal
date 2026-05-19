@@ -39,7 +39,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   const errEl = document.getElementById('form-error')!;
   const tableSelect = document.getElementById('table-select') as HTMLSelectElement;
 
-  let tables: { id: string; label: string; isVIP: boolean }[] = [];
+  let tables: { id: string; label: string; isVIP: boolean; capacity: number; occupied: number }[] = [];
 
   async function loadTableConfig() {
     try {
@@ -52,7 +52,9 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 
     tableSelect.innerHTML = '<option value="">Select table</option>';
     tables.forEach(t => {
-      tableSelect.innerHTML += `<option value="${t.id}">${t.label}${t.isVIP ? ' (VIP)' : ''}</option>`;
+      const remaining = (t.capacity ?? 0) - (t.occupied ?? 0);
+      const avail = remaining > 0 ? `${remaining} seat${remaining === 1 ? '' : 's'} left` : 'FULL (overbooked)';
+      tableSelect.innerHTML += `<option value="${t.id}">${t.label}${t.isVIP ? ' (VIP)' : ''} — ${avail}</option>`;
     });
   }
 

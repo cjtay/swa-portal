@@ -80,25 +80,41 @@ export async function markArrived(db: D1Database, guestId: string, sessionEmail:
     .run();
 }
 
+export async function getTableOccupancyMap(db: D1Database): Promise<Record<string, number>> {
+  const result = await db.prepare(
+    'SELECT table_id, COUNT(*) AS cnt FROM reg_guests GROUP BY table_id',
+  ).all();
+  const map: Record<string, number> = {};
+  for (const row of result.results as Record<string, unknown>[]) {
+    map[String(row.table_id)] = (row.cnt as number) ?? 0;
+  }
+  return map;
+}
+
 export interface ArrivalStats {
   totalExpected: number;
   totalArrived: number;
+  walkInCount: number;
   arrivalPct: number;
 }
 
 export async function getArrivalStats(db: D1Database): Promise<ArrivalStats> {
   const totalResult = await db.prepare(
-    'SELECT COUNT(*) AS total FROM reg_guests WHERE guest_name IS NOT NULL',
+    'SELECT COUNT(*) AS total FROM reg_guests WHERE guest_name IS NOT NULL AND is_walk_in = 0',
   ).first();
   const arrivedResult = await db.prepare(
-    'SELECT COUNT(*) AS total FROM reg_guests WHERE arrived_at IS NOT NULL',
+    'SELECT COUNT(*) AS total FROM reg_guests WHERE arrived_at IS NOT NULL AND is_walk_in = 0',
+  ).first();
+  const walkInResult = await db.prepare(
+    'SELECT COUNT(*) AS total FROM reg_guests WHERE is_walk_in = 1',
   ).first();
 
   const totalExpected = (totalResult?.total as number) ?? 0;
   const totalArrived = (arrivedResult?.total as number) ?? 0;
+  const walkInCount = (walkInResult?.total as number) ?? 0;
   const arrivalPct = totalExpected > 0 ? Math.round((totalArrived / totalExpected) * 100) : 0;
 
-  return { totalExpected, totalArrived, arrivalPct };
+  return { totalExpected, totalArrived, walkInCount, arrivalPct };
 }
 
 export interface RecentArrival {

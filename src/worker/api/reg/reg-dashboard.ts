@@ -15,6 +15,7 @@ type TableDashboardRow = {
   capacity: number;
   namedCount: number;
   arrivedCount: number;
+  walkInCount: number;
 };
 
 type RecentArrival = {
@@ -33,11 +34,15 @@ export async function handleRegDashboard(c: AppContext) {
 
   for (const table of config.tables) {
     const namedResult = await c.env.DB.prepare(
-      'SELECT COUNT(*) AS cnt FROM reg_guests WHERE table_id = ? AND guest_name IS NOT NULL AND guest_name != ""',
+      'SELECT COUNT(*) AS cnt FROM reg_guests WHERE table_id = ? AND guest_name IS NOT NULL AND guest_name != "" AND is_walk_in = 0',
     ).bind(table.id).first();
 
     const arrivedResult = await c.env.DB.prepare(
       'SELECT COUNT(*) AS cnt FROM reg_guests WHERE table_id = ? AND arrived_at IS NOT NULL',
+    ).bind(table.id).first();
+
+    const walkInResult = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS cnt FROM reg_guests WHERE table_id = ? AND is_walk_in = 1',
     ).bind(table.id).first();
 
     tableRows.push({
@@ -47,6 +52,7 @@ export async function handleRegDashboard(c: AppContext) {
       capacity: table.capacity,
       namedCount: (namedResult?.cnt as number) ?? 0,
       arrivedCount: (arrivedResult?.cnt as number) ?? 0,
+      walkInCount: (walkInResult?.cnt as number) ?? 0,
     });
   }
 
@@ -69,6 +75,7 @@ export async function handleRegDashboard(c: AppContext) {
     success: true,
     totalExpected: stats.totalExpected,
     totalArrived: stats.totalArrived,
+    walkInCount: stats.walkInCount,
     arrivalPct: stats.arrivalPct,
     tables: tableRows,
     recentArrivals,

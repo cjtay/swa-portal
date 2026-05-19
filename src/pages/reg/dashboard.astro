@@ -9,7 +9,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       <span id="last-refresh" style="color:var(--text-muted);font-size:0.8rem;"></span>
     </div>
 
-    <div id="stats-strip" style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem;">
+    <div id="stats-strip" style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem;">
       <div class="card" style="text-align:center;padding:1rem;">
         <div style="font-size:2rem;font-weight:700;color:var(--swa-1);" id="stat-expected">0</div>
         <div style="font-size:0.85rem;color:var(--text-muted);">Expected</div>
@@ -17,6 +17,10 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       <div class="card" style="text-align:center;padding:1rem;">
         <div style="font-size:2rem;font-weight:700;color:var(--success);" id="stat-arrived">0</div>
         <div style="font-size:0.85rem;color:var(--text-muted);">Arrived</div>
+      </div>
+      <div class="card" style="text-align:center;padding:1rem;">
+        <div style="font-size:2rem;font-weight:700;color:var(--swa-2);" id="stat-walkin">0</div>
+        <div style="font-size:0.85rem;color:var(--text-muted);">Walk-ins</div>
       </div>
       <div class="card" style="text-align:center;padding:1rem;">
         <div style="font-size:2rem;font-weight:700;color:var(--swa-3);" id="stat-pct">0%</div>
@@ -41,6 +45,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
   const statExpected = document.getElementById('stat-expected')!;
   const statArrived = document.getElementById('stat-arrived')!;
+  const statWalkin = document.getElementById('stat-walkin')!;
   const statPct = document.getElementById('stat-pct')!;
   const tablesList = document.getElementById('tables-list')!;
   const recentList = document.getElementById('recent-list')!;
@@ -67,6 +72,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   function renderDashboard(data: any) {
     statExpected.textContent = String(data.totalExpected);
     statArrived.textContent = String(data.totalArrived);
+    statWalkin.textContent = String(data.walkInCount ?? 0);
     statPct.textContent = data.arrivalPct + '%';
     lastRefresh.textContent = 'Last refreshed: ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
@@ -80,7 +86,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
           <div style="flex:1;background:var(--border);border-radius:4px;height:8px;overflow:hidden;">
             <div style="width:${pct}%;background:${barColor};height:100%;border-radius:4px;transition:width 0.3s;"></div>
           </div>
-          <div style="min-width:60px;text-align:right;font-size:0.85rem;color:var(--text-muted);">${t.arrivedCount}/${t.capacity}</div>
+          <div style="min-width:60px;text-align:right;font-size:0.85rem;color:var(--text-muted);">${t.arrivedCount}/${t.capacity}${t.walkInCount > 0 ? ` <span style="color:var(--swa-2);">+${t.walkInCount} walk-in</span>` : ''}</div>
         </div>`;
       }).join('');
     } else {
