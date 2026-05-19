@@ -1,6 +1,7 @@
 ---
 // Public buyer form page — NO AdminLayout, no auth gate
 // Token is read from ?token= query parameter
+import '../../../styles/admin.css';
 ---
 
 <!DOCTYPE html>
@@ -15,41 +16,16 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <style>
-    :root {
-      --swa-1: #70308c;
-      --swa-2: #450a5e;
-      --swa-3: #874ba1;
-      --swa-4: #f3d2ff;
-      --bg: #f9fafb;
-      --bg-card: #ffffff;
-      --text: #1f2937;
-      --text-muted: #6b7280;
-      --border: #e5e7eb;
-      --success: #16a34a;
-      --danger: #dc2626;
-    }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased; }
     .buyer-header { background: var(--swa-2); color: #fff; padding: 2rem 1rem; text-align: center; }
     .buyer-header h1 { font-size: 1.3rem; font-weight: 700; }
     .buyer-header p { font-size: 0.85rem; opacity: 0.8; margin-top: 0.25rem; }
     .buyer-container { max-width: 600px; margin: 1.5rem auto; padding: 0 1rem; }
-    .buyer-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
-    .buyer-info { text-align: center; padding: 1.5rem 1rem; }
+    .buyer-info { text-align: center; padding: 1rem 1rem 0.5rem; }
     .buyer-info h2 { font-size: 1.1rem; color: var(--swa-1); }
     .buyer-info p { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem; }
-    .guest-row { border: 1px solid var(--border); border-radius: 6px; padding: 1rem; margin-bottom: 0.75rem; background: var(--bg-card); }
     .guest-row.buyer-row { border-left: 3px solid var(--swa-3); }
     .guest-name-display { font-weight: 600; font-size: 0.95rem; }
     .guest-ticket { font-family: monospace; font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem; }
-    .saved-badge { display: inline-block; background: var(--success); color: #fff; font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 3px; margin-left: 0.25rem; }
-    .guest-form { display: flex; flex-direction: column; gap: 0.5rem; }
-    .form-input { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; font-family: inherit; }
-    .form-input:focus { outline: none; border-color: var(--swa-3); box-shadow: 0 0 0 2px var(--swa-4); }
-    .btn-save { background: var(--swa-3); color: #fff; border: none; padding: 0.4rem 1rem; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
-    .btn-save:hover { background: var(--swa-1); }
-    .btn-edit { background: none; border: 1px solid var(--border); padding: 0.25rem 0.6rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; color: var(--text-muted); }
-    .btn-edit:hover { border-color: var(--swa-3); color: var(--swa-3); }
     .buyer-footer { text-align: center; font-size: 0.75rem; color: var(--text-muted); padding: 2rem 0; }
     .load-error { text-align: center; padding: 3rem 1rem; }
     .load-error h2 { color: var(--danger); }
@@ -74,7 +50,7 @@
         <h2 id="buyer-name-heading"></h2>
         <p id="booking-info"></p>
       </div>
-      <p style="font-size:0.9rem;color:var(--text-muted);margin-bottom:1rem;text-align:center;" id="instruction-text"></p>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin:1rem 0;text-align:center;" id="instruction-text"></p>
       <div id="guest-list"></div>
       <div id="last-updated" style="font-size:0.75rem;color:var(--text-muted);text-align:center;margin-top:1rem;"></div>
     </div>
@@ -121,6 +97,9 @@
   async function loadData() {
     try {
       const res = await fetch(`/api/reg/buyer/${token}`);
+      if (!res.ok) {
+        throw new Error(`Server error: ${res.status}`);
+      }
       const data = await res.json();
 
       if (data.closed) {
@@ -154,23 +133,29 @@
       const hasName = g.guest_name && g.guest_name.trim();
       const isBuyer = g.is_buyer;
 
-      return `<div class="guest-row${isBuyer ? ' buyer-row' : ''}" data-index="${i}">
+      return `<div class="card guest-row${isBuyer ? ' buyer-row' : ''}" data-index="${i}" style="margin-bottom:0.75rem;">
         <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:0.5rem;">
           <div>
-            <span style="font-size:0.75rem;color:var(--text-muted);">Seat ${i + 1}${isBuyer ? ' (Buyer)' : ''}</span>
+            <span style="font-size:0.85rem;font-weight:600;color:var(--text-muted);">Seat ${i + 1}${isBuyer ? ' (Buyer)' : ''}</span>
             <div class="guest-name-display" id="name-display-${i}" style="${hasName ? '' : 'color:var(--text-muted);font-style:italic;'}">
               ${hasName ? esc(g.guest_name) : 'Enter guest name'}
             </div>
           </div>
           <div style="display:flex;gap:0.25rem;align-items:center;">
-            ${hasName ? `<span class="saved-badge">Saved</span><button class="btn-edit" onclick="toggleEdit(${i})">Edit</button>` : ''}
+            ${hasName ? `<span class="badge badge-approved">Saved</span><button class="btn btn-secondary" style="padding:0.3rem 0.75rem;font-size:0.75rem;" onclick="toggleEdit(${i})">Edit</button>` : ''}
           </div>
         </div>
         <div class="guest-ticket">Ticket reference: ${esc(g.ticket_code)}</div>
-        <div class="guest-form" id="form-${i}" style="${hasName ? 'display:none;' : ''}">
-          <input type="text" class="form-input" id="input-name-${i}" placeholder="Enter guest name" value="${esc(g.guest_name || '')}" />
-          <input type="text" class="form-input" id="input-notes-${i}" placeholder="Dietary or accessibility requirements (optional)" value="${esc(g.notes || '')}" />
-          <button class="btn-save" onclick="saveGuest(${i})">Save</button>
+        <div id="form-${i}" style="${hasName ? 'display:none;' : ''}margin-top:0.75rem;">
+          <div class="form-group" style="margin-bottom:0.5rem;">
+            <label class="form-label" for="input-name-${i}">Guest Name</label>
+            <input type="text" class="form-input" id="input-name-${i}" placeholder="Enter guest name" value="${esc(g.guest_name || '')}" />
+          </div>
+          <div class="form-group" style="margin-bottom:0.75rem;">
+            <label class="form-label" for="input-notes-${i}">Dietary / Accessibility Requirements</label>
+            <input type="text" class="form-input" id="input-notes-${i}" placeholder="Optional" value="${esc(g.notes || '')}" />
+          </div>
+          <button class="btn btn-primary" onclick="saveGuest(${i})">Save</button>
         </div>
       </div>`;
     }).join('');
