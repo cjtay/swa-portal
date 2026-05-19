@@ -1,0 +1,559 @@
+---
+import '../../../styles/admin.css';
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, notranslate, noimageindex" />
+  <meta name="format-detection" content="telephone=no" />
+  <title>Guest Check-in — SWA</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style is:global>
+    :root {
+      --swa-1: #70308c;
+      --swa-2: #450a5e;
+      --swa-3: #874ba1;
+      --swa-4: #f3d2ff;
+      --swa-5: #8489c7;
+      --bg: #f9fafb;
+      --bg-card: #ffffff;
+      --text: #1f2937;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --danger: #dc2626;
+      --success: #16a34a;
+      --warning: #d97706;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f3d2ff;
+      color: var(--text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100dvh;
+    }
+    .checkin-container {
+      max-width: 480px;
+      margin: 0 auto;
+      min-height: 100dvh;
+      background: #fff;
+      box-shadow: 0 0 20px rgba(69,10,94,0.1);
+    }
+    .checkin-header {
+      background: var(--swa-2);
+      color: #fff;
+      padding: 1rem 1rem 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .checkin-header img {
+      height: 32px;
+      width: 32px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .checkin-header h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    .checkin-body {
+      padding: 1rem;
+    }
+    .checkin-subtitle {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+    .search-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .search-row input {
+      flex: 1;
+      display: block;
+      width: 100%;
+      padding: 0.85rem 1rem;
+      border: 2px solid var(--border);
+      border-radius: 0.5rem;
+      font-size: 1rem;
+      color: var(--text);
+      background: #fff;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .search-row input:focus {
+      outline: none;
+      border-color: var(--swa-3);
+      box-shadow: 0 0 0 3px rgba(135,75,161,0.2);
+    }
+    .search-row select {
+      display: block;
+      padding: 0.85rem 0.75rem;
+      border: 2px solid var(--border);
+      border-radius: 0.5rem;
+      font-size: 1rem;
+      color: var(--text);
+      background: #fff;
+      -webkit-appearance: none;
+      appearance: none;
+      min-width: 100px;
+    }
+    .search-row select:focus {
+      outline: none;
+      border-color: var(--swa-3);
+      box-shadow: 0 0 0 3px rgba(135,75,161,0.2);
+    }
+    .walkin-link {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      width: 100%;
+      padding: 0.85rem 1rem;
+      border: 2px dashed var(--swa-3);
+      border-radius: 0.5rem;
+      background: #faf5ff;
+      color: var(--swa-3);
+      font-size: 1rem;
+      font-weight: 600;
+      text-decoration: none;
+      margin-bottom: 1.25rem;
+      transition: background 0.15s;
+    }
+    .walkin-link:hover, .walkin-link:active {
+      background: var(--swa-4);
+    }
+
+    /* Guest cards */
+    .guest-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      transition: box-shadow 0.15s;
+    }
+    .guest-card:active {
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .guest-name {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.3;
+      margin-bottom: 0.25rem;
+    }
+    .guest-meta {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-top: 0.2rem;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+    }
+    .guest-meta .ticket-pill {
+      display: inline-flex;
+      align-items: center;
+      background: #f3f4f6;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.15rem 0.4rem;
+      font-family: 'SF Mono', 'Courier New', monospace;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .guest-meta .sep {
+      margin: 0 0.35rem;
+      color: #d1d5db;
+    }
+    .guest-badge {
+      display: inline-block;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.2rem 0.5rem;
+      border-radius: 9999px;
+      color: #fff;
+      vertical-align: middle;
+      margin-left: 0.35rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .guest-badge-walkin { background: var(--swa-3); }
+    .guest-badge-buyer { background: var(--swa-1); }
+    .guest-buyer {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 0.25rem;
+    }
+    .guest-note {
+      background: rgba(217,119,6,0.12);
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+      color: #92400e;
+      line-height: 1.4;
+    }
+    .guest-action {
+      margin-top: 0.75rem;
+    }
+
+    /* Mark Arrived button */
+    .btn-arrive {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 52px;
+      padding: 0.75rem 1rem;
+      border: none;
+      border-radius: 8px;
+      background: #16a34a;
+      color: #fff;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+      box-shadow: 0 2px 4px rgba(22,163,74,0.3);
+    }
+    .btn-arrive:active {
+      background: #15803d;
+      transform: scale(0.98);
+    }
+    .btn-arrive:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Arrived state */
+    .arrived-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      width: 100%;
+      min-height: 48px;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      background: #f0fdf4;
+      color: #16a34a;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border: 1px solid #bbf7d0;
+    }
+    .arrived-label .check-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      background: #16a34a;
+      color: #fff;
+      border-radius: 50%;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    /* Name editing */
+    .name-edit-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 0.25rem;
+    }
+    .name-edit-row input {
+      flex: 1;
+      min-width: 140px;
+      padding: 0.6rem 0.75rem;
+      border: 2px solid var(--border);
+      border-radius: 0.5rem;
+      font-size: 1rem;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .name-edit-row input:focus {
+      outline: none;
+      border-color: var(--swa-3);
+      box-shadow: 0 0 0 3px rgba(135,75,161,0.2);
+    }
+    .btn-save {
+      min-height: 44px;
+      padding: 0.6rem 1rem;
+      border: none;
+      border-radius: 0.5rem;
+      background: var(--swa-3);
+      color: #fff;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-save:active {
+      background: var(--swa-1);
+    }
+
+    /* Other states */
+    .no-results {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      background: var(--bg);
+      border-radius: 8px;
+      border: 1px dashed var(--border);
+      margin-top: 0.5rem;
+    }
+    .admin-link {
+      display: block;
+      text-align: center;
+      padding: 1rem;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      text-decoration: none;
+      border-top: 1px solid var(--border);
+      margin-top: 1.5rem;
+    }
+    .admin-link:hover {
+      color: var(--swa-3);
+    }
+    .loading-spinner {
+      text-align: center;
+      padding: 2rem 0;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    /* No name placeholder */
+    .guest-name .no-name {
+      color: var(--text-muted);
+      font-style: italic;
+      font-weight: 400;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    if (window.innerWidth > 768) {
+      window.location.href = '/reg/volunteer/search';
+    }
+  </script>
+
+  <div class="checkin-container">
+    <div class="checkin-header">
+      <img src="/swalogo.svg" alt="SWA" />
+      <h1>Guest Check-in</h1>
+    </div>
+
+    <div class="checkin-body">
+      <p class="checkin-subtitle">Search by name or ticket code. Tap to check in.</p>
+
+      <div class="search-row">
+        <input type="search" id="search-input" placeholder="Name or ticket code..." autofocus autocomplete="off" />
+        <select id="table-filter">
+          <option value="">All</option>
+        </select>
+      </div>
+
+      <a href="/reg/volunteer/add-walkin" class="walkin-link">
+        + Add Walk-in Guest
+      </a>
+
+      <div id="results-list"></div>
+      <div id="no-results" class="no-results" style="display:none;">
+        No guests found. Try a different name or ticket code, or add a walk-in guest.
+      </div>
+      <div id="loading" class="loading-spinner" style="display:none;">Searching...</div>
+    </div>
+
+    <a href="/reg" class="admin-link">Back to Admin Portal</a>
+  </div>
+</body>
+
+<script>
+  import { requireRegVolunteer } from '../../../scripts/auth-gate';
+
+  let tables = [];
+  const searchInput = document.getElementById('search-input');
+  const tableFilter = document.getElementById('table-filter');
+  const resultsList = document.getElementById('results-list');
+  const noResults = document.getElementById('no-results');
+  const loading = document.getElementById('loading');
+
+  function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  let searchTimeout;
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(doSearch, 250);
+  });
+  tableFilter.addEventListener('change', doSearch);
+
+  async function doSearch() {
+    const q = searchInput.value.trim();
+    const tableId = tableFilter.value;
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (tableId) params.set('table', tableId);
+
+    if (!q) {
+      resultsList.innerHTML = '';
+      noResults.style.display = 'none';
+      loading.style.display = 'none';
+      return;
+    }
+
+    loading.style.display = '';
+    resultsList.innerHTML = '';
+    noResults.style.display = 'none';
+
+    try {
+      const res = await fetch(`/api/reg/volunteer/search?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        renderResults(data.results);
+      }
+    } catch (err) {
+      console.error('Search failed', err);
+    } finally {
+      loading.style.display = 'none';
+    }
+  }
+
+  function renderResults(results) {
+    if (results.length === 0) {
+      resultsList.innerHTML = '';
+      noResults.style.display = '';
+      return;
+    }
+    noResults.style.display = 'none';
+
+    resultsList.innerHTML = results.map(g => {
+      const arrived = !!g.arrived_at;
+      const vipBadge = g.is_walk_in
+        ? ' <span class="guest-badge guest-badge-walkin">Walk-in</span>'
+        : '';
+      const buyerBadge = g.is_buyer
+        ? ' <span class="guest-badge guest-badge-buyer">Buyer</span>'
+        : '';
+      const noteHtml = g.notes
+        ? `<div class="guest-note">Staff note: ${esc(g.notes)}</div>`
+        : '';
+
+      let nameHtml;
+      if (g.guest_name) {
+        nameHtml = `<div class="guest-name">${esc(g.guest_name)}${buyerBadge}${vipBadge}</div>`;
+      } else if (arrived) {
+        nameHtml = `<div class="guest-name"><span class="no-name">No name</span>${buyerBadge}${vipBadge}</div>`;
+      } else {
+        const inputId = `gn-${g.id}`;
+        nameHtml = `<div class="name-edit-row">
+          <input type="text" id="${inputId}" placeholder="Guest name" value="" />
+          <button class="btn-save" onclick="saveGuestName('${g.id}')">Save</button>
+        </div>`;
+      }
+
+      const buyerLine = g.buyer_name
+        ? `<div class="guest-buyer">Buyer: ${esc(g.buyer_name)}</div>`
+        : '';
+
+      const actionHtml = arrived
+        ? `<div class="arrived-label">
+            <span class="check-icon">✓</span>
+            Arrived at ${new Date(g.arrived_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+          </div>`
+        : `<button class="btn-arrive" onclick="markArrived('${g.id}')">Mark Arrived</button>`;
+
+      return `<div class="guest-card">
+        ${nameHtml}
+        <div class="guest-meta">
+          Ticket: <span class="ticket-pill">${esc(g.ticket_code)}</span>
+          <span class="sep">&middot;</span>
+          ${esc(g.table_label)}
+        </div>
+        ${buyerLine}
+        ${noteHtml}
+        <div class="guest-action">${actionHtml}</div>
+      </div>`;
+    }).join('');
+  }
+
+  window.saveGuestName = async (id) => {
+    const input = document.getElementById(`gn-${id}`);
+    const guestName = input.value.trim();
+    if (!guestName) {
+      alert('Please enter a guest name (or "NA" if unknown).');
+      return;
+    }
+    try {
+      const res = await fetch(`/api/reg/volunteer/guest/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guest_name: guestName }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        doSearch();
+      } else {
+        alert(data.message || 'Failed to save name.');
+      }
+    } catch {
+      alert('Network error. Please try again.');
+    }
+  };
+
+  window.markArrived = async (id) => {
+    try {
+      const res = await fetch(`/api/reg/volunteer/arrive/${id}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        if (data.message) alert(data.message);
+        doSearch();
+      } else {
+        alert(data.message || 'Failed to mark arrived.');
+      }
+    } catch {
+      alert('Network error. Please try again.');
+    }
+  };
+
+  async function loadTableConfig() {
+    try {
+      const res = await fetch('/api/reg/tables');
+      const data = await res.json();
+      if (data.success && data.tables) tables = data.tables;
+    } catch {}
+    tableFilter.innerHTML = '<option value="">All</option>';
+    tables.forEach(t => {
+      tableFilter.innerHTML += `<option value="${t.id}">${t.label}${t.isVIP ? ' (VIP)' : ''}</option>`;
+    });
+  }
+
+  requireRegVolunteer(async () => {
+    await loadTableConfig();
+    searchInput.focus();
+  });
+</script>
+</html>
