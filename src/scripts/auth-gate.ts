@@ -94,3 +94,10 @@ export function requireRegVolunteer(onAuthenticated?: (data: SessionResponse) =>
     },
   });
 }
+
+export function requireItAdmin(onAuthenticated?: (data: SessionResponse) => void): void {
+  requireAuth({
+    requireItAdmin: true,
+    onAuthenticated,
+  });
+}

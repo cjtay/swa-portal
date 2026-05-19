@@ -12,6 +12,7 @@ type NavItem = {
   href: string;
   label: string;
   regRole?: string | null;
+  itAdminOnly?: boolean;
 };
 
 type NavGroup = {
@@ -28,6 +29,7 @@ const navGroups: NavGroup[] = [
       { href: '/office-booking', label: 'Office Booking' },
       { href: '/namecards', label: 'Namecards' },
       { href: '/members', label: 'Members' },
+      { href: '/admin/settings', label: 'Settings', itAdminOnly: true },
     ],
   },
   {
@@ -65,7 +67,8 @@ const navGroups: NavGroup[] = [
           {group.items.map((item) => (
             <a href={item.href}
                aria-current={currentPath === item.href ? 'page' : undefined}
-               data-reg-role={item.regRole ?? ''}>
+               data-reg-role={item.regRole ?? ''}
+               data-it-admin-only={item.itAdminOnly ? 'true' : 'false'}>
               {item.label}
             </a>
           ))}
@@ -99,6 +102,14 @@ const navGroups: NavGroup[] = [
       if (isAdmin || itemRegRole === 'reg_admin') {
         (el as HTMLElement).style.display = '';
       } else if (itemRegRole === 'reg_volunteer' && regRole === 'reg_volunteer') {
+        (el as HTMLElement).style.display = '';
+      } else {
+        (el as HTMLElement).style.display = 'none';
+      }
+    });
+
+    nav.querySelectorAll('a[data-it-admin-only="true"]').forEach((el) => {
+      if (data.is_it_admin) {
         (el as HTMLElement).style.display = '';
       } else {
         (el as HTMLElement).style.display = 'none';

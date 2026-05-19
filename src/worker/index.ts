@@ -15,6 +15,7 @@ import { handleRegDashboard } from './api/reg/reg-dashboard';
 import { handleBuyerForm, handleBuyerUpdateGuest } from './api/reg/buyer-form';
 import { handleSendMagicLink } from './api/reg/admin-magic-link';
 import { handleRegTables } from './api/reg/reg-tables';
+import { handleAdminSettingsGet, handleAdminSettingsPost } from './api/admin-settings';
 
 const app = new Hono<{
   Bindings: Env;
@@ -78,5 +79,9 @@ app.patch('/api/reg/buyer/:token/guests/:id', handleBuyerUpdateGuest);
 
 // Registration — Admin magic link
 app.post('/api/reg/admin/send-magic-link/:bookingId', handleSendMagicLink);
+
+// Admin Settings
+app.get('/api/admin/settings', handleAdminSettingsGet);
+app.post('/api/admin/settings', handleAdminSettingsPost);
 
 export default app;
