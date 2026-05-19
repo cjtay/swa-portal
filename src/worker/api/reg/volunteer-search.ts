@@ -28,7 +28,7 @@ export async function handleVolunteerSearch(c: AppContext) {
     ).bind(likeQuery, likeQuery);
   }
 
-  const config = await loadTablesConfig(c.env.SWA_SESSION);
+  const config = await loadTablesConfig(c.env.SWA_CONFIG);
   const result = await stmt.all();
 
   const results = result.results.map((row: Record<string, unknown>) => {
@@ -44,6 +44,7 @@ export async function handleVolunteerSearch(c: AppContext) {
       arrived_at: row.arrived_at,
       notes: row.notes,
       booking_ref: row.booking_ref,
+      buyer_name: row.buyer_name,
     };
   });
 
@@ -80,7 +81,7 @@ export async function handleVolunteerArrive(c: AppContext) {
 
   await markArrived(c.env.DB, guestId, sessionEmail);
 
-  const config = await loadTablesConfig(c.env.SWA_SESSION);
+  const config = await loadTablesConfig(c.env.SWA_CONFIG);
   const table = getTable(config, String(g.table_id));
 
   return c.json({
@@ -116,7 +117,7 @@ export async function handleVolunteerWalkin(c: AppContext) {
     return c.json({ success: false, message: 'Table is required.' }, 400);
   }
 
-  const config = await loadTablesConfig(c.env.SWA_SESSION);
+  const config = await loadTablesConfig(c.env.SWA_CONFIG);
   const table = getTable(config, tableId);
   if (!table) {
     return c.json({ success: false, message: 'Invalid table.' }, 400);
@@ -147,4 +148,37 @@ export async function handleVolunteerWalkin(c: AppContext) {
       arrived_at: new Date().toISOString(),
     },
   }, 201);
+}
+
+export async function handleVolunteerUpdateGuest(c: AppContext) {
+  const guestId = c.req.param('id');
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ success: false, message: 'Invalid request body.' }, 400);
+  }
+
+  const guestName = String(body.guest_name || '').trim() || null;
+
+  const guest = await c.env.DB.prepare(
+    'SELECT * FROM reg_guests WHERE id = ?',
+  ).bind(guestId).first();
+
+  if (!guest) {
+    return c.json({ success: false, message: 'Guest not found.' }, 404);
+  }
+
+  const g = guest as Record<string, unknown>;
+
+  if (g.arrived_at) {
+    return c.json({ success: false, message: 'Cannot edit name after guest has arrived.' }, 400);
+  }
+
+  await c.env.DB.prepare(
+    "UPDATE reg_guests SET guest_name = ?, updated_at = datetime('now') WHERE id = ?",
+  ).bind(guestName, guestId).run();
+
+  return c.json({ success: true, id: guestId, guest_name: guestName });
 }

@@ -2,6 +2,7 @@ export type Env = {
   DB: D1Database;
   R2_BUCKET: R2Bucket;
   SWA_SESSION: KVNamespace;
+  SWA_CONFIG: KVNamespace;
   ASSETS: Fetcher;
   OTP_SECRET: string;
   SESSION_SECRET: string;

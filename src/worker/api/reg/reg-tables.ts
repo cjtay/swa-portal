@@ -8,7 +8,7 @@ type AppContext = Context<{
 }>;
 
 export async function handleRegTables(c: AppContext) {
-  const config = await loadTablesConfig(c.env.SWA_SESSION);
+  const config = await loadTablesConfig(c.env.SWA_CONFIG);
 
   return c.json({
     success: true,

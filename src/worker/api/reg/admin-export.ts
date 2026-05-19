@@ -8,7 +8,7 @@ type AppContext = Context<{
 }>;
 
 export async function handleAdminExport(c: AppContext) {
-  const config = await loadTablesConfig(c.env.SWA_SESSION);
+  const config = await loadTablesConfig(c.env.SWA_CONFIG);
 
   const results = await c.env.DB.prepare(`
     SELECT g.ticket_code, g.guest_name, g.table_id, g.is_buyer, g.is_walk_in, g.arrived_at, g.notes,

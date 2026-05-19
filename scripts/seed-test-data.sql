@@ -1,46 +1,476 @@
 -- Seed Test Data for Registration Module
+-- 25 tables: VIP-1, VIP-2, Tables 01-23
+-- VIP-1, VIP-2: individual buyer, 10 seats each
+-- Tables 01-05: single buyer, 10 seats each
+-- Tables 06-10: 2-3 buyers, mixed seat counts
+-- Tables 11-23: single buyer, 10 seats each
+-- No arrivals, no notes
+--
 -- Run: npx wrangler d1 execute swa-portal --remote --file=scripts/seed-test-data.sql
--- Clear first if needed: npx wrangler d1 execute swa-portal --remote --command="DELETE FROM reg_guests; DELETE FROM reg_bookings;"
 
--- ===========================================
--- Booking 1: SWA Board Dinner (Table 01, 10 pax)
--- ===========================================
-INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by)
-VALUES ('e3961bdd-d3a9-454f-a60b-c79e0d058970', 'REG-SWABRD', 'Lee Li Hua', 'lihua.lee@singaporewomenassociation.org', '+65 9277 6949', '01', 10, 'Board dinner - full table', 'cjtay@singaporewomenassociation.org');
+DELETE FROM reg_tokens;
+DELETE FROM reg_guests;
+DELETE FROM reg_bookings;
 
-INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
-('3be18ca7-440b-4295-aadf-a102c7729d30', 'e3961bdd-d3a9-454f-a60b-c79e0d058970', '01', 1, '01-01', 'Lee Li Hua', 1, 0, NULL),
-('3eb40685-38cc-41ac-972f-fd82b46e5502', 'e3961bdd-d3a9-454f-a60b-c79e0d058970', '01', 2, '01-02', 'Dr Stephanie Young', 0, 0, NULL),
-('0c16cc4f-7c98-4556-acf3-9674ae07094e', 'e3961bdd-d3a9-454f-a60b-c79e0d058970', '01', 3, '01-03', 'Angela Wong', 0, 0, NULL),
-('c4c53d42-e03c-44b0-9b5a-afd2c4461373', 'e3961bdd-d3a9-454f-a60b-c79e0d058970', '01', 4, '01-04', 'Roxanne Zhang', 0, 0, NULL),
-('6498268b-c54a-48e8-aff1-0f004dcca6bf', 'e3961bdd-d3a9-454f-a60b-c79e0d058970', '01', 5, '01-05', 'Joyce Yeo', 0, 0, 'Vegetarian'),
-('1d4235d2-5981-4b58-a292-54ad6beb3825', 'e3961bdd-d3a9-454f-a60b-c79e0d058970', '01', 6, '01-06', 'Lynette Lee', 0, 0, NULL),
-('7fec4744-f3a1-482b-85a7-b72f9ffc37fb', 'e3961bdd-d3a9-454f-a60b-c79e0d058970', '01', 7, '01-07', NULL, 0, 0, NULL),
-('366f9d12-9a06-42a1-b25c-359ea763e9b0', 'e3961bdd-d3a9-454f-a60b-c79e0d058970', '01', 8, '01-08', NULL, 0, 0, NULL),
-('08aba758-fb93-4abf-b7f5-521e00bbb814', 'e3961bdd-d3a9-454f-a60b-c79e0d058970', '01', 9, '01-09', NULL, 0, 0, NULL),
-('3ebbfc94-d14b-4a77-a228-02a2f39ff427', 'e3961bdd-d3a9-454f-a60b-c79e0d058970', '01', 10, '01-10', NULL, 0, 0, NULL);
-
--- ===========================================
--- Booking 2: Acme Corp (VIP-1, 6 pax)
--- ===========================================
-INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by)
-VALUES ('e530130f-63fc-4785-b042-c0009b0f5d31', 'REG-ACME01', 'David Chen', 'david.chen@acmecorp.com', '+65 9123 4567', 'VIP-1', 6, NULL, 'cjtay@singaporewomenassociation.org');
+-- ================================================
+-- VIP-1: CJ Tay — 10 seats
+-- ================================================
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000001-0000-0000-0000-000000000000', 'REG-VIP01', 'CJ Tay', 'cjtay@singaporewomenassociation.org', NULL, 'VIP-1', 10, NULL, 'cjtay@singaporewomenassociation.org');
 
 INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
-('0139f25b-0ff8-4a3f-8aa4-5d36e34beaab', 'e530130f-63fc-4785-b042-c0009b0f5d31', 'VIP-1', 1, 'V1-01', 'David Chen', 1, 0, NULL),
-('c6760d23-0202-43f3-8479-50c4ad3dec17', 'e530130f-63fc-4785-b042-c0009b0f5d31', 'VIP-1', 2, 'V1-02', 'Sarah Lim', 0, 0, 'Halal'),
-('456d5a37-9e28-4c33-ac81-a1f03c3b4e40', 'e530130f-63fc-4785-b042-c0009b0f5d31', 'VIP-1', 3, 'V1-03', 'Michael Tan', 0, 0, NULL),
-('8ad5d17a-9562-48f6-a2c7-2237d104c54c', 'e530130f-63fc-4785-b042-c0009b0f5d31', 'VIP-1', 4, 'V1-04', 'Priya Sharma', 0, 0, NULL),
-('5a87c012-adf2-40e9-81d0-7433f6ed7978', 'e530130f-63fc-4785-b042-c0009b0f5d31', 'VIP-1', 5, 'V1-05', NULL, 0, 0, NULL),
-('5493d740-5719-4e91-b5a1-1f6de2bbaf51', 'e530130f-63fc-4785-b042-c0009b0f5d31', 'VIP-1', 6, 'V1-06', NULL, 0, 0, NULL);
+('c0000001-0000-0000-0000-000000000000', 'b0000001-0000-0000-0000-000000000000', 'VIP-1', 1, 'V1-01', 'CJ Tay', 1, 0, NULL),
+('c0000002-0000-0000-0000-000000000000', 'b0000001-0000-0000-0000-000000000000', 'VIP-1', 2, 'V1-02', 'Angela Wong', 0, 0, NULL),
+('c0000003-0000-0000-0000-000000000000', 'b0000001-0000-0000-0000-000000000000', 'VIP-1', 3, 'V1-03', 'Joyce Yeo', 0, 0, NULL),
+('c0000004-0000-0000-0000-000000000000', 'b0000001-0000-0000-0000-000000000000', 'VIP-1', 4, 'V1-04', 'Lee Li Hua', 0, 0, NULL),
+('c0000005-0000-0000-0000-000000000000', 'b0000001-0000-0000-0000-000000000000', 'VIP-1', 5, 'V1-05', 'Stephanie Yeo', 0, 0, NULL),
+('c0000006-0000-0000-0000-000000000000', 'b0000001-0000-0000-0000-000000000000', 'VIP-1', 6, 'V1-06', NULL, 0, 0, NULL),
+('c0000007-0000-0000-0000-000000000000', 'b0000001-0000-0000-0000-000000000000', 'VIP-1', 7, 'V1-07', NULL, 0, 0, NULL),
+('c0000008-0000-0000-0000-000000000000', 'b0000001-0000-0000-0000-000000000000', 'VIP-1', 8, 'V1-08', NULL, 0, 0, NULL),
+('c0000009-0000-0000-0000-000000000000', 'b0000001-0000-0000-0000-000000000000', 'VIP-1', 9, 'V1-09', NULL, 0, 0, NULL),
+('c0000010-0000-0000-0000-000000000000', 'b0000001-0000-0000-0000-000000000000', 'VIP-1', 10, 'V1-10', NULL, 0, 0, NULL);
 
--- ===========================================
--- Booking 3: Jane Smith (Table 02, 3 pax)
--- ===========================================
-INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by)
-VALUES ('04f14fa0-92c9-4d37-805a-393977aaa0db', 'REG-SMITH9', 'Jane Smith', 'jane.smith@example.com', NULL, '02', 3, NULL, 'cjtay@singaporewomenassociation.org');
+-- ================================================
+-- VIP-2: Joyce Yeo — 10 seats
+-- ================================================
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000002-0000-0000-0000-000000000000', 'REG-VIP02', 'Joyce Yeo', 'joyce.yeo@singaporewomenassociation.org', NULL, 'VIP-2', 10, NULL, 'cjtay@singaporewomenassociation.org');
 
 INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
-('517b18ed-e2d5-4b94-a6b6-65c6348d247d', '04f14fa0-92c9-4d37-805a-393977aaa0db', '02', 1, '02-01', 'Jane Smith', 1, 0, NULL),
-('c141674b-882f-4513-b3bf-97ce1638529f', '04f14fa0-92c9-4d37-805a-393977aaa0db', '02', 2, '02-02', 'Robert Smith', 0, 0, NULL),
-('b133ff9c-7e49-43d3-8be5-efe1e1e2fb5a', '04f14fa0-92c9-4d37-805a-393977aaa0db', '02', 3, '02-03', NULL, 0, 0, NULL);
+('c0000011-0000-0000-0000-000000000000', 'b0000002-0000-0000-0000-000000000000', 'VIP-2', 1, 'V2-01', 'Joyce Yeo', 1, 0, NULL),
+('c0000012-0000-0000-0000-000000000000', 'b0000002-0000-0000-0000-000000000000', 'VIP-2', 2, 'V2-02', 'CJ Tay', 0, 0, NULL),
+('c0000013-0000-0000-0000-000000000000', 'b0000002-0000-0000-0000-000000000000', 'VIP-2', 3, 'V2-03', 'Angela Wong', 0, 0, NULL),
+('c0000014-0000-0000-0000-000000000000', 'b0000002-0000-0000-0000-000000000000', 'VIP-2', 4, 'V2-04', NULL, 0, 0, NULL),
+('c0000015-0000-0000-0000-000000000000', 'b0000002-0000-0000-0000-000000000000', 'VIP-2', 5, 'V2-05', NULL, 0, 0, NULL),
+('c0000016-0000-0000-0000-000000000000', 'b0000002-0000-0000-0000-000000000000', 'VIP-2', 6, 'V2-06', NULL, 0, 0, NULL),
+('c0000017-0000-0000-0000-000000000000', 'b0000002-0000-0000-0000-000000000000', 'VIP-2', 7, 'V2-07', NULL, 0, 0, NULL),
+('c0000018-0000-0000-0000-000000000000', 'b0000002-0000-0000-0000-000000000000', 'VIP-2', 8, 'V2-08', NULL, 0, 0, NULL),
+('c0000019-0000-0000-0000-000000000000', 'b0000002-0000-0000-0000-000000000000', 'VIP-2', 9, 'V2-09', NULL, 0, 0, NULL),
+('c0000020-0000-0000-0000-000000000000', 'b0000002-0000-0000-0000-000000000000', 'VIP-2', 10, 'V2-10', NULL, 0, 0, NULL);
+
+-- ================================================
+-- Table 01: Angela Wong — 10 seats
+-- ================================================
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000003-0000-0000-0000-000000000000', 'REG-T0101', 'Angela Wong', 'angela.wong@singaporewomenassociation.org', NULL, '01', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000021-0000-0000-0000-000000000000', 'b0000003-0000-0000-0000-000000000000', '01', 1, '01-01', 'Angela Wong', 1, 0, NULL),
+('c0000022-0000-0000-0000-000000000000', 'b0000003-0000-0000-0000-000000000000', '01', 2, '01-02', 'Michael Tan', 0, 0, NULL),
+('c0000023-0000-0000-0000-000000000000', 'b0000003-0000-0000-0000-000000000000', '01', 3, '01-03', 'Sarah Lim', 0, 0, NULL),
+('c0000024-0000-0000-0000-000000000000', 'b0000003-0000-0000-0000-000000000000', '01', 4, '01-04', 'Robert Wong', 0, 0, NULL),
+('c0000025-0000-0000-0000-000000000000', 'b0000003-0000-0000-0000-000000000000', '01', 5, '01-05', NULL, 0, 0, NULL),
+('c0000026-0000-0000-0000-000000000000', 'b0000003-0000-0000-0000-000000000000', '01', 6, '01-06', NULL, 0, 0, NULL),
+('c0000027-0000-0000-0000-000000000000', 'b0000003-0000-0000-0000-000000000000', '01', 7, '01-07', NULL, 0, 0, NULL),
+('c0000028-0000-0000-0000-000000000000', 'b0000003-0000-0000-0000-000000000000', '01', 8, '01-08', NULL, 0, 0, NULL),
+('c0000029-0000-0000-0000-000000000000', 'b0000003-0000-0000-0000-000000000000', '01', 9, '01-09', NULL, 0, 0, NULL),
+('c0000030-0000-0000-0000-000000000000', 'b0000003-0000-0000-0000-000000000000', '01', 10, '01-10', NULL, 0, 0, NULL);
+
+-- ================================================
+-- Table 02: Lee Li Hua — 10 seats
+-- ================================================
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000004-0000-0000-0000-000000000000', 'REG-T0201', 'Lee Li Hua', 'lihua.lee@singaporewomenassociation.org', NULL, '02', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000031-0000-0000-0000-000000000000', 'b0000004-0000-0000-0000-000000000000', '02', 1, '02-01', 'Lee Li Hua', 1, 0, NULL),
+('c0000032-0000-0000-0000-000000000000', 'b0000004-0000-0000-0000-000000000000', '02', 2, '02-02', 'Karen Ng', 0, 0, NULL),
+('c0000033-0000-0000-0000-000000000000', 'b0000004-0000-0000-0000-000000000000', '02', 3, '02-03', 'James Lee', 0, 0, NULL),
+('c0000034-0000-0000-0000-000000000000', 'b0000004-0000-0000-0000-000000000000', '02', 4, '02-04', NULL, 0, 0, NULL),
+('c0000035-0000-0000-0000-000000000000', 'b0000004-0000-0000-0000-000000000000', '02', 5, '02-05', NULL, 0, 0, NULL),
+('c0000036-0000-0000-0000-000000000000', 'b0000004-0000-0000-0000-000000000000', '02', 6, '02-06', NULL, 0, 0, NULL),
+('c0000037-0000-0000-0000-000000000000', 'b0000004-0000-0000-0000-000000000000', '02', 7, '02-07', NULL, 0, 0, NULL),
+('c0000038-0000-0000-0000-000000000000', 'b0000004-0000-0000-0000-000000000000', '02', 8, '02-08', NULL, 0, 0, NULL),
+('c0000039-0000-0000-0000-000000000000', 'b0000004-0000-0000-0000-000000000000', '02', 9, '02-09', NULL, 0, 0, NULL),
+('c0000040-0000-0000-0000-000000000000', 'b0000004-0000-0000-0000-000000000000', '02', 10, '02-10', NULL, 0, 0, NULL);
+
+-- ================================================
+-- Table 03: Priya Sharma — 10 seats
+-- ================================================
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000005-0000-0000-0000-000000000000', 'REG-T0301', 'Priya Sharma', 'priya.sharma@example.com', NULL, '03', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000041-0000-0000-0000-000000000000', 'b0000005-0000-0000-0000-000000000000', '03', 1, '03-01', 'Priya Sharma', 1, 0, NULL),
+('c0000042-0000-0000-0000-000000000000', 'b0000005-0000-0000-0000-000000000000', '03', 2, '03-02', 'Raj Sharma', 0, 0, NULL),
+('c0000043-0000-0000-0000-000000000000', 'b0000005-0000-0000-0000-000000000000', '03', 3, '03-03', NULL, 0, 0, NULL),
+('c0000044-0000-0000-0000-000000000000', 'b0000005-0000-0000-0000-000000000000', '03', 4, '03-04', NULL, 0, 0, NULL),
+('c0000045-0000-0000-0000-000000000000', 'b0000005-0000-0000-0000-000000000000', '03', 5, '03-05', NULL, 0, 0, NULL),
+('c0000046-0000-0000-0000-000000000000', 'b0000005-0000-0000-0000-000000000000', '03', 6, '03-06', NULL, 0, 0, NULL),
+('c0000047-0000-0000-0000-000000000000', 'b0000005-0000-0000-0000-000000000000', '03', 7, '03-07', NULL, 0, 0, NULL),
+('c0000048-0000-0000-0000-000000000000', 'b0000005-0000-0000-0000-000000000000', '03', 8, '03-08', NULL, 0, 0, NULL),
+('c0000049-0000-0000-0000-000000000000', 'b0000005-0000-0000-0000-000000000000', '03', 9, '03-09', NULL, 0, 0, NULL),
+('c0000050-0000-0000-0000-000000000000', 'b0000005-0000-0000-0000-000000000000', '03', 10, '03-10', NULL, 0, 0, NULL);
+
+-- ================================================
+-- Table 04: David Koh — 10 seats
+-- ================================================
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000006-0000-0000-0000-000000000000', 'REG-T0401', 'David Koh', 'david.koh@example.com', NULL, '04', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000051-0000-0000-0000-000000000000', 'b0000006-0000-0000-0000-000000000000', '04', 1, '04-01', 'David Koh', 1, 0, NULL),
+('c0000052-0000-0000-0000-000000000000', 'b0000006-0000-0000-0000-000000000000', '04', 2, '04-02', 'Amy Koh', 0, 0, NULL),
+('c0000053-0000-0000-0000-000000000000', 'b0000006-0000-0000-0000-000000000000', '04', 3, '04-03', 'Peter Koh', 0, 0, NULL),
+('c0000054-0000-0000-0000-000000000000', 'b0000006-0000-0000-0000-000000000000', '04', 4, '04-04', NULL, 0, 0, NULL),
+('c0000055-0000-0000-0000-000000000000', 'b0000006-0000-0000-0000-000000000000', '04', 5, '04-05', NULL, 0, 0, NULL),
+('c0000056-0000-0000-0000-000000000000', 'b0000006-0000-0000-0000-000000000000', '04', 6, '04-06', NULL, 0, 0, NULL),
+('c0000057-0000-0000-0000-000000000000', 'b0000006-0000-0000-0000-000000000000', '04', 7, '04-07', NULL, 0, 0, NULL),
+('c0000058-0000-0000-0000-000000000000', 'b0000006-0000-0000-0000-000000000000', '04', 8, '04-08', NULL, 0, 0, NULL),
+('c0000059-0000-0000-0000-000000000000', 'b0000006-0000-0000-0000-000000000000', '04', 9, '04-09', NULL, 0, 0, NULL),
+('c0000060-0000-0000-0000-000000000000', 'b0000006-0000-0000-0000-000000000000', '04', 10, '04-10', NULL, 0, 0, NULL);
+
+-- ================================================
+-- Table 05: Rachel Tan — 10 seats
+-- ================================================
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000007-0000-0000-0000-000000000000', 'REG-T0501', 'Rachel Tan', 'rachel.tan@example.com', NULL, '05', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000061-0000-0000-0000-000000000000', 'b0000007-0000-0000-0000-000000000000', '05', 1, '05-01', 'Rachel Tan', 1, 0, NULL),
+('c0000062-0000-0000-0000-000000000000', 'b0000007-0000-0000-0000-000000000000', '05', 2, '05-02', 'Simon Tan', 0, 0, NULL),
+('c0000063-0000-0000-0000-000000000000', 'b0000007-0000-0000-0000-000000000000', '05', 3, '05-03', NULL, 0, 0, NULL),
+('c0000064-0000-0000-0000-000000000000', 'b0000007-0000-0000-0000-000000000000', '05', 4, '05-04', NULL, 0, 0, NULL),
+('c0000065-0000-0000-0000-000000000000', 'b0000007-0000-0000-0000-000000000000', '05', 5, '05-05', NULL, 0, 0, NULL),
+('c0000066-0000-0000-0000-000000000000', 'b0000007-0000-0000-0000-000000000000', '05', 6, '05-06', NULL, 0, 0, NULL),
+('c0000067-0000-0000-0000-000000000000', 'b0000007-0000-0000-0000-000000000000', '05', 7, '05-07', NULL, 0, 0, NULL),
+('c0000068-0000-0000-0000-000000000000', 'b0000007-0000-0000-0000-000000000000', '05', 8, '05-08', NULL, 0, 0, NULL),
+('c0000069-0000-0000-0000-000000000000', 'b0000007-0000-0000-0000-000000000000', '05', 9, '05-09', NULL, 0, 0, NULL),
+('c0000070-0000-0000-0000-000000000000', 'b0000007-0000-0000-0000-000000000000', '05', 10, '05-10', NULL, 0, 0, NULL);
+
+-- ================================================
+-- Table 06: Angela Wong (7) + Wendy Lim (3)
+-- ================================================
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000008-0000-0000-0000-000000000000', 'REG-T0601', 'Angela Wong', 'angela.wong@singaporewomenassociation.org', NULL, '06', 7, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000071-0000-0000-0000-000000000000', 'b0000008-0000-0000-0000-000000000000', '06', 1, '06-01', 'Angela Wong', 1, 0, NULL),
+('c0000072-0000-0000-0000-000000000000', 'b0000008-0000-0000-0000-000000000000', '06', 2, '06-02', 'Patricia Chan', 0, 0, NULL),
+('c0000073-0000-0000-0000-000000000000', 'b0000008-0000-0000-0000-000000000000', '06', 3, '06-03', NULL, 0, 0, NULL),
+('c0000074-0000-0000-0000-000000000000', 'b0000008-0000-0000-0000-000000000000', '06', 4, '06-04', NULL, 0, 0, NULL),
+('c0000075-0000-0000-0000-000000000000', 'b0000008-0000-0000-0000-000000000000', '06', 5, '06-05', NULL, 0, 0, NULL),
+('c0000076-0000-0000-0000-000000000000', 'b0000008-0000-0000-0000-000000000000', '06', 6, '06-06', NULL, 0, 0, NULL),
+('c0000077-0000-0000-0000-000000000000', 'b0000008-0000-0000-0000-000000000000', '06', 7, '06-07', NULL, 0, 0, NULL);
+
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000009-0000-0000-0000-000000000000', 'REG-T0602', 'Wendy Lim', 'wendy.lim@example.com', NULL, '06', 3, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000078-0000-0000-0000-000000000000', 'b0000009-0000-0000-0000-000000000000', '06', 8, '06-08', 'Wendy Lim', 1, 0, NULL),
+('c0000079-0000-0000-0000-000000000000', 'b0000009-0000-0000-0000-000000000000', '06', 9, '06-09', NULL, 0, 0, NULL),
+('c0000080-0000-0000-0000-000000000000', 'b0000009-0000-0000-0000-000000000000', '06', 10, '06-10', NULL, 0, 0, NULL);
+
+-- ================================================
+-- Table 07: Lee Li Hua (5) + Marcus Chen (4) + Tom Goh (1)
+-- ================================================
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000010-0000-0000-0000-000000000000', 'REG-T0701', 'Lee Li Hua', 'lihua.lee@singaporewomenassociation.org', NULL, '07', 5, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000081-0000-0000-0000-000000000000', 'b0000010-0000-0000-0000-000000000000', '07', 1, '07-01', 'Lee Li Hua', 1, 0, NULL),
+('c0000082-0000-0000-0000-000000000000', 'b0000010-0000-0000-0000-000000000000', '07', 2, '07-02', 'Henry Chua', 0, 0, NULL),
+('c0000083-0000-0000-0000-000000000000', 'b0000010-0000-0000-0000-000000000000', '07', 3, '07-03', NULL, 0, 0, NULL),
+('c0000084-0000-0000-0000-000000000000', 'b0000010-0000-0000-0000-000000000000', '07', 4, '07-04', NULL, 0, 0, NULL),
+('c0000085-0000-0000-0000-000000000000', 'b0000010-0000-0000-0000-000000000000', '07', 5, '07-05', NULL, 0, 0, NULL);
+
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000011-0000-0000-0000-000000000000', 'REG-T0702', 'Marcus Chen', 'marcus.chen@example.com', NULL, '07', 4, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000086-0000-0000-0000-000000000000', 'b0000011-0000-0000-0000-000000000000', '07', 6, '07-06', 'Marcus Chen', 1, 0, NULL),
+('c0000087-0000-0000-0000-000000000000', 'b0000011-0000-0000-0000-000000000000', '07', 7, '07-07', NULL, 0, 0, NULL),
+('c0000088-0000-0000-0000-000000000000', 'b0000011-0000-0000-0000-000000000000', '07', 8, '07-08', NULL, 0, 0, NULL),
+('c0000089-0000-0000-0000-000000000000', 'b0000011-0000-0000-0000-000000000000', '07', 9, '07-09', NULL, 0, 0, NULL);
+
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000012-0000-0000-0000-000000000000', 'REG-T0703', 'Tom Goh', 'tom.goh@example.com', NULL, '07', 1, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000090-0000-0000-0000-000000000000', 'b0000012-0000-0000-0000-000000000000', '07', 10, '07-10', 'Tom Goh', 1, 0, NULL);
+
+-- ================================================
+-- Table 08: Joyce Yeo (9) + Ben Chia (1)
+-- ================================================
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000013-0000-0000-0000-000000000000', 'REG-T0801', 'Joyce Yeo', 'joyce.yeo@singaporewomenassociation.org', NULL, '08', 9, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000091-0000-0000-0000-000000000000', 'b0000013-0000-0000-0000-000000000000', '08', 1, '08-01', 'Joyce Yeo', 1, 0, NULL),
+('c0000092-0000-0000-0000-000000000000', 'b0000013-0000-0000-0000-000000000000', '08', 2, '08-02', 'Alice Yeo', 0, 0, NULL),
+('c0000093-0000-0000-0000-000000000000', 'b0000013-0000-0000-0000-000000000000', '08', 3, '08-03', NULL, 0, 0, NULL),
+('c0000094-0000-0000-0000-000000000000', 'b0000013-0000-0000-0000-000000000000', '08', 4, '08-04', NULL, 0, 0, NULL),
+('c0000095-0000-0000-0000-000000000000', 'b0000013-0000-0000-0000-000000000000', '08', 5, '08-05', NULL, 0, 0, NULL),
+('c0000096-0000-0000-0000-000000000000', 'b0000013-0000-0000-0000-000000000000', '08', 6, '08-06', NULL, 0, 0, NULL),
+('c0000097-0000-0000-0000-000000000000', 'b0000013-0000-0000-0000-000000000000', '08', 7, '08-07', NULL, 0, 0, NULL),
+('c0000098-0000-0000-0000-000000000000', 'b0000013-0000-0000-0000-000000000000', '08', 8, '08-08', NULL, 0, 0, NULL),
+('c0000099-0000-0000-0000-000000000000', 'b0000013-0000-0000-0000-000000000000', '08', 9, '08-09', NULL, 0, 0, NULL);
+
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000014-0000-0000-0000-000000000000', 'REG-T0802', 'Ben Chia', 'ben.chia@example.com', NULL, '08', 1, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000100-0000-0000-0000-000000000000', 'b0000014-0000-0000-0000-000000000000', '08', 10, '08-10', 'Ben Chia', 1, 0, NULL);
+
+-- ================================================
+-- Table 09: Patricia Yap (4) + Henry Sim (4) + Grace Phua (2)
+-- ================================================
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000015-0000-0000-0000-000000000000', 'REG-T0901', 'Patricia Yap', 'patricia.yap@example.com', NULL, '09', 4, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000101-0000-0000-0000-000000000000', 'b0000015-0000-0000-0000-000000000000', '09', 1, '09-01', 'Patricia Yap', 1, 0, NULL),
+('c0000102-0000-0000-0000-000000000000', 'b0000015-0000-0000-0000-000000000000', '09', 2, '09-02', NULL, 0, 0, NULL),
+('c0000103-0000-0000-0000-000000000000', 'b0000015-0000-0000-0000-000000000000', '09', 3, '09-03', NULL, 0, 0, NULL),
+('c0000104-0000-0000-0000-000000000000', 'b0000015-0000-0000-0000-000000000000', '09', 4, '09-04', NULL, 0, 0, NULL);
+
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000016-0000-0000-0000-000000000000', 'REG-T0902', 'Henry Sim', 'henry.sim@example.com', NULL, '09', 4, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000105-0000-0000-0000-000000000000', 'b0000016-0000-0000-0000-000000000000', '09', 5, '09-05', 'Henry Sim', 1, 0, NULL),
+('c0000106-0000-0000-0000-000000000000', 'b0000016-0000-0000-0000-000000000000', '09', 6, '09-06', 'Lily Sim', 0, 0, NULL),
+('c0000107-0000-0000-0000-000000000000', 'b0000016-0000-0000-0000-000000000000', '09', 7, '09-07', NULL, 0, 0, NULL),
+('c0000108-0000-0000-0000-000000000000', 'b0000016-0000-0000-0000-000000000000', '09', 8, '09-08', NULL, 0, 0, NULL);
+
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000017-0000-0000-0000-000000000000', 'REG-T0903', 'Grace Phua', 'grace.phua@example.com', NULL, '09', 2, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000109-0000-0000-0000-000000000000', 'b0000017-0000-0000-0000-000000000000', '09', 9, '09-09', 'Grace Phua', 1, 0, NULL),
+('c0000110-0000-0000-0000-000000000000', 'b0000017-0000-0000-0000-000000000000', '09', 10, '09-10', NULL, 0, 0, NULL);
+
+-- ================================================
+-- Table 10: CJ Tay (6) + Nancy Kwok (4)
+-- ================================================
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000018-0000-0000-0000-000000000000', 'REG-T1001', 'CJ Tay', 'cjtay@singaporewomenassociation.org', NULL, '10', 6, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000111-0000-0000-0000-000000000000', 'b0000018-0000-0000-0000-000000000000', '10', 1, '10-01', 'CJ Tay', 1, 0, NULL),
+('c0000112-0000-0000-0000-000000000000', 'b0000018-0000-0000-0000-000000000000', '10', 2, '10-02', NULL, 0, 0, NULL),
+('c0000113-0000-0000-0000-000000000000', 'b0000018-0000-0000-0000-000000000000', '10', 3, '10-03', NULL, 0, 0, NULL),
+('c0000114-0000-0000-0000-000000000000', 'b0000018-0000-0000-0000-000000000000', '10', 4, '10-04', NULL, 0, 0, NULL),
+('c0000115-0000-0000-0000-000000000000', 'b0000018-0000-0000-0000-000000000000', '10', 5, '10-05', NULL, 0, 0, NULL),
+('c0000116-0000-0000-0000-000000000000', 'b0000018-0000-0000-0000-000000000000', '10', 6, '10-06', NULL, 0, 0, NULL);
+
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000019-0000-0000-0000-000000000000', 'REG-T1002', 'Nancy Kwok', 'nancy.kwok@example.com', NULL, '10', 4, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000117-0000-0000-0000-000000000000', 'b0000019-0000-0000-0000-000000000000', '10', 7, '10-07', 'Nancy Kwok', 1, 0, NULL),
+('c0000118-0000-0000-0000-000000000000', 'b0000019-0000-0000-0000-000000000000', '10', 8, '10-08', NULL, 0, 0, NULL),
+('c0000119-0000-0000-0000-000000000000', 'b0000019-0000-0000-0000-000000000000', '10', 9, '10-09', NULL, 0, 0, NULL),
+('c0000120-0000-0000-0000-000000000000', 'b0000019-0000-0000-0000-000000000000', '10', 10, '10-10', NULL, 0, 0, NULL);
+
+-- ================================================
+-- Tables 11-23: Single buyer, 10 seats each
+-- ================================================
+
+-- Table 11: Victor Lim
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000020-0000-0000-0000-000000000000', 'REG-T1101', 'Victor Lim', 'victor.lim@example.com', NULL, '11', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000121-0000-0000-0000-000000000000', 'b0000020-0000-0000-0000-000000000000', '11', 1, '11-01', 'Victor Lim', 1, 0, NULL),
+('c0000122-0000-0000-0000-000000000000', 'b0000020-0000-0000-0000-000000000000', '11', 2, '11-02', NULL, 0, 0, NULL),
+('c0000123-0000-0000-0000-000000000000', 'b0000020-0000-0000-0000-000000000000', '11', 3, '11-03', NULL, 0, 0, NULL),
+('c0000124-0000-0000-0000-000000000000', 'b0000020-0000-0000-0000-000000000000', '11', 4, '11-04', NULL, 0, 0, NULL),
+('c0000125-0000-0000-0000-000000000000', 'b0000020-0000-0000-0000-000000000000', '11', 5, '11-05', NULL, 0, 0, NULL),
+('c0000126-0000-0000-0000-000000000000', 'b0000020-0000-0000-0000-000000000000', '11', 6, '11-06', NULL, 0, 0, NULL),
+('c0000127-0000-0000-0000-000000000000', 'b0000020-0000-0000-0000-000000000000', '11', 7, '11-07', NULL, 0, 0, NULL),
+('c0000128-0000-0000-0000-000000000000', 'b0000020-0000-0000-0000-000000000000', '11', 8, '11-08', NULL, 0, 0, NULL),
+('c0000129-0000-0000-0000-000000000000', 'b0000020-0000-0000-0000-000000000000', '11', 9, '11-09', NULL, 0, 0, NULL),
+('c0000130-0000-0000-0000-000000000000', 'b0000020-0000-0000-0000-000000000000', '11', 10, '11-10', NULL, 0, 0, NULL);
+
+-- Table 12: Diana Foo
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000021-0000-0000-0000-000000000000', 'REG-T1201', 'Diana Foo', 'diana.foo@example.com', NULL, '12', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000131-0000-0000-0000-000000000000', 'b0000021-0000-0000-0000-000000000000', '12', 1, '12-01', 'Diana Foo', 1, 0, NULL),
+('c0000132-0000-0000-0000-000000000000', 'b0000021-0000-0000-0000-000000000000', '12', 2, '12-02', NULL, 0, 0, NULL),
+('c0000133-0000-0000-0000-000000000000', 'b0000021-0000-0000-0000-000000000000', '12', 3, '12-03', NULL, 0, 0, NULL),
+('c0000134-0000-0000-0000-000000000000', 'b0000021-0000-0000-0000-000000000000', '12', 4, '12-04', NULL, 0, 0, NULL),
+('c0000135-0000-0000-0000-000000000000', 'b0000021-0000-0000-0000-000000000000', '12', 5, '12-05', NULL, 0, 0, NULL),
+('c0000136-0000-0000-0000-000000000000', 'b0000021-0000-0000-0000-000000000000', '12', 6, '12-06', NULL, 0, 0, NULL),
+('c0000137-0000-0000-0000-000000000000', 'b0000021-0000-0000-0000-000000000000', '12', 7, '12-07', NULL, 0, 0, NULL),
+('c0000138-0000-0000-0000-000000000000', 'b0000021-0000-0000-0000-000000000000', '12', 8, '12-08', NULL, 0, 0, NULL),
+('c0000139-0000-0000-0000-000000000000', 'b0000021-0000-0000-0000-000000000000', '12', 9, '12-09', NULL, 0, 0, NULL),
+('c0000140-0000-0000-0000-000000000000', 'b0000021-0000-0000-0000-000000000000', '12', 10, '12-10', NULL, 0, 0, NULL);
+
+-- Table 13: Eugene Chua
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000022-0000-0000-0000-000000000000', 'REG-T1301', 'Eugene Chua', 'eugene.chua@example.com', NULL, '13', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000141-0000-0000-0000-000000000000', 'b0000022-0000-0000-0000-000000000000', '13', 1, '13-01', 'Eugene Chua', 1, 0, NULL),
+('c0000142-0000-0000-0000-000000000000', 'b0000022-0000-0000-0000-000000000000', '13', 2, '13-02', NULL, 0, 0, NULL),
+('c0000143-0000-0000-0000-000000000000', 'b0000022-0000-0000-0000-000000000000', '13', 3, '13-03', NULL, 0, 0, NULL),
+('c0000144-0000-0000-0000-000000000000', 'b0000022-0000-0000-0000-000000000000', '13', 4, '13-04', NULL, 0, 0, NULL),
+('c0000145-0000-0000-0000-000000000000', 'b0000022-0000-0000-0000-000000000000', '13', 5, '13-05', NULL, 0, 0, NULL),
+('c0000146-0000-0000-0000-000000000000', 'b0000022-0000-0000-0000-000000000000', '13', 6, '13-06', NULL, 0, 0, NULL),
+('c0000147-0000-0000-0000-000000000000', 'b0000022-0000-0000-0000-000000000000', '13', 7, '13-07', NULL, 0, 0, NULL),
+('c0000148-0000-0000-0000-000000000000', 'b0000022-0000-0000-0000-000000000000', '13', 8, '13-08', NULL, 0, 0, NULL),
+('c0000149-0000-0000-0000-000000000000', 'b0000022-0000-0000-0000-000000000000', '13', 9, '13-09', NULL, 0, 0, NULL),
+('c0000150-0000-0000-0000-000000000000', 'b0000022-0000-0000-0000-000000000000', '13', 10, '13-10', NULL, 0, 0, NULL);
+
+-- Table 14: Felicia Ong
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000023-0000-0000-0000-000000000000', 'REG-T1401', 'Felicia Ong', 'felicia.ong@example.com', NULL, '14', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000151-0000-0000-0000-000000000000', 'b0000023-0000-0000-0000-000000000000', '14', 1, '14-01', 'Felicia Ong', 1, 0, NULL),
+('c0000152-0000-0000-0000-000000000000', 'b0000023-0000-0000-0000-000000000000', '14', 2, '14-02', NULL, 0, 0, NULL),
+('c0000153-0000-0000-0000-000000000000', 'b0000023-0000-0000-0000-000000000000', '14', 3, '14-03', NULL, 0, 0, NULL),
+('c0000154-0000-0000-0000-000000000000', 'b0000023-0000-0000-0000-000000000000', '14', 4, '14-04', NULL, 0, 0, NULL),
+('c0000155-0000-0000-0000-000000000000', 'b0000023-0000-0000-0000-000000000000', '14', 5, '14-05', NULL, 0, 0, NULL),
+('c0000156-0000-0000-0000-000000000000', 'b0000023-0000-0000-0000-000000000000', '14', 6, '14-06', NULL, 0, 0, NULL),
+('c0000157-0000-0000-0000-000000000000', 'b0000023-0000-0000-0000-000000000000', '14', 7, '14-07', NULL, 0, 0, NULL),
+('c0000158-0000-0000-0000-000000000000', 'b0000023-0000-0000-0000-000000000000', '14', 8, '14-08', NULL, 0, 0, NULL),
+('c0000159-0000-0000-0000-000000000000', 'b0000023-0000-0000-0000-000000000000', '14', 9, '14-09', NULL, 0, 0, NULL),
+('c0000160-0000-0000-0000-000000000000', 'b0000023-0000-0000-0000-000000000000', '14', 10, '14-10', NULL, 0, 0, NULL);
+
+-- Table 15: Gerald Ho
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000024-0000-0000-0000-000000000000', 'REG-T1501', 'Gerald Ho', 'gerald.ho@example.com', NULL, '15', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000161-0000-0000-0000-000000000000', 'b0000024-0000-0000-0000-000000000000', '15', 1, '15-01', 'Gerald Ho', 1, 0, NULL),
+('c0000162-0000-0000-0000-000000000000', 'b0000024-0000-0000-0000-000000000000', '15', 2, '15-02', NULL, 0, 0, NULL),
+('c0000163-0000-0000-0000-000000000000', 'b0000024-0000-0000-0000-000000000000', '15', 3, '15-03', NULL, 0, 0, NULL),
+('c0000164-0000-0000-0000-000000000000', 'b0000024-0000-0000-0000-000000000000', '15', 4, '15-04', NULL, 0, 0, NULL),
+('c0000165-0000-0000-0000-000000000000', 'b0000024-0000-0000-0000-000000000000', '15', 5, '15-05', NULL, 0, 0, NULL),
+('c0000166-0000-0000-0000-000000000000', 'b0000024-0000-0000-0000-000000000000', '15', 6, '15-06', NULL, 0, 0, NULL),
+('c0000167-0000-0000-0000-000000000000', 'b0000024-0000-0000-0000-000000000000', '15', 7, '15-07', NULL, 0, 0, NULL),
+('c0000168-0000-0000-0000-000000000000', 'b0000024-0000-0000-0000-000000000000', '15', 8, '15-08', NULL, 0, 0, NULL),
+('c0000169-0000-0000-0000-000000000000', 'b0000024-0000-0000-0000-000000000000', '15', 9, '15-09', NULL, 0, 0, NULL),
+('c0000170-0000-0000-0000-000000000000', 'b0000024-0000-0000-0000-000000000000', '15', 10, '15-10', NULL, 0, 0, NULL);
+
+-- Table 16: Hannah Wee
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000025-0000-0000-0000-000000000000', 'REG-T1601', 'Hannah Wee', 'hannah.wee@example.com', NULL, '16', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000171-0000-0000-0000-000000000000', 'b0000025-0000-0000-0000-000000000000', '16', 1, '16-01', 'Hannah Wee', 1, 0, NULL),
+('c0000172-0000-0000-0000-000000000000', 'b0000025-0000-0000-0000-000000000000', '16', 2, '16-02', NULL, 0, 0, NULL),
+('c0000173-0000-0000-0000-000000000000', 'b0000025-0000-0000-0000-000000000000', '16', 3, '16-03', NULL, 0, 0, NULL),
+('c0000174-0000-0000-0000-000000000000', 'b0000025-0000-0000-0000-000000000000', '16', 4, '16-04', NULL, 0, 0, NULL),
+('c0000175-0000-0000-0000-000000000000', 'b0000025-0000-0000-0000-000000000000', '16', 5, '16-05', NULL, 0, 0, NULL),
+('c0000176-0000-0000-0000-000000000000', 'b0000025-0000-0000-0000-000000000000', '16', 6, '16-06', NULL, 0, 0, NULL),
+('c0000177-0000-0000-0000-000000000000', 'b0000025-0000-0000-0000-000000000000', '16', 7, '16-07', NULL, 0, 0, NULL),
+('c0000178-0000-0000-0000-000000000000', 'b0000025-0000-0000-0000-000000000000', '16', 8, '16-08', NULL, 0, 0, NULL),
+('c0000179-0000-0000-0000-000000000000', 'b0000025-0000-0000-0000-000000000000', '16', 9, '16-09', NULL, 0, 0, NULL),
+('c0000180-0000-0000-0000-000000000000', 'b0000025-0000-0000-0000-000000000000', '16', 10, '16-10', NULL, 0, 0, NULL);
+
+-- Table 17: Ivan Chan
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000026-0000-0000-0000-000000000000', 'REG-T1701', 'Ivan Chan', 'ivan.chan@example.com', NULL, '17', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000181-0000-0000-0000-000000000000', 'b0000026-0000-0000-0000-000000000000', '17', 1, '17-01', 'Ivan Chan', 1, 0, NULL),
+('c0000182-0000-0000-0000-000000000000', 'b0000026-0000-0000-0000-000000000000', '17', 2, '17-02', NULL, 0, 0, NULL),
+('c0000183-0000-0000-0000-000000000000', 'b0000026-0000-0000-0000-000000000000', '17', 3, '17-03', NULL, 0, 0, NULL),
+('c0000184-0000-0000-0000-000000000000', 'b0000026-0000-0000-0000-000000000000', '17', 4, '17-04', NULL, 0, 0, NULL),
+('c0000185-0000-0000-0000-000000000000', 'b0000026-0000-0000-0000-000000000000', '17', 5, '17-05', NULL, 0, 0, NULL),
+('c0000186-0000-0000-0000-000000000000', 'b0000026-0000-0000-0000-000000000000', '17', 6, '17-06', NULL, 0, 0, NULL),
+('c0000187-0000-0000-0000-000000000000', 'b0000026-0000-0000-0000-000000000000', '17', 7, '17-07', NULL, 0, 0, NULL),
+('c0000188-0000-0000-0000-000000000000', 'b0000026-0000-0000-0000-000000000000', '17', 8, '17-08', NULL, 0, 0, NULL),
+('c0000189-0000-0000-0000-000000000000', 'b0000026-0000-0000-0000-000000000000', '17', 9, '17-09', NULL, 0, 0, NULL),
+('c0000190-0000-0000-0000-000000000000', 'b0000026-0000-0000-0000-000000000000', '17', 10, '17-10', NULL, 0, 0, NULL);
+
+-- Table 18: Jasmine Kwan
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000027-0000-0000-0000-000000000000', 'REG-T1801', 'Jasmine Kwan', 'jasmine.kwan@example.com', NULL, '18', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000191-0000-0000-0000-000000000000', 'b0000027-0000-0000-0000-000000000000', '18', 1, '18-01', 'Jasmine Kwan', 1, 0, NULL),
+('c0000192-0000-0000-0000-000000000000', 'b0000027-0000-0000-0000-000000000000', '18', 2, '18-02', NULL, 0, 0, NULL),
+('c0000193-0000-0000-0000-000000000000', 'b0000027-0000-0000-0000-000000000000', '18', 3, '18-03', NULL, 0, 0, NULL),
+('c0000194-0000-0000-0000-000000000000', 'b0000027-0000-0000-0000-000000000000', '18', 4, '18-04', NULL, 0, 0, NULL),
+('c0000195-0000-0000-0000-000000000000', 'b0000027-0000-0000-0000-000000000000', '18', 5, '18-05', NULL, 0, 0, NULL),
+('c0000196-0000-0000-0000-000000000000', 'b0000027-0000-0000-0000-000000000000', '18', 6, '18-06', NULL, 0, 0, NULL),
+('c0000197-0000-0000-0000-000000000000', 'b0000027-0000-0000-0000-000000000000', '18', 7, '18-07', NULL, 0, 0, NULL),
+('c0000198-0000-0000-0000-000000000000', 'b0000027-0000-0000-0000-000000000000', '18', 8, '18-08', NULL, 0, 0, NULL),
+('c0000199-0000-0000-0000-000000000000', 'b0000027-0000-0000-0000-000000000000', '18', 9, '18-09', NULL, 0, 0, NULL),
+('c0000200-0000-0000-0000-000000000000', 'b0000027-0000-0000-0000-000000000000', '18', 10, '18-10', NULL, 0, 0, NULL);
+
+-- Table 19: Kevin Ng
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000028-0000-0000-0000-000000000000', 'REG-T1901', 'Kevin Ng', 'kevin.ng@example.com', NULL, '19', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000201-0000-0000-0000-000000000000', 'b0000028-0000-0000-0000-000000000000', '19', 1, '19-01', 'Kevin Ng', 1, 0, NULL),
+('c0000202-0000-0000-0000-000000000000', 'b0000028-0000-0000-0000-000000000000', '19', 2, '19-02', NULL, 0, 0, NULL),
+('c0000203-0000-0000-0000-000000000000', 'b0000028-0000-0000-0000-000000000000', '19', 3, '19-03', NULL, 0, 0, NULL),
+('c0000204-0000-0000-0000-000000000000', 'b0000028-0000-0000-0000-000000000000', '19', 4, '19-04', NULL, 0, 0, NULL),
+('c0000205-0000-0000-0000-000000000000', 'b0000028-0000-0000-0000-000000000000', '19', 5, '19-05', NULL, 0, 0, NULL),
+('c0000206-0000-0000-0000-000000000000', 'b0000028-0000-0000-0000-000000000000', '19', 6, '19-06', NULL, 0, 0, NULL),
+('c0000207-0000-0000-0000-000000000000', 'b0000028-0000-0000-0000-000000000000', '19', 7, '19-07', NULL, 0, 0, NULL),
+('c0000208-0000-0000-0000-000000000000', 'b0000028-0000-0000-0000-000000000000', '19', 8, '19-08', NULL, 0, 0, NULL),
+('c0000209-0000-0000-0000-000000000000', 'b0000028-0000-0000-0000-000000000000', '19', 9, '19-09', NULL, 0, 0, NULL),
+('c0000210-0000-0000-0000-000000000000', 'b0000028-0000-0000-0000-000000000000', '19', 10, '19-10', NULL, 0, 0, NULL);
+
+-- Table 20: Linda Soh
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000029-0000-0000-0000-000000000000', 'REG-T2001', 'Linda Soh', 'linda.soh@example.com', NULL, '20', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000211-0000-0000-0000-000000000000', 'b0000029-0000-0000-0000-000000000000', '20', 1, '20-01', 'Linda Soh', 1, 0, NULL),
+('c0000212-0000-0000-0000-000000000000', 'b0000029-0000-0000-0000-000000000000', '20', 2, '20-02', NULL, 0, 0, NULL),
+('c0000213-0000-0000-0000-000000000000', 'b0000029-0000-0000-0000-000000000000', '20', 3, '20-03', NULL, 0, 0, NULL),
+('c0000214-0000-0000-0000-000000000000', 'b0000029-0000-0000-0000-000000000000', '20', 4, '20-04', NULL, 0, 0, NULL),
+('c0000215-0000-0000-0000-000000000000', 'b0000029-0000-0000-0000-000000000000', '20', 5, '20-05', NULL, 0, 0, NULL),
+('c0000216-0000-0000-0000-000000000000', 'b0000029-0000-0000-0000-000000000000', '20', 6, '20-06', NULL, 0, 0, NULL),
+('c0000217-0000-0000-0000-000000000000', 'b0000029-0000-0000-0000-000000000000', '20', 7, '20-07', NULL, 0, 0, NULL),
+('c0000218-0000-0000-0000-000000000000', 'b0000029-0000-0000-0000-000000000000', '20', 8, '20-08', NULL, 0, 0, NULL),
+('c0000219-0000-0000-0000-000000000000', 'b0000029-0000-0000-0000-000000000000', '20', 9, '20-09', NULL, 0, 0, NULL),
+('c0000220-0000-0000-0000-000000000000', 'b0000029-0000-0000-0000-000000000000', '20', 10, '20-10', NULL, 0, 0, NULL);
+
+-- Table 21: Mei Ling
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000030-0000-0000-0000-000000000000', 'REG-T2101', 'Mei Ling', 'mei.ling@example.com', NULL, '21', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000221-0000-0000-0000-000000000000', 'b0000030-0000-0000-0000-000000000000', '21', 1, '21-01', 'Mei Ling', 1, 0, NULL),
+('c0000222-0000-0000-0000-000000000000', 'b0000030-0000-0000-0000-000000000000', '21', 2, '21-02', NULL, 0, 0, NULL),
+('c0000223-0000-0000-0000-000000000000', 'b0000030-0000-0000-0000-000000000000', '21', 3, '21-03', NULL, 0, 0, NULL),
+('c0000224-0000-0000-0000-000000000000', 'b0000030-0000-0000-0000-000000000000', '21', 4, '21-04', NULL, 0, 0, NULL),
+('c0000225-0000-0000-0000-000000000000', 'b0000030-0000-0000-0000-000000000000', '21', 5, '21-05', NULL, 0, 0, NULL),
+('c0000226-0000-0000-0000-000000000000', 'b0000030-0000-0000-0000-000000000000', '21', 6, '21-06', NULL, 0, 0, NULL),
+('c0000227-0000-0000-0000-000000000000', 'b0000030-0000-0000-0000-000000000000', '21', 7, '21-07', NULL, 0, 0, NULL),
+('c0000228-0000-0000-0000-000000000000', 'b0000030-0000-0000-0000-000000000000', '21', 8, '21-08', NULL, 0, 0, NULL),
+('c0000229-0000-0000-0000-000000000000', 'b0000030-0000-0000-0000-000000000000', '21', 9, '21-09', NULL, 0, 0, NULL),
+('c0000230-0000-0000-0000-000000000000', 'b0000030-0000-0000-0000-000000000000', '21', 10, '21-10', NULL, 0, 0, NULL);
+
+-- Table 22: Nina Lam
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000031-0000-0000-0000-000000000000', 'REG-T2201', 'Nina Lam', 'nina.lam@example.com', NULL, '22', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000231-0000-0000-0000-000000000000', 'b0000031-0000-0000-0000-000000000000', '22', 1, '22-01', 'Nina Lam', 1, 0, NULL),
+('c0000232-0000-0000-0000-000000000000', 'b0000031-0000-0000-0000-000000000000', '22', 2, '22-02', NULL, 0, 0, NULL),
+('c0000233-0000-0000-0000-000000000000', 'b0000031-0000-0000-0000-000000000000', '22', 3, '22-03', NULL, 0, 0, NULL),
+('c0000234-0000-0000-0000-000000000000', 'b0000031-0000-0000-0000-000000000000', '22', 4, '22-04', NULL, 0, 0, NULL),
+('c0000235-0000-0000-0000-000000000000', 'b0000031-0000-0000-0000-000000000000', '22', 5, '22-05', NULL, 0, 0, NULL),
+('c0000236-0000-0000-0000-000000000000', 'b0000031-0000-0000-0000-000000000000', '22', 6, '22-06', NULL, 0, 0, NULL),
+('c0000237-0000-0000-0000-000000000000', 'b0000031-0000-0000-0000-000000000000', '22', 7, '22-07', NULL, 0, 0, NULL),
+('c0000238-0000-0000-0000-000000000000', 'b0000031-0000-0000-0000-000000000000', '22', 8, '22-08', NULL, 0, 0, NULL),
+('c0000239-0000-0000-0000-000000000000', 'b0000031-0000-0000-0000-000000000000', '22', 9, '22-09', NULL, 0, 0, NULL),
+('c0000240-0000-0000-0000-000000000000', 'b0000031-0000-0000-0000-000000000000', '22', 10, '22-10', NULL, 0, 0, NULL);
+
+-- Table 23: Oscar Yeo
+INSERT INTO reg_bookings (id, booking_ref, buyer_name, buyer_email, buyer_phone, table_id, pax, notes, created_by) VALUES
+('b0000032-0000-0000-0000-000000000000', 'REG-T2301', 'Oscar Yeo', 'oscar.yeo@example.com', NULL, '23', 10, NULL, 'cjtay@singaporewomenassociation.org');
+
+INSERT INTO reg_guests (id, booking_id, table_id, seat_counter, ticket_code, guest_name, is_buyer, is_walk_in, notes) VALUES
+('c0000241-0000-0000-0000-000000000000', 'b0000032-0000-0000-0000-000000000000', '23', 1, '23-01', 'Oscar Yeo', 1, 0, NULL),
+('c0000242-0000-0000-0000-000000000000', 'b0000032-0000-0000-0000-000000000000', '23', 2, '23-02', NULL, 0, 0, NULL),
+('c0000243-0000-0000-0000-000000000000', 'b0000032-0000-0000-0000-000000000000', '23', 3, '23-03', NULL, 0, 0, NULL),
+('c0000244-0000-0000-0000-000000000000', 'b0000032-0000-0000-0000-000000000000', '23', 4, '23-04', NULL, 0, 0, NULL),
+('c0000245-0000-0000-0000-000000000000', 'b0000032-0000-0000-0000-000000000000', '23', 5, '23-05', NULL, 0, 0, NULL),
+('c0000246-0000-0000-0000-000000000000', 'b0000032-0000-0000-0000-000000000000', '23', 6, '23-06', NULL, 0, 0, NULL),
+('c0000247-0000-0000-0000-000000000000', 'b0000032-0000-0000-0000-000000000000', '23', 7, '23-07', NULL, 0, 0, NULL),
+('c0000248-0000-0000-0000-000000000000', 'b0000032-0000-0000-0000-000000000000', '23', 8, '23-08', NULL, 0, 0, NULL),
+('c0000249-0000-0000-0000-000000000000', 'b0000032-0000-0000-0000-000000000000', '23', 9, '23-09', NULL, 0, 0, NULL),
+('c0000250-0000-0000-0000-000000000000', 'b0000032-0000-0000-0000-000000000000', '23', 10, '23-10', NULL, 0, 0, NULL);

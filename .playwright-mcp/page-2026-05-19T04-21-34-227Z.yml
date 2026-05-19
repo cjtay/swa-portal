@@ -1,0 +1,10 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - heading "49th SWA Annual Charity Dinner 2026" [level=1] [ref=e3]
+    - paragraph [ref=e4]: Guest Registration
+  - generic [ref=e6]:
+    - heading "Something went wrong" [level=2] [ref=e7]
+    - paragraph [ref=e8]: Please try again later.
+  - generic [ref=e9]:
+    - text: Singapore Women's Association
+    - text: These details are used for event registration. Individual e-tickets will be sent separately by SWA.

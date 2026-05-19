@@ -36,7 +36,7 @@ export async function handleAdminGuests(c: AppContext) {
 
     const effectiveTableId = tableId || (booking as Record<string, unknown>).table_id as string;
 
-    const config = await loadTablesConfig(c.env.SWA_SESSION);
+    const config = await loadTablesConfig(c.env.SWA_CONFIG);
     const table = getTable(config, effectiveTableId);
     if (!table) {
       return c.json({ success: false, message: 'Invalid table_id.' }, 400);

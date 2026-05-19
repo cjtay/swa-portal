@@ -72,7 +72,7 @@ export async function handleAdminBookings(c: AppContext) {
       return c.json({ success: false, message: 'Required fields: buyer_name, table_id, pax (min 1)' }, 400);
     }
 
-    const config = await loadTablesConfig(c.env.SWA_SESSION);
+    const config = await loadTablesConfig(c.env.SWA_CONFIG);
     const table = getTable(config, tableId);
     if (!table) {
       return c.json({ success: false, message: 'Invalid table_id.' }, 400);

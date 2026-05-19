@@ -40,7 +40,8 @@ Three Workers, one Cloudflare account, shared free tier.
 | Resource | Name | ID | Purpose |
 |---|---|---|---|
 | D1 database | `swa-portal` | `b8ca063c-6767-445c-a42e-d092daf80fc4` | Member data, bookings, memberships |
-| KV namespace | `SWA_SESSION` | `ddb93996417c4476ac0f90ddf1eb332d` | OTP storage, sessions |
+| KV namespace | `SWA_SESSION` | `ddb93996417c4476ac0f90ddf1eb332d` | OTP storage, sessions, rate limiting |
+| KV namespace | `SWA_CONFIG` | `663295deb2f94800986e3dfe6f8ea230` | Registration tables config |
 | R2 bucket | `swa-portal-uploads` | — | Photo uploads, payment receipts |
 | Worker | `swa-portal` | — | Hono API + static assets |
 

@@ -27,7 +27,7 @@ export async function handleSendMagicLink(c: AppContext) {
     return c.json({ success: false, message: 'No buyer email on file. Add an email to this booking first.' }, 400);
   }
 
-  const config = await loadTablesConfig(c.env.SWA_SESSION);
+  const config = await loadTablesConfig(c.env.SWA_CONFIG);
   const table = getTable(config, String(b.table_id));
 
   const token = await getOrCreateToken(c.env.DB, bookingId, config.formCutoffTime);

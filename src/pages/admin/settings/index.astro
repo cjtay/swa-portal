@@ -1,0 +1,46 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Settings — SWA Admin Portal" currentPath="/admin/settings">
+
+<div class="pg-settings">
+  <h1 class="pg-title">Settings</h1>
+  <p class="pg-subtitle">Manage portal configuration. Changes take effect immediately.</p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;">
+    <a href="/admin/settings/tables" class="card" style="text-decoration:none;color:inherit;display:block;">
+      <h2>Registration — Table Configuration</h2>
+      <p style="color:var(--text-muted);font-size:0.85rem;">Configure table layout, capacities, VIP designations, and the buyer form cutoff time for the gala dinner registration module.</p>
+    </a>
+    <a href="/admin/settings/roles" class="card" style="text-decoration:none;color:inherit;display:block;">
+      <h2>Registration — User Roles</h2>
+      <p style="color:var(--text-muted);font-size:0.85rem;">Assign registration access roles to members who can log in. Control who can manage bookings and mark arrivals.</p>
+    </a>
+  </div>
+
+  <div class="card steps-card" style="margin-top:1.5rem;">
+    <h3 style="color:#16a34a;font-size:0.9rem;margin-bottom:0.5rem;">How settings work</h3>
+    <ol style="margin-left:1.25rem;font-size:0.85rem;">
+      <li style="margin-bottom:0.35rem;">Click a card above to open that settings section</li>
+      <li style="margin-bottom:0.35rem;">Make your changes and click Save</li>
+      <li style="margin-bottom:0.35rem;">Changes apply instantly to all relevant features</li>
+      <li style="margin-bottom:0.35rem;">The standalone <code>scripts/table-config-builder.html</code> tool is still available as an offline backup</li>
+    </ol>
+  </div>
+</div>
+
+</AdminLayout>
+
+<style>
+  .pg-settings { max-width: 860px; }
+  .pg-title { font-size: 1.4rem; font-weight: 700; color: var(--swa-1, #70308c); margin-bottom: 0.25rem; }
+  .pg-subtitle { color: var(--swa-muted, #6b7280); font-size: 0.9rem; margin-bottom: 1.5rem; }
+  .steps-card { background: #f0fdf4; border: 1px solid #bbf7d0; }
+</style>
+
+<script>
+  import { requireItAdmin } from '../../../scripts/auth-gate';
+
+  requireItAdmin(() => {});
+</script>

@@ -49,6 +49,7 @@ Three tiers. See `docs/SWAPortal-Functional-Specs.md` for the full access matrix
 |---|---|---|
 | D1 database | `swa-portal` | `b8ca063c-6767-445c-a42e-d092daf80fc4` |
 | KV namespace | `SWA_SESSION` | `ddb93996417c4476ac0f90ddf1eb332d` |
+| KV namespace | `SWA_CONFIG` | `663295deb2f94800986e3dfe6f8ea230` |
 | R2 bucket | `swa-portal-uploads` | — |
 | Worker | `swa-portal` | — |
 

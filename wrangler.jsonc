@@ -22,6 +22,10 @@
     {
       "binding": "SWA_SESSION",
       "id": "ddb93996417c4476ac0f90ddf1eb332d"
+    },
+    {
+      "binding": "SWA_CONFIG",
+      "id": "663295deb2f94800986e3dfe6f8ea230"
     }
   ],
   "r2_buckets": [

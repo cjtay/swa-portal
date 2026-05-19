@@ -1,17 +1,15 @@
 ---
-import AdminLayout from '../../layouts/AdminLayout.astro';
+import AdminLayout from '../../../layouts/AdminLayout.astro';
 ---
 
-<AdminLayout title="Settings — SWA Admin Portal" currentPath="/admin/settings">
+<AdminLayout title="Table Configuration — SWA Admin Portal" currentPath="/admin/settings">
 
 <div class="pg-settings">
-  <h1 class="pg-title">Settings</h1>
-  <p class="pg-subtitle">Manage portal configuration stored in Cloudflare KV. Changes take effect immediately.</p>
+  <a href="/admin/settings" style="display:inline-flex;align-items:center;gap:0.3rem;color:var(--swa-3,#874ba1);font-size:0.85rem;text-decoration:none;margin-bottom:0.75rem;">&larr; Back to Settings</a>
+  <h1 class="pg-title">Registration — Table Configuration</h1>
+  <p class="pg-subtitle">Configure table layout, capacities, VIP designations, and the buyer form cutoff time for the gala dinner registration module. Changes are stored in Cloudflare KV.</p>
 
   <div class="card settings-card">
-    <h2 class="card-title">Registration — Table Configuration</h2>
-    <p class="card-desc">Configure table layout, capacities, VIP designations, and the buyer form cutoff time for the gala dinner registration module.</p>
-
     <div class="settings-section">
       <div class="form-group">
         <label for="cutoff-input">Form Cutoff Time (ISO 8601)</label>
@@ -56,16 +54,6 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     <button class="btn btn-primary btn-lg" id="btn-save">Save Configuration to KV</button>
     <span id="save-status" class="save-status"></span>
   </div>
-
-  <div class="card steps-card">
-    <h3 style="color:#16a34a;font-size:0.9rem;margin-bottom:0.5rem;">How settings work</h3>
-    <ol style="margin-left:1.25rem;font-size:0.85rem;">
-      <li style="margin-bottom:0.35rem;">Edit table layout and cutoff time above</li>
-      <li style="margin-bottom:0.35rem;">Click <strong>Save Configuration to KV</strong></li>
-      <li style="margin-bottom:0.35rem;">Changes apply instantly to all registration features</li>
-      <li style="margin-bottom:0.35rem;">The standalone <code>scripts/table-config-builder.html</code> tool is still available as an offline backup</li>
-    </ol>
-  </div>
 </div>
 
 </AdminLayout>
@@ -76,7 +64,6 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   .pg-subtitle { color: var(--swa-muted, #6b7280); font-size: 0.9rem; margin-bottom: 1.5rem; }
   .settings-card { margin-bottom: 1rem; }
   .card-title { font-size: 1.05rem; font-weight: 600; color: var(--swa-2, #450a5e); margin-bottom: 0.25rem; }
-  .card-desc { color: var(--swa-muted, #6b7280); font-size: 0.85rem; margin-bottom: 1rem; }
   .settings-section { margin-bottom: 0.5rem; }
   .form-group { display: flex; flex-direction: column; margin-bottom: 0.75rem; }
   .form-group label { font-size: 0.75rem; font-weight: 600; color: var(--swa-muted, #6b7280); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem; }
@@ -115,7 +102,6 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   .validation-error ul { margin: 0; padding-left: 1.25rem; }
   .validation-error li { margin-bottom: 0.2rem; }
 
-  .steps-card { background: #f0fdf4; border: 1px solid #bbf7d0; }
   .btn-sm { font-size: 0.8rem; padding: 0.35rem 0.75rem; }
   .btn-lg { font-size: 0.95rem; padding: 0.6rem 1.5rem; }
   .btn-outline { background: #fff; color: var(--swa-1, #70308c); border: 1px solid var(--swa-1, #70308c); }
@@ -123,7 +109,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 </style>
 
 <script>
-  import { requireItAdmin, type SessionResponse } from '../../scripts/auth-gate';
+  import { requireItAdmin, type SessionResponse } from '../../../scripts/auth-gate';
 
   interface TableConfig {
     id: string;

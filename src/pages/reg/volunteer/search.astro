@@ -80,14 +80,29 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     noResults.style.display = 'none';
 
     resultsList.innerHTML = results.map((g: any) => {
-      const name = g.guest_name
-        ? esc(g.guest_name)
-        : '<span style="color:var(--text-muted);font-style:italic;">No name</span>';
       const arrived = !!g.arrived_at;
       const vipBadge = g.is_walk_in ? ' <span style="background:var(--swa-3);color:#fff;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:3px;">Walk-in</span>' : '';
       const buyerBadge = g.is_buyer ? ' <span style="background:var(--swa-1);color:#fff;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:3px;">Buyer</span>' : '';
       const noteHtml = g.notes
         ? `<div style="background:rgba(217,119,6,0.15);padding:0.4rem 0.6rem;border-radius:4px;font-size:0.85rem;margin-top:0.5rem;color:#92400e;">Staff note: ${esc(g.notes)}</div>`
+        : '';
+
+      let nameHtml;
+      if (g.guest_name) {
+        nameHtml = `<div style="font-size:1.1rem;font-weight:600;">${esc(g.guest_name)}${buyerBadge}${vipBadge}</div>`;
+      } else if (arrived) {
+        nameHtml = `<div style="font-size:1.1rem;font-weight:600;"><span style="color:var(--text-muted);font-style:italic;">No name</span>${buyerBadge}${vipBadge}</div>`;
+      } else {
+        // editable name field
+        const inputId = `guest-name-${g.id}`;
+        nameHtml = `<div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+          <input type="text" id="${inputId}" class="form-input" placeholder="Guest name" value="" style="flex:1;min-width:120px;" />
+          <button class="btn btn-secondary" style="font-size:0.85rem;padding:0.4rem 0.8rem;" onclick="saveGuestName('${g.id}')">Save</button>
+        </div>`;
+      }
+
+      const buyerLine = !g.guest_name && g.buyer_name
+        ? `<div style="color:var(--text-muted);font-size:0.85rem;margin-top:0.15rem;">Buyer: ${esc(g.buyer_name)}</div>`
         : '';
 
       const actionHtml = arrived
@@ -96,9 +111,10 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 
       return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:0.75rem;">
         <div style="display:flex;justify-content:space-between;align-items:start;">
-          <div>
-            <div style="font-size:1.1rem;font-weight:600;">${name}${buyerBadge}${vipBadge}</div>
+          <div style="flex:1;">
+            ${nameHtml}
             <div style="color:var(--text-muted);font-size:0.9rem;margin-top:0.2rem;">Ticket: <span style="font-family:monospace;">${esc(g.ticket_code)}</span> &middot; ${esc(g.table_label)}</div>
+            ${buyerLine}
           </div>
         </div>
         ${noteHtml}
@@ -106,6 +122,31 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       </div>`;
     }).join('');
   }
+
+  // @ts-ignore
+  window.saveGuestName = async (id: string) => {
+    const input = document.getElementById(`guest-name-${id}`) as HTMLInputElement;
+    const guestName = input.value.trim();
+    if (!guestName) {
+      alert('Please enter a guest name (or "NA" if unknown).');
+      return;
+    }
+    try {
+      const res = await fetch(`/api/reg/volunteer/guest/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guest_name: guestName }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        doSearch();
+      } else {
+        alert(data.message || 'Failed to save name.');
+      }
+    } catch {
+      alert('Network error. Please try again.');
+    }
+  };
 
   // @ts-ignore
   window.markArrived = async (id: string) => {

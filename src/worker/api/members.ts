@@ -84,7 +84,7 @@ export async function handleMemberById(c: Context<{ Bindings: Env }>) {
       return c.json({ success: false, message: 'Invalid request body.' }, 400);
     }
 
-    const allowedFields = ['name', 'slug', 'role', 'email', 'mobile', 'job_title', 'description', 'category', 'can_login', 'show_on_website', 'has_namecard', 'address_line1', 'address_line2', 'address_postal_code', 'address_country', 'facebook', 'linkedin', 'instagram', 'tiktok', 'youtube', 'sort_order', 'photo_url', 'photo_alt'];
+    const allowedFields = ['name', 'slug', 'role', 'email', 'mobile', 'job_title', 'description', 'category', 'can_login', 'show_on_website', 'has_namecard', 'address_line1', 'address_line2', 'address_postal_code', 'address_country', 'facebook', 'linkedin', 'instagram', 'tiktok', 'youtube', 'sort_order', 'photo_url', 'photo_alt', 'reg_role'];
     const updates: string[] = [];
     const values: unknown[] = [];
 

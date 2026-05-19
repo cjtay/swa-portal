@@ -10,7 +10,7 @@ import { handleAdminBookings, handleAdminBookingById } from './api/reg/admin-boo
 import { handleAdminGuests, handleAdminGuestById } from './api/reg/admin-guests';
 import { handleAdminExport } from './api/reg/admin-export';
 import { handleAdminGuestList } from './api/reg/admin-guest-list';
-import { handleVolunteerSearch, handleVolunteerArrive, handleVolunteerWalkin } from './api/reg/volunteer-search';
+import { handleVolunteerSearch, handleVolunteerArrive, handleVolunteerWalkin, handleVolunteerUpdateGuest } from './api/reg/volunteer-search';
 import { handleRegDashboard } from './api/reg/reg-dashboard';
 import { handleBuyerForm, handleBuyerUpdateGuest } from './api/reg/buyer-form';
 import { handleSendMagicLink } from './api/reg/admin-magic-link';
@@ -66,6 +66,7 @@ app.get('/api/reg/admin/guest-list', handleAdminGuestList);
 app.get('/api/reg/volunteer/search', handleVolunteerSearch);
 app.post('/api/reg/volunteer/arrive/:id', handleVolunteerArrive);
 app.post('/api/reg/volunteer/walkin', handleVolunteerWalkin);
+app.post('/api/reg/volunteer/guest/:id', handleVolunteerUpdateGuest);
 
 // Registration — Table config (any authenticated user)
 app.get('/api/reg/tables', handleRegTables);

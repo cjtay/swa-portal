@@ -18,7 +18,7 @@ export async function handleBuyerForm(c: AppContext) {
       return c.json({ closed: true, reason: 'invalid' });
     }
 
-    const config = await loadTablesConfig(c.env.SWA_SESSION);
+    const config = await loadTablesConfig(c.env.SWA_CONFIG);
     if (!isFormOpen(config)) {
       return c.json({ closed: true, reason: 'cutoff' });
     }
@@ -77,7 +77,7 @@ export async function handleBuyerUpdateGuest(c: AppContext) {
     return c.json({ success: false, message: 'Invalid or expired link.' }, 403);
   }
 
-  const config = await loadTablesConfig(c.env.SWA_SESSION);
+  const config = await loadTablesConfig(c.env.SWA_CONFIG);
   if (!isFormOpen(config)) {
     return c.json({ success: false, message: 'Guest registration has closed.', closed: true }, 403);
   }

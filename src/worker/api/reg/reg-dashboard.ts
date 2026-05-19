@@ -25,7 +25,7 @@ type RecentArrival = {
 };
 
 export async function handleRegDashboard(c: AppContext) {
-  const config = await loadTablesConfig(c.env.SWA_SESSION);
+  const config = await loadTablesConfig(c.env.SWA_CONFIG);
   const stats = await getArrivalStats(c.env.DB);
   const recent = await getRecentArrivals(c.env.DB, 10);
 

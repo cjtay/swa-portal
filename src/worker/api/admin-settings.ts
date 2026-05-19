@@ -83,7 +83,7 @@ export async function handleAdminSettingsGet(c: AppContext) {
     return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: `Unknown settings key: ${key}` }, 400);
   }
 
-  const raw = await c.env.SWA_SESSION.get(key);
+  const raw = await c.env.SWA_CONFIG.get(key);
   if (!raw) {
     return c.json({ success: false, error_code: 'NOT_FOUND', message: `No configuration found for key: ${key}` }, 404);
   }
@@ -122,7 +122,7 @@ export async function handleAdminSettingsPost(c: AppContext) {
     return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: validation.errors.join('; ') }, 400);
   }
 
-  await c.env.SWA_SESSION.put(key, JSON.stringify(validation.data));
+  await c.env.SWA_CONFIG.put(key, JSON.stringify(validation.data));
 
   return c.json({ success: true, key, value: validation.data });
 }

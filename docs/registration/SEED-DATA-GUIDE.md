@@ -2,7 +2,7 @@
 
 ## Seed Test Data
 
-One command to populate D1 with 3 bookings and ~19 guests (including unnamed slots and walk-in-ready structure):
+One command to populate D1 with 32 bookings and 250 guests across all 25 tables (VIP-1, VIP-2, Tables 01–23). Clears existing data first.
 
 ```bash
 npx wrangler d1 execute swa-portal --remote --file=scripts/seed-test-data.sql
@@ -47,20 +47,7 @@ npx wrangler d1 execute swa-portal --remote --command="UPDATE members SET reg_ro
 
 ## Update Table Configuration
 
-Open `scripts/table-config-builder.html` in your browser. It starts with the current table layout pre-filled. Add, edit, or remove tables. The JSON updates live. Click Copy, then paste into Cloudflare KV.
-
-### Step by step
-
-1. Open `scripts/table-config-builder.html` in a browser (just double-click the file)
-2. Edit the cutoff time, add/remove/edit tables as needed
-3. The generated JSON at the bottom updates automatically
-4. Click **Copy** to copy the JSON
-5. Go to Cloudflare Dashboard → Workers & Pages → KV → **SWA_SESSION** namespace
-6. Find the key `swa:reg_tables_config` and click **Edit**
-7. Replace the value with the copied JSON
-8. Click **Save**
-
-Changes take effect immediately.
+Use the admin UI: **Settings → Table Configuration** (`/admin/settings/tables`). It loads the current config from KV, lets you add/remove/edit tables and set the cutoff time, then saves directly back to KV on submit. Changes take effect immediately.
 
 **Important:** Never remove a table ID that has existing bookings or guests. Check first:
 
