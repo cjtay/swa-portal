@@ -459,10 +459,15 @@ Body: `guestName` (required), `tableId` (required), `notes` (optional).
 - Mark arrived immediately (walk-in guests are present by definition).
 - Return success with guest name, ticket code, and table label.
 
+> **Note:** The add-walkin table selector shows per-table availability ("N seats
+> left" / "FULL (overbooked)"), derived from the `occupied` count now returned per
+> table by `GET /api/reg/tables`. This is informational only — there is **no
+> capacity enforcement**; overbooking a table is still permitted.
+
 **Pages:**
 
 - **`src/pages/reg/volunteer/search.astro`** — Phone-optimised search page. Large search input (autofocus), table filter dropdown (default "All tables"), "Add Walk-in Guest" secondary button (links to add-walkin page). Results list: each result is a large block with guest name (bold), ticket code, table label. If guest has notes: amber highlighted banner reading "Staff note: [notes text]". If not arrived: large green "Mark Arrived" button (one tap, no confirmation dialog). If already arrived: grey "Arrived at HH:mm" label. Walk-in badge on row. No results: "No guests found. Try a different name or ticket code. Or add a walk-in guest." Uses AdminLayout.
-- **`src/pages/reg/volunteer/add-walkin.astro`** — Minimal form: name input (required), table selector (required), notes input (optional). Submit button: "Add and Check In". Back link to search page. Uses AdminLayout.
+- **`src/pages/reg/volunteer/add-walkin.astro`** — Minimal form: name input (required), table selector (required, each option shows per-table availability — "N seats left" or "FULL (overbooked)" — for guidance only; all tables remain selectable), notes input (optional). Submit button: "Add and Check In". Back link to search page. Uses AdminLayout.
 
 **Gate:** Volunteer can search by name, search by ticket code, mark a guest arrived, see a note banner when a note exists, and add a walk-in guest who is immediately checked in. Admin can also access all volunteer routes. Existing portal features still work.
 
@@ -559,7 +564,7 @@ Email content:
 
 **How:**
 
-Stats strip at top: total expected / arrived / percentage (large numbers, visible at a glance). VIP section (shown above general tables for quick visibility). Table list: one row per table with label, arrived/expected, visual fill bar. Recent arrivals panel: last 10 arrivals, scrollable. Auto-refresh every 15 seconds via client-side polling.
+Stats strip at top: Expected / Arrived / Walk-ins / Arrival % (large numbers, visible at a glance). Expected, Arrived, and Arrival % count **pre-registered guests only** (`is_walk_in = 0`); walk-ins are tallied separately in their own card so they no longer inflate the expected total. VIP section (shown above general tables for quick visibility). Table list: one row per table with label, arrived/capacity, a `+N walk-in` annotation when that table has walk-ins, and a visual fill bar. Recent arrivals panel: last 10 arrivals, scrollable. Auto-refresh every 15 seconds via client-side polling.
 
 **API endpoint:**
 
@@ -571,9 +576,10 @@ Stats strip at top: total expected / arrived / percentage (large numbers, visibl
 
 ```typescript
 type DashboardStats = {
-  totalExpected: number;       // all named reg_guests rows
-  totalArrived: number;        // reg_guests where arrived_at IS NOT NULL
-  arrivalPct: number;          // percentage, 0-100
+  totalExpected: number;       // pre-registered named rows, is_walk_in = 0
+  totalArrived: number;        // pre-registered arrived, arrived_at IS NOT NULL AND is_walk_in = 0
+  walkInCount: number;         // reg_guests where is_walk_in = 1
+  arrivalPct: number;          // percentage, 0-100, pre-registered only
   tables: TableDashboardRow[];
   recentArrivals: RecentArrival[];
 };
@@ -583,8 +589,9 @@ type TableDashboardRow = {
   tableLabel: string;
   isVIP: boolean;
   capacity: number;
-  namedCount: number;
-  arrivedCount: number;
+  namedCount: number;          // excludes walk-ins (is_walk_in = 0)
+  arrivedCount: number;        // physical bodies present, includes walk-ins
+  walkInCount: number;         // walk-ins at this table
 };
 
 type RecentArrival = {
@@ -597,7 +604,7 @@ type RecentArrival = {
 
 **Page:**
 
-- **`src/pages/reg/dashboard.astro`** — Live dashboard. Stats strip (top): Total Expected | Total Arrived | Arrival % (large numbers). VIP section: list of VIP tables, each showing arrived/capacity (shown above general tables). Table list: one row per table with label, arrived/expected, visual fill bar (grey=0 arrived, amber=1 to capacity-1, green=all arrived). Sorted: VIP tables first, then by table ID. Recent arrivals panel: last 10, scrollable, each entry shows name + table + time. Auto-refresh via `setInterval` every 15 seconds calling `GET /api/reg/dashboard/stats`, updates DOM without full page reload. Last refreshed timestamp in small text at bottom. Uses AdminLayout.
+- **`src/pages/reg/dashboard.astro`** — Live dashboard. Stats strip (top, 4 cards): Expected | Arrived | Walk-ins | Arrival % (large numbers). Expected/Arrived/% are pre-registered only (`is_walk_in = 0`); Walk-ins is a separate counter. VIP section: list of VIP tables, each showing arrived/capacity (shown above general tables). Table list: one row per table with label, arrived/capacity, a `+N walk-in` annotation when the table has walk-ins, visual fill bar (grey=0 arrived, amber=1 to capacity-1, green=all arrived). Sorted: VIP tables first, then by table ID. Recent arrivals panel: last 10, scrollable, each entry shows name + table + time. Auto-refresh via `setInterval` every 15 seconds calling `GET /api/reg/dashboard/stats`, updates DOM without full page reload. Last refreshed timestamp in small text at bottom. Uses AdminLayout.
 
 **Gate:** Dashboard shows accurate counts. Auto-refresh updates numbers without page reload. VIP tables at top. Readable on mobile browser. Existing portal features still work.
 

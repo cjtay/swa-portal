@@ -306,16 +306,16 @@ Buyer-facing endpoints (`/api/reg/buyer/*`) bypass session auth entirely. They u
 **Features**:
 - **Search** (`/reg/volunteer/search`): Phone-optimised page with large search input (autofocus). Search by guest name or ticket code. Table filter dropdown.
 - **Mark arrived**: One-tap "Mark Arrived" button per result. Shows grey "Arrived at HH:mm" if already checked in.
-- **Walk-in** (`/reg/volunteer/add-walkin`): Minimal form to add a guest at the door. Name (required), table (required), notes (optional). Walk-in guests have `booking_id = NULL` and are immediately marked arrived.
+- **Walk-in** (`/reg/volunteer/add-walkin`): Minimal form to add a guest at the door. Name (required), table (required), notes (optional). The table selector shows per-table availability ("N seats left" / "FULL (overbooked)") for guidance only — it is not enforced; overbooking remains possible. Walk-in guests have `booking_id = NULL` and are immediately marked arrived.
 
 ### 5.8 Gala Registration — Dashboard (`/reg/dashboard`)
 
 **Visibility**: Any authenticated user
 
 **Features**:
-- Stats strip: Total Expected / Total Arrived / Arrival Percentage
+- Stats strip: Expected / Arrived / Walk-ins / Arrival Percentage — Expected, Arrived, and Arrival % count pre-registered guests only (`is_walk_in = 0`); walk-ins are tallied in their own separate card
 - VIP tables section (shown above general tables)
-- Per-table row with label, arrived/expected, visual fill bar
+- Per-table row with label, arrived/capacity, a `+N walk-in` annotation when the table has walk-ins, visual fill bar
 - Recent arrivals panel (last 10)
 - Auto-refresh every 15 seconds via client-side polling
 
