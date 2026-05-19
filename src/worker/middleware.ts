@@ -14,6 +14,7 @@ const PUBLIC_PATHS = new Set([
 
 const IT_ADMIN_ONLY_API = new Set([
   '/api/sync-website',
+  '/api/admin/settings',
 ]);
 
 const ADMIN_WRITE_API = new Set([
@@ -37,6 +38,13 @@ function getBasePath(path: string): string {
   return '/' + parts.slice(1, 3).join('/');
 }
 
+function pathStartsWithAny(path: string, prefixes: Set<string>): boolean {
+  for (const prefix of prefixes) {
+    if (path === prefix || path.startsWith(prefix + '/')) return true;
+  }
+  return false;
+}
+
 export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
   const path = c.req.path;
   const basePath = getBasePath(path);
@@ -53,7 +61,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
   }
 
   // 3. Registration buyer routes — bypass session auth, token validation in handler
-  if (REG_BUYER_API.has(basePath)) {
+  if (pathStartsWithAny(path, REG_BUYER_API)) {
     return next();
   }
 
@@ -84,7 +92,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
   }
 
   // 6. Registration volunteer routes — require reg_volunteer, reg_admin, or admin
-  if (REG_VOLUNTEER_API.has(basePath)) {
+  if (pathStartsWithAny(path, REG_VOLUNTEER_API)) {
     const regRole = session.regRole ?? null;
     if (session.role !== 'admin' && regRole !== 'reg_admin' && regRole !== 'reg_volunteer') {
       return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Registration volunteer access required.' }, 403);
@@ -92,7 +100,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
   }
 
   // 7. Registration admin routes — require reg_admin or admin
-  if (REG_ADMIN_API.has(basePath)) {
+  if (pathStartsWithAny(path, REG_ADMIN_API)) {
     const regRole = session.regRole ?? null;
     if (session.role !== 'admin' && regRole !== 'reg_admin') {
       return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Registration admin access required.' }, 403);
