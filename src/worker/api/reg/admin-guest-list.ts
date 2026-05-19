@@ -8,7 +8,7 @@ type AppContext = Context<{
 }>;
 
 export async function handleAdminGuestList(c: AppContext) {
-  const config = await loadTablesConfig(c.env.SWA_SESSION);
+  const config = await loadTablesConfig(c.env.SWA_CONFIG);
 
   const results = await c.env.DB.prepare(`
     SELECT g.id, g.ticket_code, g.guest_name, g.table_id, g.seat_counter,
@@ -19,14 +19,8 @@ export async function handleAdminGuestList(c: AppContext) {
     ORDER BY g.table_id ASC, g.seat_counter ASC
   `).all();
 
-  const tablesMap = new Map<string, {
-    tableId: string;
-    tableLabel: string;
-    isVIP: boolean;
-    guests: typeof guests;
-  }>();
-
-  const guests: Array<{
+  // Build a lookup map of existing guests by tableId -> ticketCode -> guest
+  const guestsByTable = new Map<string, Map<string, {
     id: string;
     ticketCode: string;
     guestName: string | null;
@@ -37,26 +31,15 @@ export async function handleAdminGuestList(c: AppContext) {
     notes: string | null;
     bookingRef: string | null;
     buyerName: string | null;
-  }> = [];
+  }>>();
 
   for (const row of (results.results as Record<string, unknown>[])) {
     const tableId = String(row.table_id);
-    const table = getTable(config, tableId);
-    const tableLabel = table ? table.label : tableId;
-
-    if (!tablesMap.has(tableId)) {
-      tablesMap.set(tableId, {
-        tableId,
-        tableLabel,
-        isVIP: table?.isVIP ?? false,
-        guests: [],
-      });
-    }
-
     const arrivedAt = row.arrived_at ? String(row.arrived_at) : null;
+    const ticketCode = String(row.ticket_code);
     const guest = {
       id: String(row.id),
-      ticketCode: String(row.ticket_code),
+      ticketCode,
       guestName: row.guest_name ? String(row.guest_name) : null,
       isBuyer: Boolean(row.is_buyer),
       isWalkIn: Boolean(row.is_walk_in),
@@ -67,15 +50,55 @@ export async function handleAdminGuestList(c: AppContext) {
       buyerName: row.buyer_name ? String(row.buyer_name) : null,
     };
 
-    guests.push(guest);
-    tablesMap.get(tableId)!.guests.push(guest);
+    if (!guestsByTable.has(tableId)) {
+      guestsByTable.set(tableId, new Map());
+    }
+    guestsByTable.get(tableId)!.set(ticketCode, guest);
   }
 
-  const tables = Array.from(tablesMap.values());
+  // Build response for ALL configured tables, filling empty seats with pre-printed ticket codes
+  const tables = [];
+  let totalGuests = 0;
+  let namedGuests = 0;
+  let arrivedGuests = 0;
 
-  const totalGuests = guests.length;
-  const namedGuests = guests.filter(g => g.guestName !== null).length;
-  const arrivedGuests = guests.filter(g => g.arrived).length;
+  for (const tableConfig of config.tables) {
+    const tableGuests = guestsByTable.get(tableConfig.id) || new Map();
+    const guests = [];
+
+    for (let seat = 1; seat <= tableConfig.capacity; seat++) {
+      const ticketCode = `${tableConfig.ticketPrefix}-${String(seat).padStart(2, '0')}`;
+      const existingGuest = tableGuests.get(ticketCode);
+
+      if (existingGuest) {
+        totalGuests++;
+        if (existingGuest.guestName !== null) namedGuests++;
+        if (existingGuest.arrived) arrivedGuests++;
+        guests.push(existingGuest);
+      } else {
+        guests.push({
+          id: null,
+          ticketCode,
+          guestName: null,
+          isBuyer: false,
+          isWalkIn: false,
+          arrived: false,
+          arrivedAt: null,
+          notes: null,
+          bookingRef: null,
+          buyerName: null,
+        });
+      }
+    }
+
+    tables.push({
+      tableId: tableConfig.id,
+      tableLabel: tableConfig.label,
+      isVIP: tableConfig.isVIP,
+      capacity: tableConfig.capacity,
+      guests,
+    });
+  }
 
   const now = new Date();
   const generatedAt = now.toLocaleString('en-SG', {

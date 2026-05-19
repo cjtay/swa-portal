@@ -195,7 +195,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       }
 
       if (!data.tables || data.tables.length === 0) {
-        alert('No guests found. Add bookings and guests first.');
+        alert('No tables configured. Set up table configuration first.');
         return;
       }
 
@@ -217,7 +217,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         const namedInTable = table.guests.filter((g: any) => g.guestName).length;
 
         html += `<div class="print-table-section">`;
-        html += `<div class="print-table-header">${esc(table.tableLabel)}${vipTag} <span class="print-table-count">(${namedInTable}/${table.guests.length} named, ${arrivedInTable} arrived)</span></div>`;
+        html += `<div class="print-table-header">${esc(table.tableLabel)}${vipTag} <span class="print-table-count">(${namedInTable}/${table.capacity} named, ${arrivedInTable} arrived)</span></div>`;
         html += `<table class="print-guest-table">
           <thead>
             <tr>
@@ -360,7 +360,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 
     @page {
       size: A4 landscape;
-      margin: 10mm 12mm;
+      margin: 15mm 18mm 10mm 18mm;
     }
 
     .print-area {
@@ -435,7 +435,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     .print-guest-table th,
     .print-guest-table td {
       border: 0.5pt solid #333;
-      padding: 2mm 2mm;
+      padding: 3mm 2.5mm;
       vertical-align: middle;
     }
 
