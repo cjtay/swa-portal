@@ -1,0 +1,18 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - heading "SWASWA Admin Portal" [level=1] [ref=e5]:
+      - img "SWA" [ref=e6]
+      - text: SWA Admin Portal
+    - paragraph [ref=e7]: Admin access — login with email
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - generic [ref=e11]: Email Address
+      - textbox "Email Address" [ref=e12]:
+        - /placeholder: you@singaporewomenassociation.org
+    - generic [ref=e13] [cursor=pointer]:
+      - checkbox "Remember me (30 days)" [ref=e14]
+      - text: Remember me (30 days)
+    - paragraph [ref=e15]: Sessions expire after 12 hours by default. Tick "Remember me" to stay logged in for 30 days. Do not use this option on a shared computer.
+    - button "Send Login Code" [disabled] [ref=e16] [cursor=pointer]
+    - paragraph [ref=e17]: Could not load security configuration.
+    - paragraph [ref=e18]: Only members with login access can receive a code. If you don't receive one, contact an admin.

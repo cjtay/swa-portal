@@ -43,6 +43,12 @@ Three tiers. See `docs/SWAPortal-Functional-Specs.md` for the full access matrix
 - Auth files ported from GTW project — see `src/worker/` and `src/scripts/auth-gate.ts`
 - **D1-based auth** — no KV allowlist; `send-otp.ts` queries members table for `can_login=1`
 
+## Cloudflare Edge Runtime Rules
+
+- **No Node.js APIs** — Cloudflare Workers run in V8 isolates, not Node.js. Never import or use `fs`, `path`, `crypto` (Node.js), `http`/`https`, or any Node.js built-in module. Use Web Standard APIs: `fetch`, `crypto.subtle` (WebCrypto), `Request`/`Response`, `URL`, `ReadableStream`, `TextEncoder`/`TextDecoder`.
+- **Access bindings via `c.env`** — D1 (`c.env.DB`), KV (`c.env.SWA_SESSION`, `c.env.SWA_CONFIG`), R2 (`c.env.R2_BUCKET`), and secrets are accessed through the Hono context's `env` object in route handlers. `process.env` does NOT exist in Cloudflare Workers. For local dev, use `.dev.vars`.
+- **No `@astrojs/cloudflare` adapter** — This project uses Wrangler's `assets` binding with `run_worker_first: ["/api/*"]` to route API calls to the Hono worker and serve static pages from `./dist`. Do NOT introduce `@astrojs/cloudflare` or any SSR adapter.
+
 ## Cloudflare Resources
 
 | Resource | Name | ID |
