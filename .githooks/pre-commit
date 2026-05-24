@@ -1,0 +1,90 @@
+#!/bin/bash
+# Pre-commit hook: list all staged files grouped by type and ask for confirmation
+# when there are additions or deletions.
+# Enable via: git config core.hooksPath .githooks
+
+# Only prompt in interactive terminals
+if [ ! -t 0 ]; then
+  exit 0
+fi
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+changes=$(git diff --cached --name-status)
+if [ -z "$changes" ]; then
+  echo "${YELLOW}No staged changes. Use git add first.${NC}"
+  exit 1
+fi
+
+additions=()
+modifications=()
+deletions=()
+renames=()
+
+while IFS=$'\t' read -r status file; do
+  case "$status" in
+    A) additions+=("$file") ;;
+    M) modifications+=("$file") ;;
+    D) deletions+=("$file") ;;
+    R*) renames+=("$file") ;;
+    C*) copies+=("$file") ;;
+  esac
+done <<< "$changes"
+
+echo ""
+echo "${BOLD}${CYAN}═══════════════════════════════════════════${NC}"
+echo "${BOLD}${CYAN}  PRE-COMMIT REVIEW${NC}"
+echo "${BOLD}${CYAN}═══════════════════════════════════════════${NC}"
+echo ""
+
+if [ ${#additions[@]} -gt 0 ]; then
+  echo "${GREEN}${BOLD}NEW FILES (${#additions[@]})${NC}"
+  printf '  %s\n' "${additions[@]}"
+  echo ""
+fi
+
+if [ ${#deletions[@]} -gt 0 ]; then
+  echo "${RED}${BOLD}DELETED FILES (${#deletions[@]})${NC}"
+  printf '  %s\n' "${deletions[@]}"
+  echo ""
+fi
+
+if [ ${#modifications[@]} -gt 0 ]; then
+  echo "${YELLOW}${BOLD}MODIFIED FILES (${#modifications[@]})${NC}"
+  printf '  %s\n' "${modifications[@]}"
+  echo ""
+fi
+
+if [ ${#renames[@]} -gt 0 ] || [ ${#copies[@]} -gt 0 ]; then
+  echo "${YELLOW}${BOLD}RENAMED/COPIED FILES ($((${#renames[@]} + ${#copies[@]})))${NC}"
+  printf '  %s\n' "${renames[@]}" "${copies[@]}"
+  echo ""
+fi
+
+echo "${BOLD}${CYAN}───────────────────────────────────────────${NC}"
+echo "Total: ${GREEN}+${#additions[@]}${NC} ${RED}-${#deletions[@]}${NC} ${YELLOW}~${#modifications[@]}${NC} files"
+echo ""
+
+# Ask for confirmation if there are any new or deleted files
+if [ ${#additions[@]} -gt 0 ] || [ ${#deletions[@]} -gt 0 ]; then
+  read -p "$(echo -e "${BOLD}Commit these changes? [y/N] ${NC}")" -n 1 -r
+  echo ""
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "${RED}Commit aborted.${NC}"
+    exit 1
+  fi
+else
+  read -p "$(echo -e "${BOLD}Commit these changes? [Y/n] ${NC}")" -n 1 -r
+  echo ""
+  if [[ $REPLY =~ ^[Nn]$ ]]; then
+    echo "${RED}Commit aborted.${NC}"
+    exit 1
+  fi
+fi
+
+exit 0

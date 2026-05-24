@@ -25,6 +25,13 @@ See `docs/SWAPortal-Functional-Specs.md` for role access matrix, API permissions
 - **Role tiers** — `admin` (D1 `category='admin'` or `IT_ADMIN_EMAILS`), `committee` (D1 `category='committee'` with `can_login=1`)
 - **No emoji icons** in professional components
 
+## Safety Standards
+
+- **Build mode confirmation** — Before creating, editing, or deleting any files, list every file path and the planned operation (create/edit/delete), then ask for confirmation before proceeding.
+- **Package safety** — Before running `npm install <package>` or downloading any external library/asset, explain what the package does, why it is needed, and any transitive dependencies it introduces. Ask for confirmation before installing. This prevents supply chain attacks and unnecessary bloat.
+- **Verify changes** — Run the project's typecheck/lint/build command before committing to catch errors.
+- **Pre-commit review** — A `.githooks/pre-commit` script lists all staged files (new, deleted, modified) and prompts for confirmation before every `git commit`. Enable on fresh clone: `git config core.hooksPath .githooks`
+
 ## Role Access
 
 Three tiers. See `docs/SWAPortal-Functional-Specs.md` for the full access matrix.
