@@ -19,7 +19,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       </div>
       <span id="count-label" style="color:var(--text-muted);font-size:0.85rem;"></span>
     </div>
-    <div style="overflow-x:auto;">
+    <div class="table-scroll">
       <table class="data-table">
         <thead>
           <tr>
@@ -47,6 +47,55 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     </div>
   </div>
 </AdminLayout>
+
+<style is:global>
+  /* Widen this page's content for wide monitors (overrides .admin-main 1200px cap) */
+  .admin-main {
+    max-width: 1600px;
+  }
+
+  /* Visible horizontal scrollbar for the submissions table (Chrome/Edge + Firefox) */
+  .table-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: 75vh;
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+  }
+
+  /* Sticky header so column titles stay visible while scrolling vertically */
+  .table-scroll .data-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bg);
+  }
+
+  /* Chrome, Edge, Safari */
+  .table-scroll::-webkit-scrollbar {
+    height: 12px;
+    width: 12px;
+  }
+  .table-scroll::-webkit-scrollbar-track {
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    border-radius: 0 0 0.4rem 0.4rem;
+  }
+  .table-scroll::-webkit-scrollbar-thumb {
+    background: var(--swa-3);
+    border-radius: 9999px;
+    border: 2px solid var(--bg);
+  }
+  .table-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--swa-1);
+  }
+
+  /* Firefox */
+  .table-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--swa-3) var(--bg);
+  }
+</style>
 
 <script>
   import { requireAuth } from '../../../scripts/auth-gate';

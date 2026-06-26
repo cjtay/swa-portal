@@ -27,6 +27,11 @@ const DEFAULT_CONFIG = {
     "<li>Accompany seniors from wards to the event hall</li>" +
     "<li>Befriend and assist them during performances, games, photo-taking, and refreshments</li>" +
     "<li>Return them to wards after the event</li>" +
+    "</ul>" +
+    "<p><strong>Event dates:</strong> Please review the options below before filling up the form.</p>" +
+    "<ul class=\"vf-dates\">" +
+    "<li><strong>1st August (Saturday)</strong> &middot; 12:00 PM to 4:00 PM &middot; Ren Ci Community Hospital, Novena</li>" +
+    "<li><strong>8th August (Saturday)</strong> &middot; 12:00 PM to 4:00 PM &middot; 31 Bukit Batok Street 52, Singapore 659251</li>" +
     "</ul>",
   timeText: "12:00 PM to 4:00 PM",
   dates: [
