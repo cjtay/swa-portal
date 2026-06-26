@@ -20,3 +20,11 @@ export const VERIFY_MAX_FAILURES_PER_OTP = 5;
 // Authenticated API rate limiting (per-user per-endpoint)
 export const API_RATE_LIMIT_WINDOW_SECONDS = 15 * 60; // 15 minutes
 export const API_RATE_LIMIT_MAX_REQUESTS = 10;
+
+// Default recipients for public form submission notifications.
+// May be overridden per-event via KV (swa:volunteer_event_config.notifyEmail).
+export const VOLUNTEER_NOTIFY_EMAILS = [
+  'cjtay@singaporewomenassociation.org',
+  'jolene.lim@singaporewomenassociation.org',
+  'angela.wong@singaporewomenassociation.org',
+];

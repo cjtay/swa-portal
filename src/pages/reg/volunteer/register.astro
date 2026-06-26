@@ -1,0 +1,526 @@
+---
+import '../../../styles/volunteer-form.css';
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="index, follow" />
+  <title>Volunteer Registration — Singapore Women's Association</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body>
+  <div class="vf-page" id="vf-app">
+    <!-- Loading shell replaced by JS -->
+    <div class="vf-brandband">
+      <a class="vf-brand" href="/">
+        <img class="vf-brand-logo" src="/swa-logo.webp" alt="SWA Logo" width="80" height="80" />
+        <span class="vf-brand-name">Singapore Women&rsquo;s Association</span>
+      </a>
+    </div>
+
+    <div class="vf-eventband">
+      <h1 id="vf-event-title">Volunteer Registration</h1>
+      <p id="vf-event-sub">Loading…</p>
+    </div>
+
+    <main class="vf-main" id="vf-main">
+      <div id="vf-content"><div class="vf-success" style="text-align:center;color:#6b7280;">Loading form…</div></div>
+    </main>
+
+    <footer class="vf-foot">
+      &copy; <span id="vf-year"></span> Singapore Women&rsquo;s Association &middot;
+      <a href="https://www.singaporewomenassociation.org/">Main Website</a>
+    </footer>
+  </div>
+
+  <!-- Hidden spinner CSS reused via inline style fallback -->
+
+  <script>
+    const app = document.getElementById('vf-app')!;
+    const main = document.getElementById('vf-main')!;
+    const content = document.getElementById('vf-content')!;
+    const titleEl = document.getElementById('vf-event-title')!;
+    const subEl = document.getElementById('vf-event-sub')!;
+    document.getElementById('vf-year')!.textContent = String(new Date().getFullYear());
+
+    // Embed mode: ?embed=1 hides logo bar, event title band, and footer (for iframe use).
+    if (new URLSearchParams(window.location.search).get('embed') === '1') {
+      app.classList.add('vf-embed');
+    }
+
+    let config: any = null;
+    let closed = false;
+    let turnstileToken: string | null = null;
+    let turnstileWidgetId: string | null = null;
+
+    async function init() {
+      try {
+        const res = await fetch('/api/volunteer/config');
+        const data = await res.json();
+        if (!data.success) throw new Error('config');
+        config = data.config;
+        closed = !!data.closed;
+      } catch {
+        content.innerHTML = '<div class="vf-alert vf-alert-error">Could not load the form. Please refresh the page or try again later.</div>';
+        return;
+      }
+
+      titleEl.textContent = config.eventTitle || 'Volunteer Registration';
+      subEl.textContent = '';
+      subEl.hidden = true;
+
+      if (closed) {
+        renderClosed();
+        return;
+      }
+      renderForm();
+    }
+
+    function escapeHtml(s: string): string {
+      const d = document.createElement('div');
+      d.textContent = s || '';
+      return d.innerHTML;
+    }
+
+    function renderClosed() {
+      content.innerHTML =
+        '<div class="vf-closed">' +
+        '<h2>Registrations are closed</h2>' +
+        '<p>We are no longer accepting registrations for this event. Thank you for your interest.</p>' +
+        enquiryBlock() +
+        '</div>';
+    }
+
+    function enquiryBlock(): string {
+      if (!config || !config.enquiry) return '';
+      const e = config.enquiry;
+      let html = '<div class="vf-enquiry" style="margin-top:1.2rem;padding-top:1rem;border-top:1px solid #f0e3f5;font-size:0.85rem;color:#6b7280;">';
+      html += '<strong>For enquiries</strong><br/>' + escapeHtml(e.name || '');
+      if (e.email) html += ' &middot; <a href="mailto:' + escapeHtml(e.email) + '">' + escapeHtml(e.email) + '</a>';
+      if (e.phone) {
+        const waDigits = (e.phone as string).replace(/[^\d]/g, '');
+        const waHref = 'https://wa.me/' + (waDigits.length === 8 ? '65' + waDigits : waDigits);
+        html += ' &middot; <a href="' + waHref + '" target="_blank" rel="noopener" style="color:#25d366;text-decoration:none;">WhatsApp</a>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function renderForm() {
+      const intro = config.introHtml || '';
+      const dates: { label: string; date: string; venue: string }[] = config.dates || [];
+      const roles: string[] = config.roles || [];
+
+      const datesHtml = dates.map((d, i) =>
+        '<label class="vf-choice">' +
+        '<input type="checkbox" name="availability" value="' + escapeHtml(d.label) + '" data-i="' + i + '" />' +
+        '<span class="vf-choice-main"><strong>' + escapeHtml(d.label) + '</strong>' +
+        (config.timeText ? '<small>Time: ' + escapeHtml(config.timeText) + '</small>' : '') +
+        (d.venue ? '<small>' + escapeHtml(d.venue) + '</small>' : '') + '</span>' +
+        '</label>'
+      ).join('');
+
+      const rolesHtml = roles.map((r) =>
+        '<label class="vf-choice">' +
+        '<input type="checkbox" name="roles" value="' + escapeHtml(r) + '" />' +
+        '<span class="vf-choice-main">' + escapeHtml(r) + '</span>' +
+        '</label>'
+      ).join('');
+
+      const medicalChoices =
+        choiceRow('medical', 'no', 'No') +
+        choiceRow('medical', 'yes', 'Yes') +
+        '<label class="vf-choice">' +
+        '<input type="radio" name="medicalChoice" value="other" />' +
+        '<span class="vf-choice-main">Other</span></label>';
+
+      const affiliationChoices =
+        choiceRow('aff', 'member_swa', "Member of Singapore Women&rsquo;s Association") +
+        choiceRow('aff', 'laughter_yoga', 'Member of SWA Laughter Yoga Wellness Club') +
+        choiceRow('aff', 'new_volunteer', 'New Volunteer') +
+        '<label class="vf-choice">' +
+        '<input type="radio" name="affiliationChoice" value="other" />' +
+        '<span class="vf-choice-main">Other</span></label>';
+
+      content.innerHTML =
+        '<div id="vf-top-alert"></div>' +
+
+        '<section class="vf-section vf-intro">' + intro + enquiryBlock() + '</section>' +
+
+        '<form id="vf-form" novalidate>' +
+
+        '<fieldset class="vf-section">' +
+        '<h2 class="vf-section-title">Personal Particulars</h2>' +
+        '<div class="vf-grid2">' +
+        field('fullName', 'Full Name', '*', '<input type="text" class="vf-input" id="fullName" name="fullName" autocomplete="name" maxlength="120" />') +
+        field('email', 'Email', '*', '<input type="email" class="vf-input" id="email" name="email" autocomplete="email" inputmode="email" maxlength="160" />') +
+        field('contactNumber', 'Contact number', '*', '<input type="tel" class="vf-input" id="contactNumber" name="contactNumber" autocomplete="tel" inputmode="tel" maxlength="30" />') +
+        field('nricLast4', 'NRIC / FIN', '*', '<input type="text" class="vf-input" id="nricLast4" name="nricLast4" autocomplete="off" inputmode="text" maxlength="4" placeholder="123A" />', 'Last 4 characters (e.g. 123A)') +
+        '</div>' +
+        field('emergencyContact', 'Emergency contact person', '*', '<input type="text" class="vf-input" id="emergencyContact" name="emergencyContact" autocomplete="off" maxlength="300" />', 'Name, relationship and phone number') +
+        '</fieldset>' +
+
+        '<fieldset class="vf-section">' +
+        '<h2 class="vf-section-title">Availability &amp; Eligibility</h2>' +
+        fieldGroup('availability', 'Availability', '*',
+          'Which dates are you available to volunteer?',
+          '<div class="vf-choice-list">' + datesHtml + '</div>') +
+        fieldGroup('is18Plus', 'Are you 18 years old and above?', '*',
+          '',
+          '<div class="vf-choice-row">' + choiceRow('age', 'true', 'Yes') + choiceRow('age', 'false', 'No') + '</div>') +
+        fieldGroup('medical', 'Medical conditions', '*',
+          'Do you have any medical conditions that would endanger yourself or others during participation in this event?',
+          '<div class="vf-choice-row" id="medical-row">' + medicalChoices + '</div>' +
+          '<div class="vf-other" id="medical-other"><input type="text" class="vf-input" name="medicalOther" placeholder="Please describe" maxlength="500" /></div>') +
+        '</fieldset>' +
+
+        '<fieldset class="vf-section">' +
+        '<h2 class="vf-section-title">Roles &amp; Affiliation</h2>' +
+        fieldGroup('roles', 'Roles you may be interested in', '*',
+          '',
+          '<div class="vf-choice-list">' + rolesHtml + '</div>') +
+        fieldGroup('affiliation', 'Are you a', '*',
+          "If you are a corporate volunteer, choose 'Other' and answer the next question.",
+          '<div class="vf-choice-row" id="aff-row">' + affiliationChoices + '</div>' +
+          '<div class="vf-other" id="aff-other"><input type="text" class="vf-input" name="affiliationOther" placeholder="Please specify (e.g. corporate volunteer)" maxlength="200" /></div>') +
+        field('corporateCompany', 'Corporate Volunteer', '',
+          '<input type="text" class="vf-input" id="corporateCompany" name="corporateCompany" maxlength="200" />',
+          "Please provide name of company if you are a corporate volunteer") +
+        field('referral', 'Referral', '',
+          '<input type="text" class="vf-input" id="referral" name="referral" maxlength="200" />',
+          'If you are a new volunteer, let us know who referred you.') +
+        '</fieldset>' +
+
+        '<fieldset class="vf-section">' +
+        '<h2 class="vf-section-title">Consent &amp; Declaration</h2>' +
+        fieldGroup('consent', 'Consent', '*',
+          '',
+          '<div class="vf-choice-list"><label class="vf-choice">' +
+          '<input type="radio" name="consent" value="true" />' +
+          '<span class="vf-choice-main">' + escapeHtml(config.consentStatement || '') + '</span></label></div>') +
+        fieldGroup('declaration', 'Declaration', '*',
+          '',
+          '<div class="vf-choice-list"><label class="vf-choice">' +
+          '<input type="radio" name="declaration" value="true" />' +
+          '<span class="vf-choice-main">' + escapeHtml(config.declarationStatement || '') + '</span></label></div>') +
+        '</fieldset>' +
+
+        '<div class="vf-turnstile-wrap" id="turnstile-container"></div>' +
+
+        '<div class="vf-submitbar">' +
+        '<div class="vf-submit-meta">All fields marked <b>*</b> are required.</div>' +
+        '<button type="submit" class="vf-btn vf-btn-primary" id="vf-submit" disabled>Submit Registration</button>' +
+        '</div>' +
+
+        '</form>';
+
+      wireForm();
+      initTurnstile();
+    }
+
+    function field(name: string, label: string, req: string, inputHtml: string, hint?: string): string {
+      return '<div class="vf-field">' +
+        '<label class="vf-label" for="' + name + '">' + escapeHtml(label) +
+        (req ? ' <span class="vf-req">' + req + '</span>' : '') + '</label>' +
+        inputHtml +
+        (hint ? '<span class="vf-hint">' + escapeHtml(hint) + '</span>' : '') +
+        '<div class="vf-error" id="err-' + name + '"></div>' +
+        '</div>';
+    }
+
+    function fieldGroup(name: string, label: string, req: string, note: string, bodyHtml: string): string {
+      return '<div class="vf-field" id="grp-' + name + '">' +
+        '<span class="vf-label">' + escapeHtml(label) +
+        (req ? ' <span class="vf-req">' + req + '</span>' : '') + '</span>' +
+        (note ? '<span class="vf-section-note">' + escapeHtml(note) + '</span>' : '') +
+        bodyHtml +
+        '<div class="vf-error" id="err-' + name + '"></div>' +
+        '</div>';
+    }
+
+    function choiceRow(group: string, value: string, text: string): string {
+      const id = group + '-' + value;
+      return '<label class="vf-choice" for="' + id + '">' +
+        '<input type="radio" name="' + radioName(group) + '" id="' + id + '" value="' + value + '" />' +
+        '<span class="vf-choice-main">' + text + '</span></label>';
+    }
+
+    function radioName(group: string): string {
+      if (group === 'age') return 'is18Plus';
+      if (group === 'medical') return 'medicalChoice';
+      if (group === 'aff') return 'affiliationChoice';
+      return group;
+    }
+
+    /* ---------------- behaviour ---------------- */
+
+    function setError(name: string, msg: string) {
+      const el = document.getElementById('err-' + name);
+      if (!el) return;
+      if (msg) {
+        el.textContent = msg;
+        el.classList.add('is-open');
+      } else {
+        el.textContent = '';
+        el.classList.remove('is-open');
+      }
+      const input = document.getElementById(name);
+      if (input) input.setAttribute('aria-invalid', msg ? 'true' : 'false');
+      const grp = document.getElementById('grp-' + name);
+      if (grp) {
+        if (msg) grp.setAttribute('aria-invalid', 'true'); else grp.removeAttribute('aria-invalid');
+      }
+    }
+
+    function clearAllErrors() {
+      document.querySelectorAll('.vf-error').forEach((el) => {
+        el.textContent = '';
+        el.classList.remove('is-open');
+      });
+      document.querySelectorAll('[aria-invalid]').forEach((el) => el.removeAttribute('aria-invalid'));
+    }
+
+    function topAlert(msg: string, isError = true) {
+      const el = document.getElementById('vf-top-alert');
+      if (!el) return;
+      el.innerHTML = isError
+        ? '<div class="vf-alert vf-alert-error">' + escapeHtml(msg) + '</div>'
+        : '<div class="vf-alert vf-alert-banner">' + escapeHtml(msg) + '</div>';
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function wireForm() {
+      const form = document.getElementById('vf-form') as HTMLFormElement;
+
+      // Medical "other" reveal
+      const medicalRow = document.getElementById('medical-row');
+      if (medicalRow) {
+        medicalRow.addEventListener('change', (e: Event) => {
+          const t = e.target as HTMLInputElement;
+          if (t.name === 'medicalChoice') {
+            const other = document.getElementById('medical-other')!;
+            if (t.value === 'other') other.classList.add('is-open');
+            else other.classList.remove('is-open');
+          }
+        });
+      }
+
+      // Affiliation "other" reveal
+      const affRow = document.getElementById('aff-row');
+      if (affRow) {
+        affRow.addEventListener('change', (e: Event) => {
+          const t = e.target as HTMLInputElement;
+          if (t.name === 'affiliationChoice') {
+            const other = document.getElementById('aff-other')!;
+            if (t.value === 'other') other.classList.add('is-open');
+            else other.classList.remove('is-open');
+          }
+        });
+      }
+
+      // NRIC uppercase + filter
+      const nric = document.getElementById('nricLast4') as HTMLInputElement;
+      nric.addEventListener('input', function () {
+        this.value = this.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 4);
+      });
+
+      // Live error clearing on edit
+      form.addEventListener('input', (e: Event) => {
+        const t = e.target as HTMLElement;
+        const name = (t as HTMLInputElement).name;
+        if (name && document.getElementById('err-' + name)) setError(name, '');
+      });
+      form.addEventListener('change', (e: Event) => {
+        const t = e.target as HTMLInputElement;
+        const name = t.name;
+        if (!name) return;
+        if (name === 'availability') setError('availability', '');
+        if (name === 'roles') setError('roles', '');
+        if (name === 'is18Plus') setError('is18Plus', '');
+        if (name === 'medicalChoice') setError('medical', '');
+        if (name === 'affiliationChoice') setError('affiliation', '');
+        if (name === 'consent') setError('consent', '');
+        if (name === 'declaration') setError('declaration', '');
+      });
+
+      form.addEventListener('submit', onSubmit);
+    }
+
+    function initTurnstile() {
+      const container = document.getElementById('turnstile-container')!;
+      const submit = document.getElementById('vf-submit') as HTMLButtonElement;
+
+      async function load() {
+        let siteKey = '';
+        try {
+          const res = await fetch('/api/turnstile-config');
+          const data = await res.json();
+          siteKey = data.siteKey;
+        } catch {
+          topAlert('Security verification could not be loaded. Please refresh.');
+          return;
+        }
+        if (!siteKey || !(window as any).turnstile) {
+          // No Turnstile configured (e.g. local dev): allow submit anyway.
+          submit.disabled = false;
+          return;
+        }
+        turnstileWidgetId = (window as any).turnstile.render('#' + container.id, {
+          sitekey: siteKey,
+          callback: (token: string) => { turnstileToken = token; submit.disabled = false; },
+          'error-callback': () => { topAlert('Security verification failed. Please refresh.'); },
+          'expired-callback': () => { turnstileToken = null; submit.disabled = true; },
+        });
+      }
+      load();
+    }
+
+    function collectForm(): Record<string, unknown> | null {
+      clearAllErrors();
+      const errors: Record<string, string> = {};
+
+      const fullName = (document.getElementById('fullName') as HTMLInputElement).value.trim();
+      const email = (document.getElementById('email') as HTMLInputElement).value.trim().toLowerCase();
+      const contactNumber = (document.getElementById('contactNumber') as HTMLInputElement).value.trim();
+      const nricLast4 = (document.getElementById('nricLast4') as HTMLInputElement).value.trim().toUpperCase();
+      const emergencyContact = (document.getElementById('emergencyContact') as HTMLTextAreaElement).value.trim();
+
+      if (!fullName) errors.fullName = 'Full name is required.';
+      if (!email) errors.email = 'Email is required.';
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Enter a valid email address.';
+      if (!contactNumber) errors.contactNumber = 'Contact number is required.';
+      else if (!/^[0-9+\-\s()]{6,}$/.test(contactNumber)) errors.contactNumber = 'Enter a valid contact number.';
+      if (!nricLast4) errors.nricLast4 = 'NRIC/FIN last 4 characters are required.';
+      else if (!/^[0-9]{3}[A-Z]$/.test(nricLast4)) errors.nricLast4 = 'Enter the last 4 characters (e.g. 123A).';
+      if (!emergencyContact) errors.emergencyContact = 'Emergency contact is required.';
+
+      const availability = Array.from(document.querySelectorAll('input[name="availability"]:checked')).map((e) => (e as HTMLInputElement).value);
+      if (availability.length === 0) errors.availability = 'Select at least one date.';
+
+      const ageEl = document.querySelector('input[name="is18Plus"]:checked') as HTMLInputElement | null;
+      let is18Plus: boolean | null = null;
+      if (ageEl) is18Plus = ageEl.value === 'true';
+      if (is18Plus === null) errors.is18Plus = 'Please confirm your age.';
+
+      const medEl = document.querySelector('input[name="medicalChoice"]:checked') as HTMLInputElement | null;
+      const medOther = (document.querySelector('input[name="medicalOther"]') as HTMLInputElement).value.trim();
+      if (!medEl) errors.medical = 'Please answer this question.';
+      else if (medEl.value === 'other' && !medOther) errors.medical = 'Please describe your medical condition.';
+
+      const roles = Array.from(document.querySelectorAll('input[name="roles"]:checked')).map((e) => (e as HTMLInputElement).value);
+      if (roles.length === 0) errors.roles = 'Select at least one role.';
+
+      const affEl = document.querySelector('input[name="affiliationChoice"]:checked') as HTMLInputElement | null;
+      const affOther = (document.querySelector('input[name="affiliationOther"]') as HTMLInputElement).value.trim();
+      if (!affEl) errors.affiliation = 'Please select an option.';
+      else if (affEl.value === 'other' && !affOther) errors.affiliation = 'Please specify your affiliation.';
+
+      const corporateCompany = (document.getElementById('corporateCompany') as HTMLInputElement).value.trim();
+      const referral = (document.getElementById('referral') as HTMLInputElement).value.trim();
+
+      const consentEl = document.querySelector('input[name="consent"]:checked') as HTMLInputElement | null;
+      const declarationEl = document.querySelector('input[name="declaration"]:checked') as HTMLInputElement | null;
+      if (!consentEl) errors.consent = 'Consent is required to continue.';
+      if (!declarationEl) errors.declaration = 'Declaration is required to continue.';
+
+      if (Object.keys(errors).length > 0) {
+        for (const k of Object.keys(errors)) setError(k, errors[k]);
+        const firstErr = document.querySelector('.vf-error.is-open');
+        if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        topAlert('Please correct the highlighted fields.');
+        return null;
+      }
+
+      return {
+        fullName, email, contactNumber, nricLast4, emergencyContact,
+        availability,
+        is18Plus: is18Plus === true,
+        medicalChoice: medEl ? medEl.value : '',
+        medicalOther: medEl && medEl.value === 'other' ? medOther : '',
+        rolesInterest: roles,
+        affiliationChoice: affEl ? affEl.value : '',
+        affiliationOther: affEl && affEl.value === 'other' ? affOther : '',
+        corporateCompany, referral,
+        consent: !!consentEl,
+        declaration: !!declarationEl,
+        turnstileToken: turnstileToken || '',
+      };
+    }
+
+    async function onSubmit(e: Event) {
+      e.preventDefault();
+      const payload = collectForm();
+      if (!payload) return;
+
+      const submit = document.getElementById('vf-submit') as HTMLButtonElement;
+      if (!turnstileToken) {
+        topAlert('Please complete the security verification.');
+        return;
+      }
+
+      submit.disabled = true;
+      const original = submit.textContent;
+      submit.innerHTML = '<span class="vf-spinner"></span>Submitting…';
+
+      try {
+        const res = await fetch('/api/volunteer/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (data.success) {
+          renderSuccess(data.reference);
+          return;
+        }
+        // server returned known errors object?
+        if (data.errors && typeof data.errors === 'object') {
+          clearAllErrors();
+          for (const k of Object.keys(data.errors)) setError(k, data.errors[k]);
+          const firstErr = document.querySelector('.vf-error.is-open');
+          if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          topAlert(data.message || 'Please correct the highlighted fields.');
+        } else if (data.error_code === 'FORM_CLOSED') {
+          renderClosed();
+        } else {
+          topAlert(data.message || 'Submission failed. Please try again.');
+        }
+      } catch {
+        topAlert('Network error. Please check your connection and try again.');
+      }
+
+      if ((window as any).turnstile && turnstileWidgetId) {
+        (window as any).turnstile.reset(turnstileWidgetId);
+        turnstileToken = null;
+      }
+      submit.disabled = false;
+      submit.innerHTML = original;
+    }
+
+    function renderSuccess(ref: string) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      content.innerHTML =
+        '<div class="vf-success">' +
+        '<div class="vf-check"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>' +
+        '<h2>Thank you for registering!</h2>' +
+        '<p>Your volunteer registration has been received.</p>' +
+        '<div class="vf-ref">' + escapeHtml(ref || '') + '</div>' +
+        '<p>Thank you for your interest in volunteering with us. We will be in touch with shortlisted volunteers regarding next steps. Please note that submission is an expression of interest; placement is only confirmed upon our follow-up. Kindly keep this reference for your records.</p>' +
+        enquiryBlock() +
+        '<button class="vf-again" id="vf-register-another">Register another volunteer</button>' +
+        '</div>';
+      const again = document.getElementById('vf-register-another');
+      if (again) again.addEventListener('click', () => { window.location.reload(); });
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -16,6 +16,7 @@ import { handleBuyerForm, handleBuyerUpdateGuest } from './api/reg/buyer-form';
 import { handleSendMagicLink } from './api/reg/admin-magic-link';
 import { handleRegTables } from './api/reg/reg-tables';
 import { handleAdminSettingsGet, handleAdminSettingsPost } from './api/admin-settings';
+import { handleVolunteerConfig, handleVolunteerRegister, handleVolunteerSubmissions, handleVolunteerExport } from './api/volunteer-reg';
 
 const app = new Hono<{
   Bindings: Env;
@@ -84,5 +85,13 @@ app.post('/api/reg/admin/send-magic-link/:bookingId', handleSendMagicLink);
 // Admin Settings
 app.get('/api/admin/settings', handleAdminSettingsGet);
 app.post('/api/admin/settings', handleAdminSettingsPost);
+
+// Volunteer Registration (public form at /reg/volunteer/register)
+app.get('/api/volunteer/config', handleVolunteerConfig);
+app.post('/api/volunteer/register', handleVolunteerRegister);
+
+// Online Forms — admin + committee view submissions
+app.get('/api/admin/forms/volunteer', handleVolunteerSubmissions);
+app.get('/api/admin/forms/volunteer/export', handleVolunteerExport);
 
 export default app;

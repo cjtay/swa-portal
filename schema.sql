@@ -87,3 +87,31 @@ CREATE TABLE IF NOT EXISTS error_log (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_members_slug ON members(slug);
 CREATE INDEX IF NOT EXISTS idx_members_email ON members(email);
 CREATE INDEX IF NOT EXISTS idx_members_can_login ON members(can_login);
+
+-- Volunteer Registrations (public form at /reg/volunteer/register)
+-- Generic/reusable: event_key ties rows to a configured event in KV
+--   (swa:volunteer_event_config). Falls back to baked-in default event config.
+CREATE TABLE IF NOT EXISTS volunteer_registrations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_key TEXT,
+  full_name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  contact_number TEXT NOT NULL,
+  nric_last4 TEXT NOT NULL,
+  emergency_contact TEXT NOT NULL,
+  availability TEXT NOT NULL,
+  is_18_plus INTEGER NOT NULL,
+  medical_conditions TEXT NOT NULL,
+  roles_interest TEXT NOT NULL,
+  affiliation TEXT NOT NULL,
+  corporate_company TEXT,
+  referral TEXT,
+  consent INTEGER NOT NULL,
+  declaration INTEGER NOT NULL,
+  submitted_ip TEXT,
+  user_agent TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_volreg_event ON volunteer_registrations(event_key);
+CREATE INDEX IF NOT EXISTS idx_volreg_email ON volunteer_registrations(email);

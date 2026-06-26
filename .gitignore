@@ -40,3 +40,6 @@ coverage/
 
 # npm cache
 .npm/
+
+# Playwright MCP browser artifacts (screenshots/snapshots)
+.playwright-mcp/

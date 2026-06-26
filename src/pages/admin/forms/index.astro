@@ -1,0 +1,15 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Online Forms — SWA Admin Portal" currentPath="/admin/forms">
+  <h1>Online Forms</h1>
+  <p style="color:var(--text-muted);margin-bottom:2rem;">Public forms and their submissions.</p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;">
+    <a href="/admin/forms/volunteer" class="card" style="text-decoration:none;color:inherit;display:block;">
+      <h2>Volunteer Registration</h2>
+      <p style="color:var(--text-muted);font-size:0.85rem;">View volunteer registration submissions from the public form.</p>
+    </a>
+  </div>
+</AdminLayout>

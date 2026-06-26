@@ -1,0 +1,486 @@
+/* ============================================
+   Volunteer Registration Form — self-contained theme
+   Matches swa2024 typography (Inter throughout)
+   and brand colours (swa-1..swa-4) using the portal's
+   existing CSS variables. .vf-* namespace avoids
+   collisions with admin.css.
+   ============================================ */
+
+/* Reset: border-box for the volunteer form subtree so width:100% + padding
+   never causes horizontal overflow. Scoped to .vf-page to avoid leaking. */
+.vf-page,
+.vf-page *,
+.vf-page *::before,
+.vf-page *::after {
+  box-sizing: border-box;
+}
+
+/* Standalone full-bleed page: kill UA body margin and guarantee no horizontal
+   scroll. Long unbreakable strings (emails/URLs) may break anywhere. */
+body {
+  margin: 0;
+  overflow-x: hidden;
+}
+
+.vf-page {
+  overflow-wrap: anywhere;
+  --swa-1: #70308c;
+  --swa-2: #450a5e;
+  --swa-3: #874ba1;
+  --swa-4: #f3d2ff;
+  --swa-5: #8489c7;
+  --swa-soft: #faf5ff;
+
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #1f2937;
+  background:
+    radial-gradient(1100px 600px at 50% -160px, var(--swa-4) 0%, rgba(243, 210, 255, 0) 62%),
+    linear-gradient(180deg, #ffffff 0%, var(--swa-soft) 100%);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Brand band (mirrors swa2024 Navbar.astro left side) ---------- */
+.vf-brandband {
+  width: 100%;
+  background: #ffffff;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--swa-4);
+}
+.vf-brandband .vf-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  text-decoration: none;
+}
+.vf-brandband .vf-brand-logo {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  display: block;
+}
+.vf-brandband .vf-brand-name {
+  font-weight: 600;
+  font-size: 0.875rem;
+  line-height: 1.2;
+  color: var(--swa-1);
+  min-width: 0;
+}
+
+/* ---------- Event title band (purple, sits below white logo bar) ---------- */
+.vf-eventband {
+  width: 100%;
+  background: linear-gradient(120deg, var(--swa-2) 0%, var(--swa-1) 55%, var(--swa-3) 100%);
+  padding: 2.25rem 1.25rem 2.5rem;
+  text-align: center;
+  color: #fff;
+}
+.vf-eventband h1 {
+  font-size: clamp(1.5rem, 1rem + 2.6vw, 2.4rem);
+  font-weight: 700;
+  line-height: 1.18;
+  max-width: 46rem;
+  margin: 0 auto 0.6rem;
+  letter-spacing: -0.02em;
+}
+.vf-eventband p {
+  font-size: 0.95rem;
+  opacity: 0.9;
+  max-width: 40rem;
+  margin: 0 auto;
+}
+
+/* ---------- Layout container ---------- */
+.vf-main {
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 1.75rem 1rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+}
+
+/* ---------- Intro panel ---------- */
+.vf-intro {
+  background: #fff;
+  border: 1px solid var(--swa-4);
+  border-radius: 0.75rem;
+  padding: 1.5rem 1.5rem 1.4rem;
+  box-shadow: 0 10px 25px -12px rgba(69, 10, 94, 0.22);
+}
+.vf-intro p { margin: 0 0 0.5rem; }
+.vf-intro p:last-child { margin-bottom: 0; }
+.vf-intro .lead { font-size: 1.05rem; color: var(--swa-1); font-weight: 600; }
+.vf-intro .vf-meta { display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; margin-top: 0.75rem; }
+.vf-intro .vf-meta .vf-metak {
+  font-weight: 700;
+  color: var(--swa-2);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.vf-intro ul { margin: 0.4rem 0 0; padding-left: 1.1rem; }
+.vf-intro li { margin-bottom: 0.25rem; }
+.vf-intro .vf-enquiry {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid #f0e3f5;
+  font-size: 0.9rem;
+  color: #4b5563;
+}
+.vf-intro .vf-enquiry a { color: var(--swa-3); text-decoration: none; font-weight: 600; }
+.vf-intro .vf-enquiry a:hover { text-decoration: underline; }
+
+/* ---------- Section card ---------- */
+.vf-section {
+  background: #fff;
+  border: 1px solid #ece6f0;
+  border-radius: 0.75rem;
+  padding: 1.4rem 1.5rem;
+  box-shadow: 0 8px 22px -14px rgba(69, 10, 94, 0.28);
+}
+/* Separate stacked section cards (fieldsets inside the form have no margin,
+   and .vf-main's gap only spaces the form as a whole, not the cards within). */
+.vf-section + .vf-section { margin-top: 1.4rem; }
+.vf-section-title {
+  font-size: 1.18rem;
+  font-weight: 700;
+  color: var(--swa-2);
+  padding: 0 0.35rem 0.4rem 0;
+  display: block;
+  margin: 0 0 0.6rem;
+}
+.vf-section .vf-section-note {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-top: -0.3rem;
+  margin-bottom: 0.8rem;
+}
+
+/* ---------- Field rows ---------- */
+.vf-grid2 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem 1.4rem;
+}
+.vf-grid2 .vf-field { margin-bottom: 0; }
+.vf-field { margin-bottom: 1rem; }
+.vf-field:last-child { margin-bottom: 0; }
+
+/* ---------- Labels ---------- */
+.vf-label {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 0.3rem;
+}
+.vf-label .vf-req { color: #b91c5c; margin-left: 2px; }
+.vf-hint { display: block; font-size: 0.75rem; color: #6b7280; margin-top: 0.2rem; }
+
+/* ---------- Inputs ---------- */
+.vf-input,
+.vf-textarea,
+.vf-select {
+  width: 100%;
+  font: inherit;
+  color: #1f2937;
+  background: #fff;
+  border: 1.5px solid #ddd3e6;
+  border-radius: 0.6rem;
+  padding: 0.7rem 0.85rem;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  appearance: none;
+}
+.vf-input::placeholder,
+.vf-textarea::placeholder { color: #9ca3af; }
+.vf-input:focus,
+.vf-textarea:focus,
+.vf-select:focus {
+  outline: none;
+  border-color: var(--swa-3);
+  box-shadow: 0 0 0 3px rgba(135, 75, 161, 0.18);
+  background: var(--swa-soft);
+}
+.vf-input[aria-invalid="true"],
+.vf-textarea[aria-invalid="true"] {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+.vf-textarea { min-height: 7.5rem; resize: vertical; }
+.vf-with-icon { position: relative; }
+.vf-with-icon .vf-input { padding-left: 2.4rem; }
+.vf-with-icon .vf-input-icon {
+  position: absolute;
+  left: 0.8rem; top: 50%; transform: translateY(-50%);
+  color: #9ca3af; pointer-events: none;
+}
+
+/* ---------- Choice (checkbox / radio) ---------- */
+.vf-choice-list { display: flex; flex-direction: column; gap: 0.55rem; }
+.vf-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.65rem 0.9rem;
+  border: 1.5px solid #ddd3e6;
+  border-radius: 0.6rem;
+  cursor: pointer;
+  background: #fff;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  font-size: 0.95rem;
+}
+.vf-choice:hover { border-color: var(--swa-3); background: var(--swa-soft); }
+.vf-choice input { margin-top: 0.12rem; accent-color: var(--swa-1); width: 1.15rem; height: 1.15rem; flex-shrink: 0; }
+.vf-choice:has(input:checked) {
+  border-color: var(--swa-3);
+  background: var(--swa-4);
+  box-shadow: 0 0 0 1px var(--swa-3) inset;
+}
+.vf-choice .vf-choice-main { display: flex; flex-direction: column; width: 100%; }
+.vf-choice .vf-choice-main small { color: #6b7280; font-size: 0.78rem; }
+
+/* Choice row: stack on mobile, wrap on larger screens */
+.vf-choice-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+.vf-choice-row .vf-choice {
+  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Inline "Other" text inputs inside a choice row */
+.vf-choice-row .vf-input {
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
+/* "Other" reveal block */
+.vf-other { display: none; margin-top: 0.55rem; }
+.vf-other.is-open { display: block; }
+
+/* ---------- Error messages ---------- */
+.vf-error {
+  display: none;
+  font-size: 0.78rem;
+  color: #b91c5c;
+  margin-top: 0.3rem;
+  font-weight: 500;
+}
+.vf-error.is-open { display: block; }
+.vf-error-inline { color: #b91c5c; }
+
+/* ---------- Turnstile ---------- */
+.vf-turnstile-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 0.5rem 0 0;
+}
+
+/* ---------- Submit bar ---------- */
+/* Static, in-flow bar so it never covers form fields */
+.vf-submitbar {
+  position: static;
+  width: 100%;
+  max-width: 100%;
+  margin-top: 0.25rem;
+  background: #fff;
+  border: 1px solid #ece6f0;
+  border-radius: 0.75rem;
+  padding: 0.7rem 1rem;
+  box-shadow: 0 10px 30px -14px rgba(69, 10, 94, 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+.vf-submitbar .vf-submit-meta { font-size: 0.78rem; color: #6b7280; }
+.vf-submitbar .vf-submit-meta b { color: var(--swa-1); }
+
+.vf-btn {
+  font: inherit;
+  font-weight: 700;
+  border: none;
+  border-radius: 0.6rem;
+  padding: 0.8rem 1.6rem;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.15s, background 0.15s, opacity 0.15s;
+}
+.vf-btn:disabled { cursor: not-allowed; opacity: 0.55; }
+.vf-btn-primary {
+  color: #fff;
+  background: linear-gradient(120deg, var(--swa-2), var(--swa-1));
+  box-shadow: 0 10px 20px -10px rgba(69, 10, 94, 0.6);
+}
+.vf-btn-primary:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 14px 26px -12px rgba(69, 10, 94, 0.7); }
+.vf-btn-primary:not(:disabled):active { transform: translateY(0); }
+.vf-btn-secondary {
+  color: var(--swa-2);
+  background: var(--swa-4);
+  border: 1px solid var(--swa-3);
+}
+
+/* ---------- Alerts / states ---------- */
+.vf-alert {
+  border-radius: 0.7rem;
+  padding: 0.9rem 1rem;
+  font-size: 0.9rem;
+  border: 1px solid transparent;
+}
+.vf-alert-error { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.vf-alert-banner {
+  background: var(--swa-4);
+  border-color: var(--swa-3);
+  color: var(--swa-2);
+  text-align: center;
+  font-weight: 600;
+}
+
+/* ---------- Success screen ---------- */
+.vf-success {
+  background: #fff;
+  border: 1px solid var(--swa-4);
+  border-radius: 0.85rem;
+  padding: 2.5rem 1.6rem;
+  box-shadow: 0 10px 25px -12px rgba(69, 10, 94, 0.22);
+  text-align: center;
+  max-width: 640px;
+  margin: 2.2rem auto;
+}
+.vf-success .vf-check {
+  width: 64px; height: 64px; margin: 0 auto 1rem;
+  border-radius: 999px;
+  background: linear-gradient(120deg, var(--swa-2), var(--swa-3));
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+}
+.vf-success h2 {
+  color: var(--swa-2);
+  font-size: 1.6rem;
+  margin-bottom: 0.5rem;
+}
+.vf-success .vf-ref {
+  display: inline-block;
+  font-family: "Courier New", monospace;
+  background: var(--swa-soft);
+  border: 1px solid var(--swa-4);
+  color: var(--swa-1);
+  padding: 0.3rem 0.8rem;
+  border-radius: 0.5rem;
+  margin: 0.8rem 0 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.vf-success p { color: #4b5563; margin: 0 0 0.6rem; }
+.vf-success .vf-enquiry {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #f0e3f5;
+  font-size: 0.85rem; color: #6b7280;
+}
+.vf-success .vf-enquiry a { color: var(--swa-3); font-weight: 600; text-decoration: none; }
+.vf-success .vf-enquiry a:hover { text-decoration: underline; }
+.vf-success .vf-again {
+  margin-top: 1.4rem;
+  font: inherit; font-weight: 700;
+  padding: 0.7rem 1.5rem;
+  border-radius: 0.6rem;
+  color: var(--swa-2);
+  background: var(--swa-4);
+  border: 1px solid var(--swa-3);
+  cursor: pointer;
+}
+
+/* ---------- Closed screen ---------- */
+.vf-closed {
+  background: #fff;
+  border: 1px solid var(--swa-4);
+  border-radius: 0.85rem;
+  padding: 2.5rem 1.6rem;
+  box-shadow: 0 10px 25px -12px rgba(69, 10, 94, 0.22);
+  text-align: center;
+  max-width: 640px;
+  margin: 2.2rem auto;
+}
+.vf-closed h2 { color: var(--swa-2); margin-bottom: 0.5rem; }
+.vf-closed p { color: #4b5563; }
+
+/* ---------- Footer ---------- */
+.vf-foot {
+  text-align: center;
+  font-size: 0.75rem;
+  color: #6b7280;
+  padding: 1.2rem 1rem 2rem;
+}
+.vf-foot a { color: var(--swa-3); text-decoration: none; }
+.vf-foot a:hover { text-decoration: underline; }
+
+/* ---------- Loader ---------- */
+.vf-spinner {
+  display: inline-block;
+  width: 1rem; height: 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 999px;
+  animation: vf-spin 0.7s linear infinite;
+  vertical-align: -0.15rem;
+  margin-right: 0.4rem;
+}
+@keyframes vf-spin { to { transform: rotate(360deg); } }
+
+/* ---------- Larger screens ---------- */
+@media (min-width: 640px) {
+  .vf-choice-row { flex-direction: row; flex-wrap: wrap; }
+  .vf-choice-row .vf-choice { flex: 1 1 220px; min-width: 200px; width: auto; }
+  /* Mirror swa2024 sm: breakpoint (h-20 w-20 logo, text-2xl name) */
+  .vf-brandband { padding: 0.5rem 1rem; }
+  .vf-brandband .vf-brand { gap: 0.6rem; }
+  .vf-brandband .vf-brand-logo { width: 80px; height: 80px; }
+  .vf-brandband .vf-brand-name { font-size: 1.5rem; }
+}
+
+@media (min-width: 768px) {
+  .vf-grid2 { grid-template-columns: 1fr 1fr; }
+  .vf-grid2 .vf-input { max-width: 340px; }
+}
+
+@media (max-width: 480px) {
+  .vf-submitbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.55rem;
+    padding: 0.7rem;
+  }
+  .vf-submitbar .vf-submit-meta { text-align: center; }
+  .vf-btn-primary { width: 100%; }
+  .vf-section { padding: 1.35rem 1rem; }
+  .vf-intro { padding: 1.25rem 1rem; }
+  .vf-eventband { padding: 1.8rem 1rem 2rem; }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+/* ---------- Embed mode (?embed=1) — hide chrome for iframe embedding ---------- */
+.vf-page.vf-embed .vf-brandband,
+.vf-page.vf-embed .vf-eventband,
+.vf-page.vf-embed .vf-foot {
+  display: none;
+}
+.vf-page.vf-embed .vf-main {
+  padding-top: 0.5rem;
+}

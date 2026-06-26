@@ -25,12 +25,20 @@ const REG_BUYER_API = new Set([
   '/api/reg/buyer',
 ]);
 
+const VOLUNTEER_API = new Set([
+  '/api/volunteer',
+]);
+
 const REG_VOLUNTEER_API = new Set([
   '/api/reg/volunteer',
 ]);
 
 const REG_ADMIN_API = new Set([
   '/api/reg/admin',
+]);
+
+const ONLINE_FORMS_API = new Set([
+  '/api/admin/forms',
 ]);
 
 function getBasePath(path: string): string {
@@ -62,6 +70,11 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
 
   // 3. Registration buyer routes — bypass session auth, token validation in handler
   if (pathStartsWithAny(path, REG_BUYER_API)) {
+    return next();
+  }
+
+  // 3b. Volunteer registration routes — public, Turnstile-verified in handler
+  if (pathStartsWithAny(path, VOLUNTEER_API)) {
     return next();
   }
 
@@ -104,6 +117,13 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     const regRole = session.regRole ?? null;
     if (session.role !== 'admin' && regRole !== 'reg_admin') {
       return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Registration admin access required.' }, 403);
+    }
+  }
+
+  // 7b. Online Forms admin routes — require admin or committee
+  if (pathStartsWithAny(path, ONLINE_FORMS_API)) {
+    if (session.role !== 'admin' && session.role !== 'committee') {
+      return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Admin or committee access required.' }, 403);
     }
   }
 
