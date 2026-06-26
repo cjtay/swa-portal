@@ -9,7 +9,7 @@ import '../../../styles/volunteer-form.css';
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="index, follow" />
   <title>Volunteer Registration — Singapore Women's Association</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/webp" href="/swa-logo.webp" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
@@ -26,9 +26,36 @@ import '../../../styles/volunteer-form.css';
     </div>
 
     <div class="vf-eventband">
+      <div class="vf-ndp-lockup">
+        <picture>
+          <source srcset="/ndp-2026/NDP_61_Logo_Full_Gradient.avif" type="image/avif" />
+          <img class="vf-ndp-logo" src="/ndp-2026/NDP_61_Logo_Full_Gradient.png" alt="NDP 2026 — 61 logo" width="180" height="72" loading="eager" decoding="async" />
+        </picture>
+      </div>
       <h1 id="vf-event-title">Volunteer Registration</h1>
-      <p id="vf-event-sub">Loading…</p>
+      <p id="vf-event-sub" class="vf-ndp-tagline">Majulah Singapura, Go Beyond!</p>
     </div>
+
+    <section class="vf-gallery" aria-label="Glimpses from last year's event">
+      <h2 class="vf-gallery__heading">Glimpses from last year&rsquo;s event</h2>
+      <div class="vf-gallery__strip">
+        <figure class="vf-gallery__item">
+          <img src="/gallery/renci-2025/renci-laughter-yoga-1.webp" alt="Befrienders leading seniors in laughter yoga at Ren Ci Community Hospital" width="240" height="160" loading="lazy" decoding="async" />
+        </figure>
+        <figure class="vf-gallery__item">
+          <img src="/gallery/renci-2025/renci-games-4.webp" alt="Volunteers running carnival game booths alongside seniors at Ren Ci Community Hospital" width="240" height="160" loading="lazy" decoding="async" />
+        </figure>
+        <figure class="vf-gallery__item">
+          <img src="/gallery/renci-2025/renci-performance-3.webp" alt="Stage performances during the National Day celebration at Ren Ci Community Hospital" width="240" height="160" loading="lazy" decoding="async" />
+        </figure>
+        <figure class="vf-gallery__item">
+          <img src="/gallery/renci-2025/renci-queen-ella-1.webp" alt="Pageant queen with a befriender accompanying seniors at Ren Ci Community Hospital" width="240" height="160" loading="lazy" decoding="async" />
+        </figure>
+        <figure class="vf-gallery__item">
+          <img src="/gallery/renci-2025/renci-queen-tanisha-1.webp" alt="Pageant queen portrait from the National Day celebration at Ren Ci Community Hospital" width="240" height="160" loading="lazy" decoding="async" />
+        </figure>
+      </div>
+    </section>
 
     <main class="vf-main" id="vf-main">
       <div id="vf-content"><div class="vf-success" style="text-align:center;color:#6b7280;">Loading form…</div></div>
@@ -73,8 +100,7 @@ import '../../../styles/volunteer-form.css';
       }
 
       titleEl.textContent = config.eventTitle || 'Volunteer Registration';
-      subEl.textContent = '';
-      subEl.hidden = true;
+      // NDP 2026 tagline is hardcoded in the HTML (.vf-ndp-tagline); leave it visible.
 
       if (closed) {
         renderClosed();

@@ -74,20 +74,45 @@ body {
   min-width: 0;
 }
 
-/* ---------- Event title band (purple, sits below white logo bar) ---------- */
+/* ---------- Event title band (purple, sits below white logo bar) ----------
+   NDP 2026 accent: subtle crimson tail in the gradient keeps SWA purple
+   dominant while echoing the NDP "61" logo palette. Tagline sits beneath
+   the event title. Logo lockup floats above the title. */
 .vf-eventband {
   width: 100%;
-  background: linear-gradient(120deg, var(--swa-2) 0%, var(--swa-1) 55%, var(--swa-3) 100%);
+  /* Lighter purple start so the NDP "61" logo's own purple gradient remains
+     visible against the band. Crimson tail retained as a subtle NDP accent. */
+  background: linear-gradient(120deg, var(--swa-3) 0%, var(--swa-1) 60%, #9b1c4a 100%);
   padding: 2.25rem 1.25rem 2.5rem;
   text-align: center;
   color: #fff;
 }
+
+/* NDP 2026 logo lockup — "61" gradient mark above the event title */
+.vf-ndp-lockup {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.9rem;
+}
+.vf-ndp-lockup picture {
+  display: block;
+  line-height: 0;
+}
+.vf-ndp-logo {
+  height: 72px;
+  width: auto;
+  max-width: 180px;
+  display: block;
+  /* Subtle lift so the "61" reads clearly against the deep purple band */
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.18));
+}
+
 .vf-eventband h1 {
   font-size: clamp(1.5rem, 1rem + 2.6vw, 2.4rem);
   font-weight: 700;
   line-height: 1.18;
   max-width: 46rem;
-  margin: 0 auto 0.6rem;
+  margin: 0 auto 0.35rem;
   letter-spacing: -0.02em;
 }
 .vf-eventband p {
@@ -95,6 +120,17 @@ body {
   opacity: 0.9;
   max-width: 40rem;
   margin: 0 auto;
+}
+/* NDP 2026 theme tagline ("Majulah Singapura, Go Beyond!") — plain
+   italic line beneath the title, no capsule/chip styling. */
+.vf-ndp-tagline {
+  font-size: 1rem;
+  font-weight: 500;
+  font-style: italic;
+  letter-spacing: 0.01em;
+  color: rgba(255, 255, 255, 0.92);
+  margin: 0.1rem auto 0;
+  opacity: 0.95;
 }
 
 /* ---------- Layout container ---------- */
@@ -468,11 +504,67 @@ body {
   .vf-section { padding: 1.35rem 1rem; }
   .vf-intro { padding: 1.25rem 1rem; }
   .vf-eventband { padding: 1.8rem 1rem 2rem; }
+  /* Slightly smaller NDP mark on narrow phones so it doesn't crowd the title */
+  .vf-ndp-logo { height: 56px; max-width: 140px; }
+  .vf-ndp-tagline { font-size: 0.88rem; }
 }
 
 /* Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
+}
+
+/* ---------- Gallery strip (last year's photos) ---------- */
+.vf-gallery {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 0.5rem;
+  text-align: center;
+}
+.vf-gallery__heading {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--swa-2);
+  margin: 0 0 0.85rem;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.vf-gallery__heading::before,
+.vf-gallery__heading::after {
+  content: "";
+  width: 28px;
+  height: 1px;
+  background: var(--swa-4);
+}
+.vf-gallery__strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+}
+.vf-gallery__item {
+  margin: 0;
+  flex: 1 1 140px;
+  min-width: 120px;
+  max-width: 240px;
+  aspect-ratio: 3 / 2;
+  border-radius: 0.6rem;
+  overflow: hidden;
+  border: 1px solid var(--swa-4);
+  background: var(--swa-soft);
+  box-shadow: 0 4px 12px -8px rgba(69, 10, 94, 0.25);
+}
+.vf-gallery__item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.25s ease;
 }
 
 /* ---------- Embed mode (?embed=1) — hide chrome for iframe embedding ---------- */
