@@ -1,0 +1,74 @@
+- generic [ref=e2]:
+  - link "SWA Logo Singapore Women’s Association" [ref=e4] [cursor=pointer]:
+    - /url: /
+    - img "SWA Logo" [ref=e5]
+    - generic [ref=e6]: Singapore Women’s Association
+  - generic [ref=e7]:
+    - img "NDP 2026 — 61 logo" [ref=e10]
+    - heading "Bringing National Day 2026 to Seniors at Ren Ci Community Hospital" [level=1] [ref=e31]
+    - paragraph [ref=e12]: Majulah Singapura, Go Beyond!
+  - region "Glimpses from last year's event" [ref=e13]:
+    - heading "Glimpses from last year’s event" [level=2] [ref=e14]
+    - generic [ref=e15]:
+      - figure [ref=e16]:
+        - img "Befrienders leading seniors in laughter yoga at Ren Ci Community Hospital" [ref=e17]
+      - figure [ref=e18]:
+        - img "Volunteers running carnival game booths alongside seniors at Ren Ci Community Hospital" [ref=e19]
+      - figure [ref=e20]:
+        - img "Stage performances during the National Day celebration at Ren Ci Community Hospital" [ref=e21]
+      - figure [ref=e22]:
+        - img "Pageant queen with a befriender accompanying seniors at Ren Ci Community Hospital" [ref=e23]
+      - figure [ref=e24]:
+        - img "Pageant queen portrait from the National Day celebration at Ren Ci Community Hospital" [ref=e25]
+  - main [ref=e26]:
+    - generic [ref=e27]:
+      - generic [ref=e32]:
+        - paragraph [ref=e33]: We warmly invite you to volunteer as a Befriender for a meaningful day of celebration with our seniors.
+        - paragraph [ref=e34]: A nostalgic National Day carnival with food and game booths, performances, and telecasts.
+        - paragraph [ref=e35]:
+          - strong [ref=e36]: "Role of Befrienders:"
+        - list [ref=e37]:
+          - listitem [ref=e38]: Accompany seniors from wards to the event hall
+          - listitem [ref=e39]: Befriend and assist them during performances, games, photo-taking, and refreshments
+          - listitem [ref=e40]: Return them to wards after the event
+        - paragraph [ref=e41]:
+          - strong [ref=e42]: "Event dates:"
+          - text: Please review the options below before filling up the form.
+        - list [ref=e43]:
+          - listitem [ref=e44]
+          - listitem [ref=e46]
+        - generic [ref=e48]:
+          - strong [ref=e49]: For enquiries
+          - text: Angela Wong ·
+          - link "angela.wong@singaporewomenassociation.org" [ref=e50] [cursor=pointer]:
+            - /url: mailto:angela.wong@singaporewomenassociation.org
+          - text: ·
+          - link "WhatsApp" [ref=e51] [cursor=pointer]:
+            - /url: https://wa.me/6596741022
+      - generic [ref=e52]:
+        - group [ref=e53]:
+          - heading "Personal Particulars" [level=2] [ref=e54]
+          - generic [ref=e55]
+          - generic [ref=e69]
+        - group [ref=e73]:
+          - heading "Availability & Eligibility" [level=2] [ref=e74]
+          - generic [ref=e75]
+          - generic [ref=e90]
+          - generic [ref=e99]
+        - group [ref=e111]:
+          - heading "Roles & Affiliation" [level=2] [ref=e112]
+          - generic [ref=e113]
+          - generic [ref=e128]
+          - generic [ref=e143]
+          - generic [ref=e147]
+        - group [ref=e151]:
+          - heading "Consent & Declaration" [level=2] [ref=e152]
+          - generic [ref=e153]
+          - generic [ref=e159]
+        - generic [ref=e165]:
+          - generic [ref=e166]: All fields marked * are required.
+          - button "Submit Registration" [disabled] [ref=e167]
+  - contentinfo [ref=e29]:
+    - text: © 2026 Singapore Women’s Association ·
+    - link "Main Website" [ref=e30] [cursor=pointer]:
+      - /url: https://www.singaporewomenassociation.org/

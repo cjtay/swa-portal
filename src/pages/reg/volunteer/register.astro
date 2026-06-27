@@ -506,8 +506,13 @@ import '../../../styles/volunteer-form.css';
           renderSuccess(data.reference);
           return;
         }
-        // server returned known errors object?
-        if (data.errors && typeof data.errors === 'object') {
+        // Transient D1 platform error — form data kept, visitor can re-click Submit.
+        // Falls through (no early return) so the shared cleanup below re-enables the
+        // submit button and resets Turnstile for the retry.
+        if (res.status === 503 && data.error_code === 'D1_WRITE_FAILED') {
+          topAlert(data.message || 'We couldn\u2019t save your registration this time. Please click Submit again \u2014 your details are kept.');
+        } else if (data.errors && typeof data.errors === 'object') {
+          // server returned known errors object?
           clearAllErrors();
           for (const k of Object.keys(data.errors)) setError(k, data.errors[k]);
           const firstErr = document.querySelector('.vf-error.is-open');

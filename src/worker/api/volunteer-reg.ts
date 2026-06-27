@@ -209,11 +209,47 @@ export async function handleVolunteerRegister(c: AppContext) {
 
     return c.json({ success: true, reference: ref });
   } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+
+    // Transient D1 platform-side errors — Cloudflare's published guidance is to
+    // surface these as retry-safe 503s (see GTW D1 incident report 2026-06-20 §4.0).
+    // The volunteer's form data is preserved client-side; a manual re-submit is safe.
+    if (isRetryableD1Error(errMsg)) {
+      await logError(env, {
+        endpoint,
+        error_type: 'D1_WRITE_FAILED',
+        error_message: `volunteer-register: ${errMsg}`,
+        http_status: 503,
+      });
+      return c.json(
+        {
+          success: false,
+          error_code: 'D1_WRITE_FAILED',
+          message:
+            'We couldn\u2019t save your registration this time. Please click Submit again \u2014 your details are kept.',
+        },
+        503,
+      );
+    }
+
     return handleApiError(c, endpoint, err, 'Could not save your registration. Please try again.', {
       error_type: 'D1_INSERT_VOL',
       http_status: 500,
     });
   }
+}
+
+/* D1 retryable transient-error matcher.
+   Mirrors Cloudflare's own `shouldRetry` example (D1 Retry queries best-practices
+   page). D1 auto-retries read-only queries but NOT writes, so writes need
+   application-level signalling to the client for a safe manual retry. */
+function isRetryableD1Error(msg: string): boolean {
+  return (
+    msg.includes('storage caused object to be reset') ||
+    msg.includes('reset because its code was updated') ||
+    msg.includes('Internal error while starting up D1 DB storage') ||
+    msg.includes('Network connection lost')
+  );
 }
 
 /* ----------------------------------------------------
