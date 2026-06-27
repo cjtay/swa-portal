@@ -23,10 +23,10 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       <table class="data-table">
         <thead>
           <tr>
-            <th>Ref</th>
+            <th class="sortable" data-sort="id">Ref</th>
             <th>Event</th>
-            <th>Full Name</th>
-            <th>Email</th>
+            <th class="sortable" data-sort="full_name">Full Name</th>
+            <th class="sortable" data-sort="email">Email</th>
             <th>Contact Number</th>
             <th>NRIC/FIN Last 4</th>
             <th>Emergency Contact</th>
@@ -39,7 +39,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
             <th>Referral</th>
             <th>Consent</th>
             <th>Declaration</th>
-            <th>Submitted (SG)</th>
+            <th class="sortable" data-sort="created_at">Submitted (SG)</th>
           </tr>
         </thead>
         <tbody id="submissions-list"></tbody>
@@ -95,12 +95,66 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     scrollbar-width: thin;
     scrollbar-color: var(--swa-3) var(--bg);
   }
+
+  /* Sortable column headers */
+  .data-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .data-table th.sortable:hover {
+    color: var(--swa-1);
+    background: #f5f0f8;
+  }
+  .data-table th.sortable[aria-sort="ascending"]::after {
+    content: ' ▲';
+    font-size: 0.65rem;
+  }
+  .data-table th.sortable[aria-sort="descending"]::after {
+    content: ' ▼';
+    font-size: 0.65rem;
+  }
+  .data-table th.sortable[aria-sort] {
+    color: var(--swa-1);
+  }
 </style>
 
 <script>
   import { requireAuth } from '../../../scripts/auth-gate';
 
   let allSubmissions: any[] = [];
+  let sortColumn: string | null = null;
+  let sortDirection: 'asc' | 'desc' = 'asc';
+
+  function sortSubmissions() {
+    if (!sortColumn) return;
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    allSubmissions.sort((a: any, b: any) => {
+      let va: any = a[sortColumn!];
+      let vb: any = b[sortColumn!];
+      if (sortColumn === 'id') {
+        return (Number(va) - Number(vb)) * dir;
+      }
+      if (sortColumn === 'created_at') {
+        return String(va || '').localeCompare(String(vb || '')) * dir;
+      }
+      // full_name, email — case-insensitive string
+      return String(va || '').toLowerCase().localeCompare(String(vb || '').toLowerCase()) * dir;
+    });
+  }
+
+  function updateSortHeaders() {
+    const thead = document.querySelector('.data-table thead');
+    if (!thead) return;
+    thead.querySelectorAll('th.sortable').forEach((th) => {
+      const col = (th as HTMLElement).dataset.sort;
+      if (col === sortColumn) {
+        th.setAttribute('aria-sort', sortDirection === 'asc' ? 'ascending' : 'descending');
+      } else {
+        th.removeAttribute('aria-sort');
+      }
+    });
+  }
 
   async function loadSubmissions() {
     const tbody = document.getElementById('submissions-list')!;
@@ -157,6 +211,9 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   }
 
   function renderSubmissions() {
+    sortSubmissions();
+    updateSortHeaders();
+
     const search = (document.getElementById('search-input') as HTMLInputElement).value.toLowerCase().trim();
     const filtered = search
       ? allSubmissions.filter((s: any) =>
@@ -209,6 +266,19 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   document.getElementById('search-input')!.addEventListener('input', renderSubmissions);
   document.getElementById('export-btn')!.addEventListener('click', () => {
     window.location.href = '/api/admin/forms/volunteer/export';
+  });
+
+  document.querySelector('.data-table thead')!.addEventListener('click', (e: Event) => {
+    const th = (e.target as HTMLElement).closest('th.sortable') as HTMLElement | null;
+    if (!th) return;
+    const col = th.dataset.sort!;
+    if (sortColumn === col) {
+      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortColumn = col;
+      sortDirection = 'asc';
+    }
+    renderSubmissions();
   });
 
   requireAuth({
