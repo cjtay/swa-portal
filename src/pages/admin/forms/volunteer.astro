@@ -15,7 +15,13 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:0.75rem;flex-wrap:wrap;">
       <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
         <input type="search" id="search-input" class="form-input" placeholder="Search by name, email, or contact..." style="width:280px;max-width:100%;" />
-        <button class="btn btn-secondary" id="export-btn">Export CSV</button>
+        <div class="filter-export-group">
+          <span class="filter-export-label">Filter &amp; Export</span>
+          <button class="btn btn-date btn-date--active" id="filter-all">All</button>
+          <button class="btn btn-date" id="filter-1aug">1 Aug</button>
+          <button class="btn btn-date" id="filter-8aug">8 Aug</button>
+          <button class="btn btn-secondary" id="export-btn">Export CSV</button>
+        </div>
       </div>
       <span id="count-label" style="color:var(--text-muted);font-size:0.85rem;"></span>
     </div>
@@ -117,6 +123,50 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   .data-table th.sortable[aria-sort] {
     color: var(--swa-1);
   }
+
+  /* Date filter buttons */
+  .btn-date {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 0.3rem;
+    background: var(--bg);
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .btn-date:hover {
+    border-color: var(--swa-3);
+    color: var(--swa-2);
+  }
+  .btn-date--active {
+    background: var(--swa-1);
+    border-color: var(--swa-1);
+    color: #fff;
+  }
+  .btn-date--active:hover {
+    background: var(--swa-2);
+    border-color: var(--swa-2);
+    color: #fff;
+  }
+
+  /* Filter & Export group container */
+  .filter-export-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.75rem;
+    border: 1px dashed var(--swa-3);
+    border-radius: 0.4rem;
+    background: #fbf7fc;
+  }
+  .filter-export-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--swa-2);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-right: 0.15rem;
+  }
 </style>
 
 <script>
@@ -125,6 +175,12 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   let allSubmissions: any[] = [];
   let sortColumn: string | null = null;
   let sortDirection: 'asc' | 'desc' = 'asc';
+  let activeDateFilter: string | null = null;
+
+  const DATE_FILTER_MAP: Record<string, string> = {
+    '1aug': '1st August (Saturday)',
+    '8aug': '8th August (Saturday)',
+  };
 
   function sortSubmissions() {
     if (!sortColumn) return;
@@ -215,12 +271,24 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     updateSortHeaders();
 
     const search = (document.getElementById('search-input') as HTMLInputElement).value.toLowerCase().trim();
+
+    let working = allSubmissions;
+
+    if (activeDateFilter) {
+      const dateLabel = DATE_FILTER_MAP[activeDateFilter];
+      if (dateLabel) {
+        working = working.filter((s: any) =>
+          Array.isArray(s.availability) && s.availability.includes(dateLabel)
+        );
+      }
+    }
+
     const filtered = search
-      ? allSubmissions.filter((s: any) =>
+      ? working.filter((s: any) =>
           (s.full_name || '').toLowerCase().includes(search) ||
           (s.email || '').toLowerCase().includes(search) ||
           (s.contact_number || '').toLowerCase().includes(search))
-      : allSubmissions;
+      : working;
 
     const tbody = document.getElementById('submissions-list')!;
     const countLabel = document.getElementById('count-label')!;
@@ -260,12 +328,16 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       </tr>`;
     }).join('');
 
-    countLabel.textContent = search ? `${filtered.length} of ${allSubmissions.length} shown` : `${allSubmissions.length} total`;
+    countLabel.textContent = (search || activeDateFilter) ? `${filtered.length} of ${allSubmissions.length} shown` : `${allSubmissions.length} total`;
   }
 
   document.getElementById('search-input')!.addEventListener('input', renderSubmissions);
   document.getElementById('export-btn')!.addEventListener('click', () => {
-    window.location.href = '/api/admin/forms/volunteer/export';
+    let url = '/api/admin/forms/volunteer/export';
+    if (activeDateFilter && DATE_FILTER_MAP[activeDateFilter]) {
+      url += '?date=' + encodeURIComponent(DATE_FILTER_MAP[activeDateFilter]);
+    }
+    window.location.href = url;
   });
 
   document.querySelector('.data-table thead')!.addEventListener('click', (e: Event) => {
@@ -280,6 +352,21 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     }
     renderSubmissions();
   });
+
+  function setDateFilter(filterKey: string | null) {
+    activeDateFilter = filterKey;
+    document.querySelectorAll('.btn-date').forEach((btn) => btn.classList.remove('btn-date--active'));
+    if (filterKey) {
+      document.getElementById('filter-' + filterKey)!.classList.add('btn-date--active');
+    } else {
+      document.getElementById('filter-all')!.classList.add('btn-date--active');
+    }
+    renderSubmissions();
+  }
+
+  document.getElementById('filter-all')!.addEventListener('click', () => setDateFilter(null));
+  document.getElementById('filter-1aug')!.addEventListener('click', () => setDateFilter('1aug'));
+  document.getElementById('filter-8aug')!.addEventListener('click', () => setDateFilter('8aug'));
 
   requireAuth({
     onAuthenticated() {

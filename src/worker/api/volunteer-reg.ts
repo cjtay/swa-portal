@@ -305,6 +305,7 @@ export async function handleVolunteerSubmissions(c: AppContext) {
    ---------------------------------------------------- */
 export async function handleVolunteerExport(c: AppContext) {
   const endpoint = 'admin-forms-volunteer-export';
+  const dateFilter = (c.req.query('date') || '').trim();
 
   // Load event config to derive date columns (labels).
   let dateLabels: string[] = [];
@@ -318,9 +319,14 @@ export async function handleVolunteerExport(c: AppContext) {
 
   let results: Record<string, unknown>[];
   try {
-    const res = await c.env.DB.prepare(
-      'SELECT * FROM volunteer_registrations ORDER BY created_at DESC, id DESC LIMIT 2000',
-    ).all();
+    let query = 'SELECT * FROM volunteer_registrations';
+    const params: unknown[] = [];
+    if (dateFilter) {
+      query += ' WHERE availability LIKE ?';
+      params.push('%' + dateFilter + '%');
+    }
+    query += ' ORDER BY created_at DESC, id DESC LIMIT 2000';
+    const res = await c.env.DB.prepare(query).bind(...params).all();
     results = (res.results || []) as Record<string, unknown>[];
   } catch (err) {
     return handleApiError(c, endpoint, err, 'Could not load submissions for export.', {
