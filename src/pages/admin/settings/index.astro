@@ -9,24 +9,18 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   <p class="pg-subtitle">Manage portal configuration. Changes take effect immediately.</p>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;">
-    <a href="/admin/settings/tables" class="card" style="text-decoration:none;color:inherit;display:block;">
-      <h2>Registration — Table Configuration</h2>
-      <p style="color:var(--text-muted);font-size:0.85rem;">Configure table layout, capacities, VIP designations, and the buyer form cutoff time for the gala dinner registration module.</p>
-    </a>
     <a href="/admin/settings/roles" class="card" style="text-decoration:none;color:inherit;display:block;">
-      <h2>Registration — User Roles</h2>
+      <h2>User Roles</h2>
       <p style="color:var(--text-muted);font-size:0.85rem;">Assign registration access roles to members who can log in. Control who can manage bookings and mark arrivals.</p>
     </a>
   </div>
 
   <div class="card steps-card" style="margin-top:1.5rem;">
-    <h3 style="color:#16a34a;font-size:0.9rem;margin-bottom:0.5rem;">How settings work</h3>
-    <ol style="margin-left:1.25rem;font-size:0.85rem;">
-      <li style="margin-bottom:0.35rem;">Click a card above to open that settings section</li>
-      <li style="margin-bottom:0.35rem;">Make your changes and click Save</li>
-      <li style="margin-bottom:0.35rem;">Changes apply instantly to all relevant features</li>
-      <li style="margin-bottom:0.35rem;">The standalone <code>scripts/table-config-builder.html</code> tool is still available as an offline backup</li>
-    </ol>
+    <h3 style="color:#16a34a;font-size:0.9rem;margin-bottom:0.5rem;">Where are the other settings?</h3>
+    <p style="font-size:0.85rem;color:var(--text-muted);">
+      Table configuration for the charity dinner now lives under
+      <a href="/events" style="color:var(--swa-3,#874ba1);">Events</a> &rarr; Table Configuration.
+    </p>
   </div>
 </div>
 

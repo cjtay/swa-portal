@@ -8,41 +8,41 @@ interface Props {
 
 const { title, currentPath = '' } = Astro.props;
 
+// Top-level navigation. Sections (Members, Forms, Events) use prefix matching
+// so any sub-page highlights its parent item. Each item carries its own
+// role-gating attributes; there are no more nav "groups".
 type NavItem = {
   href: string;
   label: string;
+  // Path prefixes that should mark this item as current.
+  matchPrefix?: string[];
+  // Role gating — same semantics as the old sidebar.
   regRole?: string | null;
+  // If true, the item is shown only when ANY reg sub-feature is visible.
+  // Used by the Events landing so it hides cleanly for users with no event role.
+  eventsGroup?: boolean;
   itAdminOnly?: boolean;
 };
 
-type NavGroup = {
-  heading: string;
-  items: NavItem[];
-  regRole?: string | null;
-};
-
-const navGroups: NavGroup[] = [
+const navItems: NavItem[] = [
+  { href: '/', label: 'Dashboard' },
+  { href: '/members', label: 'Members', matchPrefix: ['/members'] },
+  { href: '/namecards', label: 'Namecards', matchPrefix: ['/namecards'] },
+  { href: '/office-booking', label: 'Office Booking', matchPrefix: ['/office-booking'] },
+  { href: '/admin/forms', label: 'Forms', matchPrefix: ['/admin/forms'] },
   {
-    heading: '',
-    items: [
-      { href: '/', label: 'Dashboard' },
-      { href: '/office-booking', label: 'Office Booking' },
-      { href: '/namecards', label: 'Namecards' },
-      { href: '/members', label: 'Members' },
-      { href: '/admin/forms', label: 'Online Forms' },
-      { href: '/admin/settings', label: 'Settings', itAdminOnly: true },
-    ],
+    href: '/events',
+    label: 'Events',
+    matchPrefix: ['/events', '/reg/', '/admin/settings/tables'],
+    eventsGroup: true,
   },
-  {
-    heading: 'Registration',
-    items: [
-      { href: '/reg/admin/bookings', label: 'Bookings', regRole: 'reg_admin' },
-      { href: '/reg/volunteer/checkin', label: 'Check-in', regRole: 'reg_volunteer' },
-      { href: '/reg/dashboard', label: 'Arrivals Dashboard' },
-    ],
-    regRole: 'reg_volunteer',
-  },
+  { href: '/admin/settings', label: 'Settings', matchPrefix: ['/admin/settings'], itAdminOnly: true },
 ];
+
+function isCurrent(item: NavItem): boolean {
+  if (item.matchPrefix) return item.matchPrefix.some((p) => p === '/' ? currentPath === '/' : currentPath.startsWith(p));
+  return currentPath === item.href;
+}
 ---
 
 <!DOCTYPE html>
@@ -59,88 +59,151 @@ const navGroups: NavGroup[] = [
 </head>
 <body>
 <div class="admin-layout">
-  <aside class="admin-sidebar">
-    <div class="sidebar-brand"><img src="/swalogo.svg" alt="SWA" /><span>SWA</span> Admin Portal</div>
-    <nav class="sidebar-nav" id="sidebar-nav">
-      {navGroups.map((group) => (
-        <div class="sidebar-group" data-reg-role={group.regRole ?? ''}>
-          {group.heading && <div class="sidebar-heading">{group.heading}</div>}
-          {group.items.map((item) => (
-            <a href={item.href}
-               aria-current={currentPath === item.href ? 'page' : undefined}
-               data-reg-role={item.regRole ?? ''}
-               data-it-admin-only={item.itAdminOnly ? 'true' : 'false'}>
-              {item.label}
-            </a>
-          ))}
-        </div>
+  <header class="admin-topbar">
+    <div class="topbar-brand">
+      <img src="/swalogo.svg" alt="SWA" />
+      <span class="brand-swa">SWA</span>
+      <span class="brand-portal">Admin Portal</span>
+    </div>
+
+    <nav class="topbar-nav" id="topbar-nav" aria-label="Primary">
+      {navItems.map((item) => (
+        <a href={item.href}
+           aria-current={isCurrent(item) ? 'page' : undefined}
+           data-reg-role={item.regRole ?? ''}
+           data-events-group={item.eventsGroup ? 'true' : 'false'}
+           data-it-admin-only={item.itAdminOnly ? 'true' : 'false'}>
+          {item.label}
+        </a>
       ))}
     </nav>
-    <div class="sidebar-user" id="sidebar-user" style="display:none;">
-      <div class="user-name" id="sidebar-user-name"></div>
+
+    <div class="topbar-user" id="topbar-user" hidden>
+      <span class="user-name" id="topbar-user-name"></span>
+      <button type="button" class="logout-btn" id="logout-btn">Log out</button>
     </div>
-  </aside>
+
+    <!-- Volunteer-only logout: shown when the nav is hidden for check-in volunteers. -->
+    <button type="button" class="logout-btn topbar-volunteer-logout" id="logout-btn-volunteer" hidden>Log out</button>
+
+    <button type="button" class="menu-toggle" id="menu-toggle" aria-label="Toggle menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </header>
+
+  <div class="mobile-drawer" id="mobile-drawer" hidden>
+    <nav aria-label="Mobile">
+      {navItems.map((item) => (
+        <a href={item.href}
+           aria-current={isCurrent(item) ? 'page' : undefined}
+           data-reg-role={item.regRole ?? ''}
+           data-events-group={item.eventsGroup ? 'true' : 'false'}
+           data-it-admin-only={item.itAdminOnly ? 'true' : 'false'}>
+          {item.label}
+        </a>
+      ))}
+      <button type="button" class="logout-btn mobile-logout" id="logout-btn-mobile">Log out</button>
+    </nav>
+  </div>
+
   <main class="admin-main">
     <slot />
   </main>
 </div>
-</body>
 
 <script>
   import { requireAuth, type SessionResponse } from '../scripts/auth-gate';
 
-  function updateNavVisibility(data: SessionResponse) {
-    const nav = document.getElementById('sidebar-nav');
-    if (!nav) return;
-
-    const role = data.role;
-    const regRole = data.regRole;
+  function canSeeRegItem(itemRegRole: string, role: string | null, regRole: string | null): boolean {
     const isAdmin = role === 'admin';
+    if (isAdmin) return true;
+    if (itemRegRole === 'reg_admin') return regRole === 'reg_admin';
+    if (itemRegRole === 'reg_volunteer') {
+      return regRole === 'reg_volunteer' || regRole === 'reg_admin' || role === 'committee';
+    }
+    return true;
+  }
 
-    nav.querySelectorAll('a[data-reg-role]').forEach((el) => {
-      const itemRegRole = (el as HTMLElement).dataset.regRole || '';
-      if (!itemRegRole) return;
-      if (isAdmin || itemRegRole === 'reg_admin') {
-        (el as HTMLElement).style.display = '';
-      } else if (itemRegRole === 'reg_volunteer' && (regRole === 'reg_volunteer' || regRole === 'reg_admin' || role === 'committee')) {
-        (el as HTMLElement).style.display = '';
-      } else {
-        (el as HTMLElement).style.display = 'none';
-      }
+  // Events landing is shown to anyone who can see ANY event sub-feature.
+  // With no per-item regRole on the landing itself, we still want it to
+  // disappear for users who have no event access at all (e.g. a plain
+  // committee member with no reg role). Admins always see it.
+  function canSeeEvents(role: string | null, regRole: string | null): boolean {
+    if (role === 'admin') return true;
+    return regRole === 'reg_admin' || regRole === 'reg_volunteer' || role === 'committee';
+  }
+
+  function updateNavVisibility(data: SessionResponse) {
+    const containers = [document.getElementById('topbar-nav'), document.querySelector('.mobile-drawer nav')];
+    containers.forEach((nav) => {
+      if (!nav) return;
+
+      nav.querySelectorAll('a').forEach((el) => {
+        const a = el as HTMLAnchorElement;
+        const itemRegRole = a.dataset.regRole || '';
+        const itAdminOnly = a.dataset.itAdminOnly === 'true';
+        const eventsGroup = a.dataset.eventsGroup === 'true';
+
+        let visible = true;
+        if (itAdminOnly) visible = data.is_it_admin;
+        else if (eventsGroup) visible = canSeeEvents(data.role, data.regRole);
+        else if (itemRegRole) visible = canSeeRegItem(itemRegRole, data.role, data.regRole);
+
+        a.style.display = visible ? '' : 'none';
+      });
     });
 
-    nav.querySelectorAll('a[data-it-admin-only="true"]').forEach((el) => {
-      if (data.is_it_admin) {
-        (el as HTMLElement).style.display = '';
-      } else {
-        (el as HTMLElement).style.display = 'none';
-      }
-    });
+    // Check-in volunteers are scoped to /reg/volunteer/* only — hide the
+    // entire nav and the standard user menu. A dedicated logout button is
+    // shown in their place so they are not stranded. Committee members and
+    // admins (even those holding reg_volunteer) keep the full chrome.
+    const isVolunteer = data.role === 'volunteer';
+    const navEl = document.getElementById('topbar-nav');
+    const userEl = document.getElementById('topbar-user');
+    const toggleEl = document.getElementById('menu-toggle');
+    const drawerEl = document.getElementById('mobile-drawer');
+    const volunteerLogout = document.getElementById('logout-btn-volunteer');
+    if (navEl) navEl.style.display = isVolunteer ? 'none' : '';
+    if (userEl) userEl.style.display = isVolunteer ? 'none' : '';
+    if (toggleEl) toggleEl.style.display = isVolunteer ? 'none' : '';
+    if (drawerEl) drawerEl.style.display = isVolunteer ? 'none' : '';
+    if (volunteerLogout) volunteerLogout.hidden = !isVolunteer;
+  }
 
-    nav.querySelectorAll('.sidebar-group[data-reg-role]').forEach((el) => {
-      const groupRegRole = (el as HTMLElement).dataset.regRole || '';
-      if (!groupRegRole) return;
-      if (isAdmin) {
-        (el as HTMLElement).style.display = '';
-      } else if (groupRegRole === 'reg_volunteer' && (regRole === 'reg_volunteer' || regRole === 'reg_admin' || role === 'committee')) {
-        (el as HTMLElement).style.display = '';
-      } else if (groupRegRole === 'reg_admin' && regRole === 'reg_admin') {
-        (el as HTMLElement).style.display = '';
-      } else {
-        (el as HTMLElement).style.display = 'none';
-      }
-    });
+  function doLogout() {
+    // The session cookie is cleared server-side; redirect to login on success.
+    fetch('/api/session', { method: 'DELETE' })
+      .catch(() => {})
+      .finally(() => { window.location.href = '/login'; });
   }
 
   requireAuth({
     onAuthenticated(data: SessionResponse) {
-      const userEl = document.getElementById('sidebar-user');
-      const nameEl = document.getElementById('sidebar-user-name');
+      const userEl = document.getElementById('topbar-user');
+      const nameEl = document.getElementById('topbar-user-name');
       if (userEl && nameEl) {
         nameEl.textContent = data.name || data.email || '';
-        userEl.style.display = '';
+        userEl.hidden = false;
       }
       updateNavVisibility(data);
     },
   });
+
+  // Mobile drawer toggle
+  const toggle = document.getElementById('menu-toggle');
+  const drawer = document.getElementById('mobile-drawer');
+  toggle?.addEventListener('click', () => {
+    const open = drawer?.hasAttribute('hidden') === false;
+    if (open) {
+      drawer?.setAttribute('hidden', '');
+      toggle.setAttribute('aria-expanded', 'false');
+    } else {
+      drawer?.removeAttribute('hidden');
+      toggle.setAttribute('aria-expanded', 'true');
+    }
+  });
+
+  document.getElementById('logout-btn')?.addEventListener('click', doLogout);
+  document.getElementById('logout-btn-mobile')?.addEventListener('click', doLogout);
+  document.getElementById('logout-btn-volunteer')?.addEventListener('click', doLogout);
 </script>

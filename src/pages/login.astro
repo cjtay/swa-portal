@@ -111,8 +111,6 @@ import '../styles/admin.css';
 
   initTurnstile();
 
-  const redirect = new URLSearchParams(window.location.search).get('redirect') || '/';
-
   btnSendOtp.addEventListener('click', async () => {
     const email = emailInput.value.trim();
     if (!email) { emailError.textContent = 'Please enter your email address.'; emailError.style.display = ''; return; }
@@ -179,7 +177,11 @@ import '../styles/admin.css';
       });
       const json = await res.json();
       if (json.success) {
-        window.location.href = redirect;
+        // Check-in volunteers go straight to the search page; everyone else
+        // honours ?redirect= or lands on the dashboard.
+        const fallback = json.role === 'volunteer' ? '/reg/volunteer/search' : '/';
+        const target = new URLSearchParams(window.location.search).get('redirect') || fallback;
+        window.location.href = target;
       } else {
         otpError.textContent = json.message || 'Verification failed.';
         otpError.style.display = '';

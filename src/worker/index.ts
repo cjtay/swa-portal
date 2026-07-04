@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from './types';
 import { authMiddleware } from './middleware';
-import { handleSession } from './api/session';
+import { handleSession, handleLogout } from './api/session';
 import { handleSendOtp } from './api/send-otp';
 import { handleVerifyOtp } from './api/verify-otp';
 import { handleBookings, handleBookingById, handleBookingCancel } from './api/bookings';
@@ -36,6 +36,7 @@ app.get('/api/turnstile-config', (c) => {
 
 // Auth
 app.get('/api/session', handleSession);
+app.delete('/api/session', handleLogout);
 app.post('/api/send-otp', handleSendOtp);
 app.post('/api/verify-otp', handleVerifyOtp);
 

@@ -107,6 +107,11 @@ export async function handleVerifyOtp(c: Context<{ Bindings: Env }>) {
     role = 'admin';
   } else if (member && member.category === 'admin') {
     role = 'admin';
+  } else if (member && member.category === 'volunteer') {
+    // Check-in volunteers — scoped to /reg/volunteer/* only. Distinct from
+    // committee members (who may also hold reg_role='reg_volunteer') so the
+    // admin chrome can be hidden for this group alone.
+    role = 'volunteer';
   } else {
     role = 'committee';
   }

@@ -1,0 +1,78 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Events — SWA Admin Portal" currentPath="/events">
+
+<div class="pg-events">
+  <h1 class="pg-title">Events</h1>
+  <p class="pg-subtitle">Tools for the annual charity dinner and future events — bookings, arrivals, check-in and configuration.</p>
+
+  <div class="events-grid">
+    <a href="/reg/admin/bookings" class="card event-card">
+      <h2>Bookings</h2>
+      <p>Manage table reservations, guest lists and magic links for the gala dinner.</p>
+    </a>
+    <a href="/reg/dashboard" class="card event-card">
+      <h2>Arrivals Dashboard</h2>
+      <p>Live view of expected and arrived guests, refreshed throughout the evening.</p>
+    </a>
+    <a href="/reg/volunteer/checkin" class="card event-card event-card--external" target="_blank" rel="noopener">
+      <h2>Check-in Kiosk</h2>
+      <p>Full-screen volunteer check-in kiosk. Opens in a new tab.</p>
+    </a>
+    <a href="/admin/settings/tables" class="card event-card">
+      <h2>Table Configuration</h2>
+      <p>Configure table layout, capacities, VIP designations and the buyer form cutoff time.</p>
+    </a>
+  </div>
+
+  <div class="card event-future">
+    <h3>Coming soon</h3>
+    <p>E-ticket issuance and additional event tooling will appear here as cards.</p>
+  </div>
+</div>
+
+</AdminLayout>
+
+<style>
+  .pg-events { max-width: 960px; }
+  .pg-title { font-size: 1.4rem; font-weight: 700; color: var(--swa-1, #70308c); margin-bottom: 0.25rem; }
+  .pg-subtitle { color: var(--text-muted, #6b7280); font-size: 0.9rem; margin-bottom: 1.5rem; }
+  .events-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+  }
+  .event-card {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    margin-bottom: 0;
+  }
+  .event-card h2 { margin-bottom: 0.35rem; }
+  .event-card p { color: var(--text-muted, #6b7280); font-size: 0.85rem; margin: 0; }
+  .event-card--external h2::after {
+    content: ' \2197';
+    font-size: 0.85rem;
+    color: var(--swa-3, #874ba1);
+  }
+  .event-future {
+    margin-top: 1.5rem;
+    background: #f8f5fb;
+    border: 1px dashed var(--swa-3, #874ba1);
+  }
+  .event-future h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--swa-3, #874ba1);
+    margin-bottom: 0.35rem;
+  }
+  .event-future p { font-size: 0.85rem; color: var(--text-muted, #6b7280); margin: 0; }
+</style>
+
+<script>
+  import { requireRegVolunteer } from '../scripts/auth-gate';
+  requireRegVolunteer(() => {});
+</script>
