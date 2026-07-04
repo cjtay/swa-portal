@@ -29,14 +29,13 @@ The entire digital infrastructure — all three systems, all three domains, all 
 
 | System | Status |
 |--------|--------|
-| SWA Website | ✅ Live on staging; awaiting domain transfer to go fully public |
+| SWA Website | ✅ Live |
 | GTW 2026 | ✅ Core operations complete; final end-to-end testing in progress |
 | Admin Portal — Authentication & Login | ✅ Fully operational |
 | Admin Portal — Office Booking | ✅ Fully operational |
 | Admin Portal — Gala Dinner Registration & Check-In | ✅ Fully operational |
 | Admin Portal — Member Directory (UI) | 🔄 API complete; screen interface in progress |
 | Admin Portal — Namecard Management (UI) | 🔄 API complete; screen interface in progress |
-| Domain Transfers (all three) | 🔄 In progress — expected within days |
 | Image Library Migration (Cloudinary → Cloudflare R2) | 📋 Planned |
 | Website Rebuild Trigger from Portal | 📋 Planned |
 
@@ -77,14 +76,13 @@ This section provides an honest account of what is fully operational, what is in
 - **Admin Portal — Authentication**: Secure email-based login with one-time codes is fully working for all member tiers.
 - **Admin Portal — Office Booking**: Committee members can book the meeting room, receive confirmation emails, and cancel bookings. Admins can manage all bookings.
 - **Admin Portal — Gala Dinner Registration**: Admin booking creation, buyer magic-link guest registration, volunteer check-in, and the live arrivals dashboard are all fully operational.
-- **SWA Website**: All 657 pages are built and verified. The site is live on the staging URL and has been smoke-tested. Domain transfer is the only remaining step before public launch.
+- **SWA Website**: All 657 pages are live and verified across all three domains.
 
 ### 3.2 What Is In Progress
 
 - **Admin Portal — Member Directory UI**: The backend API supporting member search, create, edit, and delete is complete. The front-end screen that committee members will use is being built.
 - **Admin Portal — Namecard Management UI**: Similarly, the API is done; the screen interface is in progress.
 - **Admin Portal — Member Photo Upload**: The storage infrastructure (Cloudflare R2) is in place; the upload form is being finalised.
-- **Domain Transfers**: All three domains (`singaporewomenassociation.org`, `admin.singaporewomenassociation.org`, `gtw.singaporewomenassociation.org`) are in the transfer process.
 - **GTW 2026 — Final Testing**: End-to-end, concurrency, mobile, email, and print tests are being completed before the event.
 
 ### 3.3 What Is Planned (Not Yet Started)
@@ -566,7 +564,6 @@ Optional WhatsApp notifications for GTW volunteers upon successful ticket submis
 
 | Item | System | Status |
 |------|--------|--------|
-| Domain transfer completion | All three | 🔄 In progress |
 | Member directory UI | Admin Portal | 🔄 In progress |
 | Member photo upload form | Admin Portal | 🔄 In progress |
 | Namecard management UI | Admin Portal | 🔄 In progress |

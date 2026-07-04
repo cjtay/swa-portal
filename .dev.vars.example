@@ -1,0 +1,19 @@
+# Copy this file to `.dev.vars` for local wrangler dev (`npm run dev:worker`).
+# `.dev.vars` is gitignored and NEVER deployed — wrangler reads it only for
+# `wrangler dev`. Production secrets are set via `wrangler secret put`.
+
+# Dev-only auth bypass. When 'true', the auth middleware short-circuits with a
+# fake IT-admin session so you can use the portal without OTP login.
+# NEVER set this in wrangler.jsonc `vars` or via `wrangler secret put`.
+DEV_BYPASS_AUTH=true
+
+# Local secrets — any non-empty string works for HMAC while developing.
+# SESSION_SECRET must start with "local-dev-" — getDevBypassSession() requires
+# this prefix as a second trust anchor (defense against accidental prod flag
+# leaks). Production's real secret is high-entropy and will never match.
+SESSION_SECRET=local-dev-session-secret-change-me
+OTP_SECRET=local-dev-otp-secret-change-me
+
+# Resend is not exercised in dev unless you actually send OTPs.
+# `re_*` is Resend's documented dummy key prefix.
+RESEND_API_KEY=re_dummy_unused_locally

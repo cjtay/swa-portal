@@ -15,6 +15,9 @@ node_modules/
 !.env.example
 !.dev.vars.example
 
+# production D1 exports (may contain member PII — never commit)
+prod-dump.sql
+
 # editor
 .vscode/
 .idea/

@@ -1,6 +1,6 @@
 import type { Context, Next } from 'hono';
 import type { Env } from './types';
-import { getSession } from './api/session';
+import { getSession, getDevBypassSession } from './api/session';
 import { IT_ADMIN_EMAILS } from '../constants/portal';
 import { checkApiRateLimit, getEndpointKey } from './lib/rate-limit';
 
@@ -75,6 +75,36 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
 
   // 3b. Volunteer registration routes — public, Turnstile-verified in handler
   if (pathStartsWithAny(path, VOLUNTEER_API)) {
+    return next();
+  }
+
+  // 3c. Dev-only auth bypass. When DEV_BYPASS_AUTH==='true' (set in .dev.vars
+  // for `npm run dev:worker` only), inject a fake IT-admin session onto the
+  // context and skip the real HMAC cookie check. Production never sets the
+  // flag, so this entire block is unreachable there.
+  const dev = getDevBypassSession(c);
+  if (dev?.kind === 'abort') {
+    return c.json(
+      { success: false, error_code: 'DEV_BYPASS_MISCONFIG', message: 'DEV_BYPASS_AUTH set on non-localhost host.' },
+      500,
+    );
+  }
+  if (dev?.kind === 'session') {
+    c.set('sessionEmail', dev.data.email);
+    c.set('sessionName', dev.data.name);
+    c.set('sessionRole', dev.data.role);
+    c.set('sessionRegRole', dev.data.regRole);
+    // Still run the per-user rate limiter below (uses session.email), then next().
+    const endpointKeyDev = getEndpointKey(path, method);
+    if (endpointKeyDev) {
+      const rlResult = await checkApiRateLimit(c.env.SWA_SESSION, endpointKeyDev, dev.data.email);
+      if (!rlResult.allowed) {
+        return c.json(
+          { success: false, error_code: 'RATE_LIMITED', message: 'Too many requests. Please try again later.' },
+          429,
+        );
+      }
+    }
     return next();
   }
 
