@@ -15,12 +15,12 @@
     "cf-typegen": "wrangler types src/worker/worker-configuration.d.ts"
   },
   "dependencies": {
-    "astro": "^6.2.1",
-    "hono": "^4.12.12"
+    "astro": "^6.4.8",
+    "hono": "^4.12.27"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260409.1",
     "typescript": "^5.9.3",
-    "wrangler": "^4.81.0"
+    "wrangler": "^4.107.0"
   }
 }
