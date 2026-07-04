@@ -9,7 +9,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "dev:worker": "wrangler dev",
+    "dev:worker": "astro build && wrangler dev",
     "deploy": "astro build && wrangler deploy",
     "astro": "astro",
     "cf-typegen": "wrangler types src/worker/worker-configuration.d.ts"
