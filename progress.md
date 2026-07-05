@@ -1,104 +1,60 @@
-# Volunteer Registration Form — Progress Tracker
+# SWA Portal — Progress Log
 
-Tracks the build of the public volunteer registration form in swa-portal.
-See `docs/` for full plan; see this file to resume work across sessions.
+A running log of work completed each session, plus the immediate next steps.
+Append a new dated entry at the top; keep it short and skimmable.
 
-## Goal
-Generic/reusable public volunteer registration form at `/reg/volunteer/register`,
-themed to match swa2024 design language, single-page grouped sections,
-Cloudflare Turnstile required, D1 storage. Admin config/view/export come later.
+This file is gitignored — it's a private working scratchpad, not committed.
 
-## Source reference
-Microsoft Form: "Bringing National Day 2025 to Seniors at Ren Ci Community Hospital".
-14 fields carried over (see fields list below).
+For the full phase tracker see `docs/SWAPortal-Implementation-Plan.md`.
+For role access, API permissions, and feature specs see
+`docs/SWAPortal-Functional-Specs.md`.
 
-## Default config (KV `swa:volunteer_event_config` empty fallback)
-- eventTitle: "Bringing National Day 2025 to Seniors at Ren Ci Community Hospital"
-- timeText: "12:00 PM to 4:00 PM"
-- dates:
-  - 1st August (Friday) — Ren Ci Community Hospital, Novena
-  - 8th August (Friday)  — 31 Bukit Batok Street 52, Singapore 659251
-- roles: Befriender, Game Booth Helper, Performance Support Crew, Logistics Helper
-- enquiry: Angela Wong · angela.wong@singaporewomenassociation.org · 9674 1022
-- consent / declaration: from source form text
-- formCutoffTime: null ; isActive: true
+---
 
-## Files
-- [x] progress.md (this file)
-- [x] schema.sql — added volunteer_registrations table + indexes
-- [x] src/styles/volunteer-form.css — self-contained themed CSS (.vf-* namespace)
-- [x] src/worker/api/volunteer-reg.ts — handleVolunteerConfig (GET) + handleVolunteerRegister (POST)
-- [x] src/worker/index.ts — registered GET/POST routes
-- [x] src/worker/middleware.ts — /api/volunteer made public (VOLUNTEER_API prefix set)
-- [x] src/pages/reg/volunteer/register.astro — public form page
-- [x] verify: npm run build (OK; /reg/volunteer/register built)
-- [x] verify: load form in dev (renders default config; both dates correct)
-- [x] verify: GET /api/volunteer/config returns 200 with full config JSON
-- [x] verify: POST /api/volunteer/register rejects missing/invalid Turnstile (no D1 write)
-- [x] verify: tsc clean for volunteer-reg.ts (pre-existing repo errors unrelated)
+## 2026-07-05
 
-## Form fields (14; * = required)
-1. Full Name* (text, autocomplete=name)
-2. Email* (email, autocomplete=email, confirm)
-3. Contact number* (tel, inputmode=tel)
-4. NRIC/FIN last 4* (pattern, length 4)
-5. Emergency Contact person* (textarea: name/relationship/phone)
-6. Availability* (checkbox list from config.dates)
-7. 18+* (radio Yes/No)
-8. Medical conditions* (radio No/Yes + "Other" free text)
-9. Roles interested* (checkbox list from config.roles)
-10. Are you a* (radio: Member SWA / Laughter Yoga / New Volunteer + "Other")
-11. Corporate Volunteer (optional text, contextual)
-12. Referral (optional text)
-13. Consent* (single radio confirm)
-14. Declaration* (single radio confirm)
+### Done
+- **Fixed drawer panel always visible on `/admin/forms/membership`** — the detail
+  drawer's `.drawer-overlay { display: flex }` was overriding the `hidden`
+  attribute, so the empty panel rendered in front of the page on load. Added
+  `.drawer-overlay[hidden] { display: none; }` in
+  `src/pages/admin/forms/membership.astro` (matches the existing pattern in
+  `src/styles/admin.css` for `.new-booking-form[hidden]` and
+  `.mobile-drawer:not([hidden])`). Build verified.
 
-## Backend behaviour
-- Turnstile required (hard block submit; server verifies via TURNSTILE_SECRET)
-- IP rate limit (window 15m, mirroring rate-limit.ts)
-- Insert into volunteer_registrations; return reference id
-- Closed state when isActive=false or past formCutoffTime
+### Notes
+- The membership admin page (`src/pages/admin/forms/membership.astro`) and its
+  API (`src/worker/api/membership-reg.ts`) shipped in commit `5684268` and look
+  feature-complete: list view, detail drawer, approve/reject workflow, PayNow QR,
+  signature pad, image rendering, CSV export. No known issues beyond the drawer
+  bug fixed today.
+- The public membership registration form lives at
+  `/reg/membership/register` (`src/pages/reg/membership/register.astro`), styled
+  via `src/styles/membership-form.css`.
 
-## D1 schema (volunteer_registrations)
-id, event_key, full_name, email, contact_number, nric_last4,
-emergency_contact, availability(JSON), is_18_plus(int), medical_conditions,
-roles_interest(JSON), affiliation, corporate_company, referral,
-consent(int), declaration(int), submitted_ip, user_agent, created_at
-+ idx_volreg_event, idx_volreg_email
+### Next steps (pick up here)
+- **Phase 1D** — Office booking calendar UI
+  (see `docs/SWAPortal-Implementation-Plan.md`).
+- **Phase 1E** — Namecard management UI + photo upload.
+- **Phase 1F** — Member directory with search/filter/pagination.
+- Domain transfer: configure `admin.singaporewomenassociation.org` custom domain.
+- Smoke-test the membership drawer fix in `npm run dev` (close button, backdrop,
+  Escape) since today's verification was build-only.
 
-## Out of scope (later phases — awaiting user direction)
-- Admin settings UI to edit swa:volunteer_event_config (extend admin-settings.ts
-  KNOWN_KEYS + new page under /admin/settings/, e.g. /admin/settings/volunteer)
-- Admin view/export of volunteer_registrations (/admin/volunteers + API,
-  mirroring admin-export.ts; CSV export)
-- Confirmation/acknowledgement email to volunteer (Resend) — optional
-- Notification email to coordinator on each submission — optional
-- Apply D1 schema to REMOTE database (npx wrangler d1 execute --remote) before
-  deploy — local D1 already has the table.
+### Untested changes this session
+- The drawer fix was confirmed by `npm run build` (22 pages built cleanly) but
+  not by manual browser click-through.
 
-## Session resume notes
-- Brand colours reuse portal --swa-* CSS vars (swa-1..swa-4). No Tailwind in portal.
-- Turnstile site key/secret already configured (used by login.astro).
-- Middleware PUBLIC_PATHS pattern: add '/api/volunteer' to a public-prefix set
-  (pathStartsWithAny) — do NOT just add to PUBLIC_PATHS set (exact match only).
-- Spec: British English; no emojis in professional components.
+---
 
-## Completion log
-- Phase 1 COMPLETE — public volunteer registration form built & verified.
-  Files: schema.sql, src/styles/volunteer-form.css, src/worker/api/volunteer-reg.ts,
-  src/worker/index.ts, src/worker/middleware.ts, src/pages/reg/volunteer/register.astro.
-  Build OK; config API 200; submit rejects invalid Turnstile (no D1 write); form renders
-  default config (both dates: 1 Aug Ren Ci Novena, 8 Aug Bukit Batok full address).
-  Local D1 migrated; remote D1 migration pending before deploy.
+## Previously completed (carried over from earlier sessions)
 
-- 2026-06-26 UI polish COMPLETE — addressed font + overlap feedback.
-  Changed: src/styles/volunteer-form.css, src/pages/reg/volunteer/register.astro.
-  - Switched to Inter-only typography to match swa2024 base (removed Playfair Display).
-  - Made choice rows stack vertically on mobile; wider flexible wrapping on desktop.
-  - Removed inline fixed widths from affiliation/medical "Other" options.
-  - Made submit bar static on all screen sizes so it never overlaps form fields.
-  - Moved 2-column personal-fields breakpoint from 640px to 768px.
-  Verified with mobile (390×844) and desktop (1280×800) screenshots.
-
-  Next session starts here: choose admin config UI and/or admin view/export, OR
-  apply remote schema + deploy. See "Out of scope" above.
+### Volunteer registration form — COMPLETE
+- Public form at `/reg/volunteer/register` (`src/pages/reg/volunteer/register.astro`,
+  themed via `src/styles/volunteer-form.css`), backed by
+  `src/worker/api/volunteer-reg.ts` (config GET + register POST), Turnstile
+  required, D1 storage in `volunteer_registrations` table.
+- Admin viewer at `src/pages/admin/forms/volunteer.astro` with date filters
+  (All / 1 Aug / 8 Aug), client-side sorting, vertical scroll, CSV export.
+- UI polish pass done (Inter-only typography, mobile stacking, static submit bar).
+- Remote D1 schema migration may still be pending — verify before deploy.
