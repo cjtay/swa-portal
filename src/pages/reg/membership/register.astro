@@ -1,0 +1,895 @@
+---
+import '../../../styles/membership-form.css';
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="index, follow" />
+  <title>Membership Application | Singapore Women's Association</title>
+  <link rel="icon" type="image/webp" href="/swa-logo.webp" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+</head>
+<body>
+  <div class="mf-page" id="mf-app">
+    <div class="mf-brandband">
+      <a class="mf-brand" href="/">
+        <img class="mf-brand-logo" src="/swa-logo.webp" alt="SWA Logo" width="80" height="80" />
+        <span class="mf-brand-name">Singapore Women&rsquo;s Association</span>
+      </a>
+    </div>
+
+    <div class="mf-eventband">
+      <h1>Membership Application</h1>
+      <p>Join the Singapore Women&rsquo;s Association as a member.</p>
+    </div>
+
+    <main class="mf-main" id="mf-main">
+      <div id="mf-content"><div class="mf-success" style="text-align:center;color:#6b7280;">Loading form…</div></div>
+    </main>
+
+    <footer class="mf-foot">
+      &copy; <span id="mf-year"></span> Singapore Women&rsquo;s Association &middot;
+      <a href="https://www.singaporewomenassociation.org/">Main Website</a>
+    </footer>
+  </div>
+
+  <script>
+    const app = document.getElementById('mf-app')!;
+    const main = document.getElementById('mf-main')!;
+    const content = document.getElementById('mf-content')!;
+    document.getElementById('mf-year')!.textContent = String(new Date().getFullYear());
+
+    if (new URLSearchParams(window.location.search).get('embed') === '1') {
+      app.classList.add('mf-embed');
+    }
+
+    let config: any = null;
+    let turnstileToken: string | null = null;
+    let turnstileWidgetId: string | null = null;
+
+    // PayNow QR live state
+    let currentName = '';
+    let currentRef = '';
+    let qrReady = false; // becomes true once qrcode.min.js has loaded
+    let sigDirty = false; // user has drawn on the signature canvas
+    let sigMethod: 'draw' | 'upload' = 'draw';
+    let signatureUploadFile: File | null = null;
+    let paynowFile: File | null = null;
+    let consentChecked = false;
+
+    /* ------------------------------------------------ PayNow QR (ported from gtw2026 / paynow-qr.ts) */
+    function formatField(id: string, value: string): string {
+      const len = String(value.length).padStart(2, '0');
+      return id + len + value;
+    }
+    function crc16(str: string): string {
+      let crc = 0xffff;
+      for (let i = 0; i < str.length; i++) {
+        crc ^= str.charCodeAt(i) << 8;
+        for (let j = 0; j < 8; j++) {
+          crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+        }
+      }
+      return crc.toString(16).toUpperCase().padStart(4, '0');
+    }
+    function generatePayNowString({ uen, amount, merchantName, refNumber }: { uen: string; amount: number; merchantName: string; refNumber: string; }): string {
+      let paynow = '';
+      paynow += formatField('00', 'SG.PAYNOW');
+      paynow += formatField('01', '2');
+      paynow += formatField('02', uen);
+      paynow += formatField('03', '0');
+      const additional = formatField('01', refNumber.substring(0, 25));
+      let str = '';
+      str += formatField('00', '01');
+      str += formatField('01', '12');
+      str += formatField('26', paynow);
+      str += formatField('52', '0000');
+      str += formatField('53', '702');
+      str += formatField('54', amount.toFixed(2));
+      str += formatField('58', 'SG');
+      str += formatField('59', merchantName.substring(0, 25));
+      str += formatField('60', 'Singapore');
+      str += formatField('62', additional);
+      str += '6304';
+      return str + crc16(str);
+    }
+    function slugifyName(name: string): string {
+      return name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+    }
+    function generateSuffix(): string {
+      const bytes = new Uint8Array(3);
+      crypto.getRandomValues(bytes);
+      return Array.from(bytes, (b) => (b % 36).toString(36)).join('').toUpperCase().slice(0, 4).padEnd(4, '0');
+    }
+    function regenerateRef(): string {
+      const slug = slugifyName(currentName) || 'APPLICANT';
+      const suffix = generateSuffix();
+      currentRef = 'MEM-' + slug + '-' + suffix;
+      return currentRef;
+    }
+
+    async function loadQrLib(): Promise<void> {
+      if (qrReady) return;
+      await new Promise<void>((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = '/js/qrcode.min.js';
+        s.onload = () => { qrReady = true; resolve(); };
+        s.onerror = () => reject(new Error('qr lib failed'));
+        document.head.appendChild(s);
+      });
+    }
+
+    async function renderQr(): Promise<void> {
+      if (!currentName) return;
+      if (!currentRef) regenerateRef();
+      const refEl = document.getElementById('mf-qr-ref');
+      if (refEl) refEl.textContent = currentRef;
+      try {
+        await loadQrLib();
+      } catch {
+        const wrap = document.getElementById('mf-qr-canvas-wrap');
+        if (wrap) wrap.innerHTML = '<div style="padding:1rem;color:#b91c5c;font-size:0.85rem;">QR library could not be loaded. Please refresh.</div>';
+        return;
+      }
+      const canvas = document.getElementById('mf-qr-canvas') as HTMLCanvasElement | null;
+      if (!canvas) return;
+      const qrStr = generatePayNowString({
+        uen: config.uen,
+        amount: config.fee,
+        merchantName: config.merchantName,
+        refNumber: currentRef,
+      });
+      const QRCode = (window as any).QRCode;
+      if (!QRCode) return;
+      QRCode.toCanvas(canvas, qrStr, {
+        width: 540,
+        margin: 1,
+        errorCorrectionLevel: 'H',
+        color: { dark: '#000000', light: '#ffffff' },
+      }).then(() => {
+        canvas.style.width = '240px';
+        canvas.style.height = '240px';
+        // SWA logo overlay in the centre (works because we use errorCorrectionLevel 'H')
+        const logo = new Image();
+        logo.onload = () => {
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          const size = canvas.width;
+          const r = size * 0.16;
+          const cx = size / 2;
+          const cy = size / 2;
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.drawImage(logo, cx - r * 0.7, cy - r * 0.7, r * 1.4, r * 1.4);
+        };
+        logo.src = '/swa-logo.webp';
+      }).catch(() => { /* ignore render error */ });
+    }
+
+    function downloadQr(): void {
+      const canvas = document.getElementById('mf-qr-canvas') as HTMLCanvasElement | null;
+      if (!canvas || !currentRef) return;
+      try {
+        const url = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = currentRef + '-paynow.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch {
+        topAlert('Could not download QR image. Please take a screenshot instead.');
+      }
+    }
+
+    /* ------------------------------------------------ Signature pad */
+    function initSignaturePad(): void {
+      const canvas = document.getElementById('mf-sig-canvas') as HTMLCanvasElement | null;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Size the canvas to its CSS box at device pixel ratio for crisp lines
+      const resize = () => {
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const oldData = sigDirty ? canvas.toDataURL('image/png') : null;
+        canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+        canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#1f2937';
+        if (oldData) {
+          const img = new Image();
+          img.onload = () => ctx.drawImage(img, 0, 0, rect.width, rect.height);
+          img.src = oldData;
+        }
+      };
+      resize();
+      window.addEventListener('resize', resize);
+
+      let drawing = false;
+      let lastX = 0;
+      let lastY = 0;
+
+      const pos = (e: PointerEvent) => {
+        const rect = canvas.getBoundingClientRect();
+        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      };
+
+      canvas.addEventListener('pointerdown', (e: PointerEvent) => {
+        e.preventDefault();
+        canvas.setPointerCapture(e.pointerId);
+        drawing = true;
+        const p = pos(e);
+        lastX = p.x;
+        lastY = p.y;
+        // dot for single taps
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 1, 0, Math.PI * 2);
+        ctx.fillStyle = '#1f2937';
+        ctx.fill();
+      });
+      canvas.addEventListener('pointermove', (e: PointerEvent) => {
+        if (!drawing) return;
+        e.preventDefault();
+        const p = pos(e);
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+        lastX = p.x;
+        lastY = p.y;
+        sigDirty = true;
+      });
+      const end = (e: PointerEvent) => {
+        if (drawing) {
+          drawing = false;
+          sigDirty = true;
+          try { canvas.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+        }
+      };
+      canvas.addEventListener('pointerup', end);
+      canvas.addEventListener('pointercancel', end);
+      canvas.addEventListener('pointerleave', end);
+
+      const clearBtn = document.getElementById('mf-sig-clear');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          sigDirty = false;
+          setError('signature', '');
+        });
+      }
+    }
+
+    function getSignatureBlob(): File | null {
+      if (sigMethod === 'upload') return signatureUploadFile;
+      if (!sigDirty) return null;
+      const canvas = document.getElementById('mf-sig-canvas') as HTMLCanvasElement | null;
+      if (!canvas) return null;
+      const dataUrl = canvas.toDataURL('image/png');
+      const bytes = base64ToBytes(dataUrl.split(',')[1] || '');
+      return new File([bytes], 'signature.png', { type: 'image/png' });
+    }
+
+    function base64ToBytes(b64: string): Uint8Array {
+      const bin = atob(b64);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    }
+
+    /* ------------------------------------------------ Image resize (PayNow upload) */
+    async function resizeImage(file: File, maxDim = 1600, quality = 0.7): Promise<File> {
+      if (file.size <= 1_000_000) return file;
+      const bitmap = await createImageBitmap(file);
+      let { width, height } = bitmap;
+      if (width > maxDim || height > maxDim) {
+        const ratio = Math.min(maxDim / width, maxDim / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return file;
+      ctx.drawImage(bitmap, 0, 0, width, height);
+      const blob: Blob | null = await new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/jpeg', quality));
+      if (!blob) return file;
+      const name = file.name.replace(/\.(jpe?g|png|webp|heic|heif)$/i, '') + '.jpg';
+      return new File([blob], name, { type: 'image/jpeg' });
+    }
+
+    /* ------------------------------------------------ Init */
+    async function init() {
+      try {
+        const res = await fetch('/api/membership/config');
+        const data = await res.json();
+        config = data.config;
+      } catch {
+        config = { fee: 30, renewalFee: 20, uen: '', merchantName: 'SWA', currency: 'SGD' };
+      }
+      renderForm();
+      wireForm();
+      initSignaturePad();
+      initTurnstile();
+    }
+
+    function renderForm() {
+      content.innerHTML = `
+        <form id="mf-form" novalidate>
+          <div id="mf-top-alert"></div>
+
+          <section class="mf-section">
+            <span class="mf-section-title">Membership Application</span>
+            <div class="mf-fee-callout">
+              Membership fee: <strong>S$${config.fee.toFixed(2)}</strong> for the first year.
+              From the second year onwards, the renewal fee is <strong>S$${(config.renewalFee ?? 20).toFixed(2)}</strong>.
+            </div>
+            <p style="font-size:0.88rem;color:#4b5563;margin:0;">
+              Please complete all fields below. Once you have entered your name, a PayNow QR will be generated. Scan it with your bank&rsquo;s PayNow feature to pay the first-year fee, then upload a screenshot of the successful transfer before submitting.
+            </p>
+          </section>
+
+          <section class="mf-section">
+            <span class="mf-section-title">Membership Intent</span>
+            <p style="font-size:0.85rem;color:#6b7280;margin:0 0 0.6rem;">I wish to join the Singapore Women&rsquo;s Association to:</p>
+            <div class="mf-choice-list" id="intent-row">
+              <label class="mf-choice"><input type="radio" name="membershipIntent" value="administration" /><span>Take an active part in the administration of the Association</span></label>
+              <label class="mf-choice"><input type="radio" name="membershipIntent" value="services" /><span>Render services to the Association</span></label>
+              <label class="mf-choice"><input type="radio" name="membershipIntent" value="supportive" /><span>Be a supportive member only</span></label>
+            </div>
+            <div class="mf-error" id="err-membershipIntent"></div>
+          </section>
+
+          <section class="mf-section">
+            <span class="mf-section-title">Personal Particulars</span>
+            <div class="mf-grid2">
+              <div class="mf-field">
+                <label class="mf-label" for="fullName">Full Name <span class="mf-req">*</span></label>
+                <input class="mf-input" type="text" id="fullName" name="fullName" autocomplete="name" />
+                <div class="mf-error" id="err-fullName"></div>
+              </div>
+              <div class="mf-field">
+                <label class="mf-label" for="nric">NRIC / FIN (last 4 characters) <span class="mf-req">*</span></label>
+                <input class="mf-input" type="text" id="nric" name="nric" inputmode="text" maxlength="4" placeholder="e.g. 567D" />
+                <span class="mf-hint">Last 3 digits and the final letter, as per your NRIC/FIN.</span>
+                <div class="mf-error" id="err-nric"></div>
+              </div>
+            </div>
+
+            <div class="mf-field">
+              <label class="mf-label" for="addressLine1">Address Line 1 <span class="mf-req">*</span></label>
+              <input class="mf-input" type="text" id="addressLine1" name="addressLine1" autocomplete="address-line1" placeholder="Block / Street / Unit" />
+              <div class="mf-error" id="err-addressLine1"></div>
+            </div>
+            <div class="mf-grid2">
+              <div class="mf-field">
+                <label class="mf-label" for="addressLine2">Address Line 2</label>
+                <input class="mf-input" type="text" id="addressLine2" name="addressLine2" autocomplete="address-line2" placeholder="Building name (optional)" />
+              </div>
+              <div class="mf-field">
+                <label class="mf-label" for="addressPostalCode">Postal Code <span class="mf-req">*</span></label>
+                <input class="mf-input" type="text" id="addressPostalCode" name="addressPostalCode" inputmode="numeric" placeholder="6-digit postal code" autocomplete="postal-code" />
+                <div class="mf-error" id="err-addressPostalCode"></div>
+              </div>
+            </div>
+
+            <div class="mf-grid2">
+              <div class="mf-field">
+                <label class="mf-label" for="phoneHome">Telephone (Home)</label>
+                <input class="mf-input" type="tel" id="phoneHome" name="phoneHome" autocomplete="tel" />
+              </div>
+              <div class="mf-field">
+                <label class="mf-label" for="phoneOffice">Telephone (Office)</label>
+                <input class="mf-input" type="tel" id="phoneOffice" name="phoneOffice" />
+              </div>
+            </div>
+
+            <div class="mf-grid2">
+              <div class="mf-field">
+                <label class="mf-label" for="email">Email Address <span class="mf-req">*</span></label>
+                <input class="mf-input" type="email" id="email" name="email" autocomplete="email" />
+                <div class="mf-error" id="err-email"></div>
+              </div>
+              <div class="mf-field">
+                <label class="mf-label" for="handphone">Mobile No. <span class="mf-req">*</span></label>
+                <input class="mf-input" type="tel" id="handphone" name="handphone" autocomplete="tel" placeholder="e.g. 9123 4567" />
+                <div class="mf-error" id="err-handphone"></div>
+              </div>
+            </div>
+
+            <div class="mf-grid2">
+              <div class="mf-field">
+                <label class="mf-label" for="dateOfBirth">Date of Birth</label>
+                <input class="mf-input" type="date" id="dateOfBirth" name="dateOfBirth" />
+              </div>
+              <div class="mf-field">
+                <label class="mf-label" for="placeOfBirth">Place of Birth</label>
+                <input class="mf-input" type="text" id="placeOfBirth" name="placeOfBirth" />
+              </div>
+            </div>
+
+            <div class="mf-grid2">
+              <div class="mf-field">
+                <label class="mf-label" for="citizenship">Citizenship</label>
+                <input class="mf-input" type="text" id="citizenship" name="citizenship" placeholder="e.g. Singaporean" />
+              </div>
+              <div class="mf-field">
+                <label class="mf-label" for="occupation">Occupation</label>
+                <input class="mf-input" type="text" id="occupation" name="occupation" />
+              </div>
+            </div>
+          </section>
+
+          <section class="mf-section">
+            <span class="mf-section-title">Profile</span>
+            <div class="mf-field">
+              <label class="mf-label" for="hobbies">Hobbies / Special Interests</label>
+              <textarea class="mf-textarea" id="hobbies" name="hobbies"></textarea>
+            </div>
+            <div class="mf-field">
+              <label class="mf-label" for="skillsExperiences">Skills / Experiences</label>
+              <textarea class="mf-textarea" id="skillsExperiences" name="skillsExperiences"></textarea>
+            </div>
+            <div class="mf-field">
+              <label class="mf-label" for="otherAssociations">Member / Position in Other Associations</label>
+              <textarea class="mf-textarea" id="otherAssociations" name="otherAssociations"></textarea>
+            </div>
+            <div class="mf-field">
+              <label class="mf-label" for="recommendedBy">Recommended By <span class="mf-req">*</span></label>
+              <input class="mf-input" type="text" id="recommendedBy" name="recommendedBy" placeholder="Name of an existing SWA member" />
+              <div class="mf-error" id="err-recommendedBy"></div>
+            </div>
+          </section>
+
+          <section class="mf-section" id="mf-payment-section">
+            <span class="mf-section-title">Payment (PayNow)</span>
+            <p style="font-size:0.85rem;color:#4b5563;margin:0 0 0.9rem;">
+              Scan the QR below with your bank&rsquo;s PayNow feature to pay <strong>S$${config.fee.toFixed(2)}</strong>.
+              The reference below will appear on our statement. Please use it as-is.
+            </p>
+            <div class="mf-qr-card">
+              <div class="mf-qr-canvas-wrap" id="mf-qr-canvas-wrap">
+                <canvas id="mf-qr-canvas" width="540" height="540"></canvas>
+              </div>
+              <div class="mf-qr-ref" id="mf-qr-ref">—</div>
+              <div class="mf-qr-amount">S$${config.fee.toFixed(2)}</div>
+              <div class="mf-qr-instructions">
+                The QR generates once you have entered your name above. Tap Download to save the image.
+              </div>
+              <button type="button" class="mf-btn mf-btn-ghost" id="mf-qr-download">Download QR image</button>
+            </div>
+          </section>
+
+          <section class="mf-section">
+            <span class="mf-section-title">PayNow Completion Screenshot</span>
+            <p style="font-size:0.85rem;color:#4b5563;margin:0 0 0.7rem;">
+              After making payment, photograph or screenshot the successful transfer and upload it here.
+            </p>
+            <label class="mf-upload-area" for="paynowScreenshot">
+              <div class="mf-upload-label">Tap to upload screenshot</div>
+              <div class="mf-upload-hint">JPG, PNG, WebP, or HEIC. Max 10 MB.</div>
+              <input type="file" id="paynowScreenshot" name="paynowScreenshot" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" />
+            </label>
+            <div class="mf-upload-preview" id="paynow-preview">
+              <img id="paynow-preview-img" alt="PayNow screenshot preview" />
+              <button type="button" class="mf-upload-remove" id="paynow-remove">Remove</button>
+            </div>
+            <div class="mf-error" id="err-paynow"></div>
+          </section>
+
+          <section class="mf-section">
+            <span class="mf-section-title">Applicant Signature <span class="mf-req">*</span></span>
+            <p style="font-size:0.85rem;color:#4b5563;margin:0 0 0.7rem;">
+              Draw your signature using your finger or stylus on touch devices, or upload an image of your signature.
+            </p>
+            <div class="mf-sig-tabs">
+              <button type="button" class="mf-sig-tab is-active" data-method="draw" id="mf-sig-tab-draw">Draw</button>
+              <button type="button" class="mf-sig-tab" data-method="upload" id="mf-sig-tab-upload">Upload</button>
+            </div>
+
+            <div class="mf-sig-panel is-open" id="mf-sig-panel-draw">
+              <div class="mf-sig-canvas-wrap">
+                <canvas class="mf-sig-canvas" id="mf-sig-canvas"></canvas>
+              </div>
+              <div class="mf-sig-actions">
+                <button type="button" class="mf-sig-clear" id="mf-sig-clear">Clear</button>
+              </div>
+            </div>
+
+            <div class="mf-sig-panel" id="mf-sig-panel-upload">
+              <label class="mf-upload-area" for="signatureUpload">
+                <div class="mf-upload-label">Tap to upload signature image</div>
+                <div class="mf-upload-hint">PNG with transparent background works best</div>
+                <input type="file" id="signatureUpload" name="signatureUpload" accept="image/png,image/jpeg" />
+              </label>
+              <div class="mf-upload-preview" id="signature-preview">
+                <img id="signature-preview-img" alt="Signature preview" />
+                <button type="button" class="mf-upload-remove" id="signature-remove">Remove</button>
+              </div>
+            </div>
+            <div class="mf-error" id="err-signature"></div>
+          </section>
+
+          <section class="mf-section">
+            <span class="mf-section-title">Declaration</span>
+            <div class="mf-choice-list">
+              <label class="mf-choice">
+                <input type="checkbox" name="consent" id="consent" />
+                <span>I confirm that the particulars given above are true and accurate, and I agree to be bound by the Constitution of the Singapore Women&rsquo;s Association.</span>
+              </label>
+            </div>
+            <div class="mf-error" id="err-consent"></div>
+          </section>
+
+          <div class="mf-section">
+            <div class="mf-turnstile-wrap" id="turnstile-container"></div>
+            <div class="mf-submitbar">
+              <div class="mf-submit-meta">All fields marked <b>*</b> are required.</div>
+              <button type="submit" class="mf-btn mf-btn-primary" id="mf-submit" disabled>Submit Application</button>
+            </div>
+          </div>
+        </form>
+      `;
+    }
+
+    function wireForm() {
+      const form = document.getElementById('mf-form') as HTMLFormElement;
+
+      // NRIC: last 4 chars only (3 digits + final letter), uppercased
+      const nric = document.getElementById('nric') as HTMLInputElement;
+      nric.addEventListener('input', function () {
+        this.value = this.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 4);
+      });
+      // Postal code digits only
+      const postal = document.getElementById('addressPostalCode') as HTMLInputElement;
+      postal.addEventListener('input', function () {
+        this.value = this.value.replace(/[^0-9]/g, '').slice(0, 6);
+      });
+
+      // Live QR: regenerate when name changes
+      const fullName = document.getElementById('fullName') as HTMLInputElement;
+      fullName.addEventListener('input', () => {
+        currentName = fullName.value.trim();
+        if (currentName.length >= 2) {
+          regenerateRef();
+          renderQr();
+        } else {
+          const refEl = document.getElementById('mf-qr-ref');
+          if (refEl) refEl.textContent = '—';
+        }
+      });
+
+      // QR download
+      const dlBtn = document.getElementById('mf-qr-download');
+      if (dlBtn) dlBtn.addEventListener('click', downloadQr);
+
+      // Membership intent clear
+      const intentRow = document.getElementById('intent-row');
+      if (intentRow) {
+        intentRow.addEventListener('change', (e: Event) => {
+          const t = e.target as HTMLInputElement;
+          if (t.name === 'membershipIntent') setError('membershipIntent', '');
+        });
+      }
+
+      // PayNow screenshot upload
+      const paynowInput = document.getElementById('paynowScreenshot') as HTMLInputElement;
+      paynowInput.addEventListener('change', async () => {
+        const file = paynowInput.files && paynowInput.files[0];
+        if (!file) return;
+        if (file.size > 10 * 1024 * 1024) {
+          setError('paynow', 'File too large (max 10 MB).');
+          paynowInput.value = '';
+          return;
+        }
+        try {
+          paynowFile = await resizeImage(file);
+        } catch {
+          paynowFile = file;
+        }
+        showPreview('paynow-preview', 'paynow-preview-img', paynowFile);
+        setError('paynow', '');
+      });
+      const paynowRemove = document.getElementById('paynow-remove');
+      if (paynowRemove) {
+        paynowRemove.addEventListener('click', () => {
+          paynowFile = null;
+          paynowInput.value = '';
+          (document.getElementById('paynow-preview') as HTMLElement).classList.remove('is-open');
+        });
+      }
+
+      // Signature tabs
+      const tabDraw = document.getElementById('mf-sig-tab-draw')!;
+      const tabUpload = document.getElementById('mf-sig-tab-upload')!;
+      tabDraw.addEventListener('click', () => switchSigTab('draw'));
+      tabUpload.addEventListener('click', () => switchSigTab('upload'));
+
+      // Signature upload
+      const sigUpload = document.getElementById('signatureUpload') as HTMLInputElement;
+      sigUpload.addEventListener('change', () => {
+        const file = sigUpload.files && sigUpload.files[0];
+        if (!file) return;
+        if (file.size > 10 * 1024 * 1024) {
+          setError('signature', 'File too large (max 10 MB).');
+          sigUpload.value = '';
+          return;
+        }
+        signatureUploadFile = file;
+        showPreview('signature-preview', 'signature-preview-img', file);
+        setError('signature', '');
+      });
+      const sigRemove = document.getElementById('signature-remove');
+      if (sigRemove) {
+        sigRemove.addEventListener('click', () => {
+          signatureUploadFile = null;
+          sigUpload.value = '';
+          (document.getElementById('signature-preview') as HTMLElement).classList.remove('is-open');
+        });
+      }
+
+      // Consent
+      const consent = document.getElementById('consent') as HTMLInputElement;
+      consent.addEventListener('change', () => {
+        consentChecked = consent.checked;
+        if (consentChecked) setError('consent', '');
+      });
+
+      // Live error clearing
+      form.addEventListener('input', (e: Event) => {
+        const t = e.target as HTMLElement;
+        const name = (t as HTMLInputElement).name;
+        if (name && document.getElementById('err-' + name)) setError(name, '');
+      });
+
+      form.addEventListener('submit', onSubmit);
+    }
+
+    function switchSigTab(method: 'draw' | 'upload') {
+      sigMethod = method;
+      const tabDraw = document.getElementById('mf-sig-tab-draw')!;
+      const tabUpload = document.getElementById('mf-sig-tab-upload')!;
+      const panelDraw = document.getElementById('mf-sig-panel-draw')!;
+      const panelUpload = document.getElementById('mf-sig-panel-upload')!;
+      if (method === 'draw') {
+        tabDraw.classList.add('is-active');
+        tabUpload.classList.remove('is-active');
+        panelDraw.classList.add('is-open');
+        panelUpload.classList.remove('is-open');
+      } else {
+        tabUpload.classList.add('is-active');
+        tabDraw.classList.remove('is-active');
+        panelUpload.classList.add('is-open');
+        panelDraw.classList.remove('is-open');
+      }
+      setError('signature', '');
+    }
+
+    function showPreview(wrapId: string, imgId: string, file: File) {
+      const wrap = document.getElementById(wrapId) as HTMLElement;
+      const img = document.getElementById(imgId) as HTMLImageElement;
+      const reader = new FileReader();
+      reader.onload = () => { img.src = reader.result as string; wrap.classList.add('is-open'); };
+      reader.readAsDataURL(file);
+    }
+
+    function setError(name: string, msg: string) {
+      const el = document.getElementById('err-' + name);
+      if (el) {
+        el.textContent = msg;
+        if (msg) el.classList.add('is-open');
+        else el.classList.remove('is-open');
+      }
+      const input = document.getElementById(name) as HTMLElement | null;
+      if (input) {
+        if (msg) input.setAttribute('aria-invalid', 'true');
+        else input.removeAttribute('aria-invalid');
+      }
+    }
+
+    function clearAllErrors() {
+      document.querySelectorAll('.mf-error').forEach((el) => {
+        el.classList.remove('is-open');
+        el.textContent = '';
+      });
+      document.querySelectorAll('[aria-invalid]').forEach((el) => el.removeAttribute('aria-invalid'));
+    }
+
+    function topAlert(msg: string) {
+      const el = document.getElementById('mf-top-alert')!;
+      el.innerHTML =
+        '<div class="mf-alert mf-alert-error">' + escapeHtml(msg) + '</div>';
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function escapeHtml(s: string): string {
+      return s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function collectErrors(): Record<string, string> {
+      const errors: Record<string, string> = {};
+
+      const fullName = (document.getElementById('fullName') as HTMLInputElement).value.trim();
+      if (!fullName) errors.fullName = 'Full name is required.';
+      else if (fullName.length < 2) errors.fullName = 'Please enter your full name.';
+
+      const nric = (document.getElementById('nric') as HTMLInputElement).value.trim().toUpperCase();
+      if (!nric) errors.nric = 'NRIC/FIN is required.';
+      else if (!/^\d{3}[A-Z]$/.test(nric)) errors.nric = 'Enter the last 4 characters of your NRIC/FIN (3 digits + final letter, e.g. 567D).';
+
+      const addressLine1 = (document.getElementById('addressLine1') as HTMLInputElement).value.trim();
+      if (!addressLine1) errors.addressLine1 = 'Address is required.';
+
+      const addressPostalCode = (document.getElementById('addressPostalCode') as HTMLInputElement).value.trim();
+      if (!addressPostalCode) errors.addressPostalCode = 'Postal code is required.';
+      else if (!/^\d{6}$/.test(addressPostalCode)) errors.addressPostalCode = 'Enter a 6-digit Singapore postal code.';
+
+      const email = (document.getElementById('email') as HTMLInputElement).value.trim();
+      if (!email) errors.email = 'Email is required.';
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Enter a valid email address.';
+
+      const handphone = (document.getElementById('handphone') as HTMLInputElement).value.trim();
+      if (!handphone) errors.handphone = 'Mobile number is required.';
+
+      const recommendedBy = (document.getElementById('recommendedBy') as HTMLInputElement).value.trim();
+      if (!recommendedBy) errors.recommendedBy = 'Please state who recommended you.';
+
+      const intentEl = document.querySelector('input[name="membershipIntent"]:checked') as HTMLInputElement | null;
+      if (!intentEl) errors.membershipIntent = 'Please select your membership intent.';
+
+      const sigBlob = getSignatureBlob();
+      if (!sigBlob) errors.signature = 'Please draw or upload your signature.';
+
+      if (!consentChecked) errors.consent = 'Please confirm the declaration to continue.';
+
+      return errors;
+    }
+
+    async function onSubmit(e: Event) {
+      e.preventDefault();
+      clearAllErrors();
+      const errors = collectErrors();
+      if (Object.keys(errors).length > 0) {
+        for (const k of Object.keys(errors)) setError(k, errors[k]);
+        const firstErr = document.querySelector('.mf-error.is-open');
+        if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        topAlert('Please correct the highlighted fields.');
+        return;
+      }
+
+      const submit = document.getElementById('mf-submit') as HTMLButtonElement;
+      if (!turnstileToken) {
+        topAlert('Please complete the security verification.');
+        return;
+      }
+
+      if (!currentRef) regenerateRef();
+
+      submit.disabled = true;
+      const original = submit.textContent;
+      submit.innerHTML = '<span class="mf-spinner"></span>Submitting…';
+
+      const fd = new FormData();
+      fd.append('fullName', (document.getElementById('fullName') as HTMLInputElement).value.trim());
+      fd.append('nric', (document.getElementById('nric') as HTMLInputElement).value.trim().toUpperCase());
+      fd.append('addressLine1', (document.getElementById('addressLine1') as HTMLInputElement).value.trim());
+      fd.append('addressLine2', (document.getElementById('addressLine2') as HTMLInputElement).value.trim());
+      fd.append('addressPostalCode', (document.getElementById('addressPostalCode') as HTMLInputElement).value.trim());
+      fd.append('phoneHome', (document.getElementById('phoneHome') as HTMLInputElement).value.trim());
+      fd.append('phoneOffice', (document.getElementById('phoneOffice') as HTMLInputElement).value.trim());
+      fd.append('email', (document.getElementById('email') as HTMLInputElement).value.trim().toLowerCase());
+      fd.append('handphone', (document.getElementById('handphone') as HTMLInputElement).value.trim());
+      fd.append('dateOfBirth', (document.getElementById('dateOfBirth') as HTMLInputElement).value);
+      fd.append('placeOfBirth', (document.getElementById('placeOfBirth') as HTMLInputElement).value);
+      fd.append('citizenship', (document.getElementById('citizenship') as HTMLInputElement).value);
+      fd.append('occupation', (document.getElementById('occupation') as HTMLInputElement).value);
+      fd.append('hobbies', (document.getElementById('hobbies') as HTMLTextAreaElement).value);
+      fd.append('skillsExperiences', (document.getElementById('skillsExperiences') as HTMLTextAreaElement).value);
+      fd.append('otherAssociations', (document.getElementById('otherAssociations') as HTMLTextAreaElement).value);
+      const intentEl = document.querySelector('input[name="membershipIntent"]:checked') as HTMLInputElement;
+      fd.append('membershipIntent', intentEl ? intentEl.value : '');
+      fd.append('recommendedBy', (document.getElementById('recommendedBy') as HTMLInputElement).value.trim());
+      fd.append('signatureMethod', sigMethod);
+      fd.append('turnstileToken', turnstileToken);
+
+      if (paynowFile) fd.append('paynowScreenshot', paynowFile);
+      const sigBlob = getSignatureBlob();
+      if (sigBlob) fd.append('signature', sigBlob);
+
+      try {
+        const res = await fetch('/api/membership/register', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.success) {
+          renderSuccess(data.reference);
+          return;
+        }
+        if (res.status === 503 && data.error_code === 'D1_WRITE_FAILED') {
+          topAlert(data.message || 'We couldn\u2019t save your application this time. Please click Submit again.');
+        } else if (data.errors && typeof data.errors === 'object') {
+          clearAllErrors();
+          for (const k of Object.keys(data.errors)) setError(k, data.errors[k]);
+          const firstErr = document.querySelector('.mf-error.is-open');
+          if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          topAlert(data.message || 'Please correct the highlighted fields.');
+        } else {
+          topAlert(data.message || 'Submission failed. Please try again.');
+        }
+      } catch {
+        topAlert('Network error. Please check your connection and try again.');
+      }
+
+      if ((window as any).turnstile && turnstileWidgetId) {
+        (window as any).turnstile.reset(turnstileWidgetId);
+        turnstileToken = null;
+      }
+      submit.disabled = false;
+      submit.innerHTML = original;
+    }
+
+    function renderSuccess(ref: string) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      content.innerHTML =
+        '<div class="mf-success">' +
+        '<div class="mf-check"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>' +
+        '<h2>Application Received</h2>' +
+        '<p>Your membership application has been submitted successfully.</p>' +
+        '<div class="mf-ref">' + escapeHtml(ref || '') + '</div>' +
+        '<p>Thank you for applying to join the Singapore Women&rsquo;s Association. Our membership team will review your application and be in touch. If you have not yet made your PayNow payment, please do so using the QR shown earlier.</p>' +
+        '<p style="font-size:0.82rem;color:#6b7280;">For enquiries, email <a href="mailto:contactus@singaporewomenassociation.org" style="color:var(--swa-3);">contactus@singaporewomenassociation.org</a>.</p>' +
+        '<button class="mf-again" id="mf-submit-another">Submit another application</button>' +
+        '</div>';
+      const again = document.getElementById('mf-submit-another');
+      if (again) again.addEventListener('click', () => window.location.reload());
+    }
+
+    function initTurnstile() {
+      const container = document.getElementById('turnstile-container')!;
+      const submit = document.getElementById('mf-submit') as HTMLButtonElement;
+
+      async function load() {
+        let siteKey = '';
+        try {
+          const res = await fetch('/api/turnstile-config');
+          const data = await res.json();
+          siteKey = data.siteKey;
+        } catch {
+          topAlert('Security verification could not be loaded. Please refresh.');
+          return;
+        }
+        if (!siteKey || !(window as any).turnstile) {
+          submit.disabled = false;
+          return;
+        }
+        turnstileWidgetId = (window as any).turnstile.render('#' + container.id, {
+          sitekey: siteKey,
+          callback: (token: string) => { turnstileToken = token; submit.disabled = false; },
+          'error-callback': () => { topAlert('Security verification failed. Please refresh.'); },
+          'expired-callback': () => { turnstileToken = null; submit.disabled = true; },
+        });
+      }
+      load();
+    }
+
+    init();
+  </script>
+</body>
+</html>

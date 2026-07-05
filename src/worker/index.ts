@@ -17,6 +17,15 @@ import { handleSendMagicLink } from './api/reg/admin-magic-link';
 import { handleRegTables } from './api/reg/reg-tables';
 import { handleAdminSettingsGet, handleAdminSettingsPost } from './api/admin-settings';
 import { handleVolunteerConfig, handleVolunteerRegister, handleVolunteerSubmissions, handleVolunteerExport } from './api/volunteer-reg';
+import {
+  handleMembershipConfig,
+  handleMembershipRegister,
+  handleMembershipSubmissions,
+  handleMembershipExport,
+  handleMembershipImage,
+  handleMembershipApprove,
+  handleMembershipReject,
+} from './api/membership-reg';
 
 const app = new Hono<{
   Bindings: Env;
@@ -94,5 +103,18 @@ app.post('/api/volunteer/register', handleVolunteerRegister);
 // Online Forms — admin + committee view submissions
 app.get('/api/admin/forms/volunteer', handleVolunteerSubmissions);
 app.get('/api/admin/forms/volunteer/export', handleVolunteerExport);
+
+// Membership Application (public form at /reg/membership/register)
+app.get('/api/membership/config', handleMembershipConfig);
+app.post('/api/membership/register', handleMembershipRegister);
+
+// Online Forms — admin + committee view membership submissions
+app.get('/api/admin/forms/membership', handleMembershipSubmissions);
+app.get('/api/admin/forms/membership/export', handleMembershipExport);
+app.get('/api/admin/forms/membership/image/:id/:kind', handleMembershipImage);
+
+// Online Forms — admin only approve / reject (writes to members + memberships)
+app.post('/api/admin/forms/membership/:id/approve', handleMembershipApprove);
+app.post('/api/admin/forms/membership/:id/reject', handleMembershipReject);
 
 export default app;

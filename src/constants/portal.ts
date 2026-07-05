@@ -28,3 +28,27 @@ export const VOLUNTEER_NOTIFY_EMAILS = [
   'jolene.lim@singaporewomenassociation.org',
   'angela.wong@singaporewomenassociation.org',
 ];
+
+// Membership application form — recipients for new submission notifications.
+export const MEMBERSHIP_NOTIFY_EMAILS = [
+  'cjtay@singaporewomenassociation.org',
+  'jolene.lim@singaporewomenassociation.org',
+  'angela.wong@singaporewomenassociation.org',
+];
+
+// Membership fee schedule lives in D1 (membership_types rows, ids 1 and 2)
+// so admins can change fees without a redeploy. The membership-reg config
+// handler reads them at runtime.
+
+// PayNow merchant details for the membership application QR.
+// UEN is the same SWA entity used across SWA online properties (e.g. gtw2026).
+export const SWA_UEN = 'S54SS0010L';
+export const SWA_PAYNOW_MERCHANT_NAME = 'SWA';
+
+// IP rate limit for the public membership submission endpoint.
+export const MEMBERSHIP_RATE_LIMIT_WINDOW_SECONDS = 15 * 60;
+export const MEMBERSHIP_RATE_LIMIT_MAX_REQUESTS = 10;
+
+// Max upload size for PayNow screenshot + signature image (10 MB each).
+export const MEMBERSHIP_MAX_FILE_BYTES = 10 * 1024 * 1024;
+

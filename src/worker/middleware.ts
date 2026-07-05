@@ -29,6 +29,10 @@ const VOLUNTEER_API = new Set([
   '/api/volunteer',
 ]);
 
+const MEMBERSHIP_API = new Set([
+  '/api/membership',
+]);
+
 const REG_VOLUNTEER_API = new Set([
   '/api/reg/volunteer',
 ]);
@@ -75,6 +79,11 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
 
   // 3b. Volunteer registration routes — public, Turnstile-verified in handler
   if (pathStartsWithAny(path, VOLUNTEER_API)) {
+    return next();
+  }
+
+  // 3d. Membership application routes — public, Turnstile-verified in handler
+  if (pathStartsWithAny(path, MEMBERSHIP_API)) {
     return next();
   }
 

@@ -1,0 +1,521 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Membership Applications | SWA Admin Portal" currentPath="/admin/forms/membership">
+  <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem;">
+    <a href="/admin/forms" style="color:var(--text-muted);text-decoration:none;font-size:0.85rem;">Online Forms</a>
+    <span style="color:var(--text-muted);">/</span>
+    <span style="font-size:0.85rem;">Membership Application</span>
+  </div>
+  <h1>Membership Applications</h1>
+  <p style="color:var(--text-muted);margin-bottom:1.5rem;">All submissions from the public membership application form.</p>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:0.75rem;flex-wrap:wrap;">
+      <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+        <input type="search" id="search-input" class="form-input" placeholder="Search by name, email, reference, or NRIC..." style="width:300px;max-width:100%;" />
+        <button class="btn btn-secondary" id="export-btn">Export CSV</button>
+      </div>
+      <span id="count-label" style="color:var(--text-muted);font-size:0.85rem;"></span>
+    </div>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="id">Ref</th>
+            <th class="sortable" data-sort="full_name">Full Name</th>
+            <th class="sortable" data-sort="email">Email</th>
+            <th>NRIC/FIN</th>
+            <th>Mobile No.</th>
+            <th>Postal Code</th>
+            <th>Intent</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Signature</th>
+            <th>PayNow</th>
+            <th class="sortable" data-sort="created_at">Submitted (SG)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="submissions-list"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Detail drawer -->
+  <div class="drawer-overlay" id="drawer-overlay" hidden>
+    <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+      <header class="drawer-header">
+        <h2 id="drawer-title">Application</h2>
+        <button class="drawer-close" id="drawer-close" aria-label="Close">&times;</button>
+      </header>
+      <div class="drawer-body" id="drawer-body"></div>
+    </aside>
+  </div>
+</AdminLayout>
+
+<style is:global>
+  .admin-main { max-width: 1600px; }
+
+  .table-scroll {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 75vh;
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+  }
+  .table-scroll .data-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bg);
+  }
+  .table-scroll::-webkit-scrollbar { height: 12px; width: 12px; }
+  .table-scroll::-webkit-scrollbar-track {
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    border-radius: 0 0 0.4rem 0.4rem;
+  }
+  .table-scroll::-webkit-scrollbar-thumb {
+    background: var(--swa-3);
+    border-radius: 9999px;
+    border: 2px solid var(--bg);
+  }
+  .table-scroll::-webkit-scrollbar-thumb:hover { background: var(--swa-1); }
+  .table-scroll { scrollbar-width: thin; scrollbar-color: var(--swa-3) var(--bg); }
+
+  .data-table th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  .data-table th.sortable:hover { color: var(--swa-1); background: #f5f0f8; }
+  .data-table th.sortable[aria-sort="ascending"]::after { content: ' \25B2'; font-size: 0.65rem; }
+  .data-table th.sortable[aria-sort="descending"]::after { content: ' \25BC'; font-size: 0.65rem; }
+  .data-table th.sortable[aria-sort] { color: var(--swa-1); }
+
+  .row-view-btn {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.78rem;
+    border: 1px solid var(--swa-3);
+    background: var(--bg);
+    color: var(--swa-2);
+    border-radius: 0.3rem;
+    cursor: pointer;
+  }
+  .row-view-btn:hover { background: #f5f0f8; }
+
+  .drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 50;
+    display: flex;
+    justify-content: flex-end;
+  }
+  .drawer {
+    width: min(640px, 100%);
+    background: var(--bg);
+    height: 100%;
+    overflow-y: auto;
+    box-shadow: -10px 0 30px -10px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+  }
+  .drawer-header {
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 1.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .drawer-header h2 { margin: 0; font-size: 1.15rem; color: var(--swa-2); }
+  .drawer-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    line-height: 1;
+  }
+  .drawer-body { padding: 1.25rem; }
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 0.5rem 1rem;
+    font-size: 0.88rem;
+  }
+  .detail-grid dt { color: var(--text-muted); font-weight: 600; }
+  .detail-grid dd { margin: 0; color: var(--text); word-break: break-word; }
+  .detail-images {
+    margin-top: 1.25rem;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  @media (min-width: 540px) {
+    .detail-images { grid-template-columns: 1fr 1fr; }
+  }
+  .detail-image-block h3 {
+    font-size: 0.85rem;
+    color: var(--swa-2);
+    margin: 0 0 0.4rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .detail-image-block img {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    background: #f9fafb;
+    object-fit: contain;
+    max-height: 280px;
+  }
+  .detail-image-block .missing {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-style: italic;
+  }
+  .detail-actions {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .detail-actions .action-info {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    padding: 0.5rem 0;
+  }
+  .action-btn {
+    font: inherit;
+    font-weight: 600;
+    font-size: 0.88rem;
+    padding: 0.55rem 1.1rem;
+    border-radius: 0.4rem;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  .action-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .action-approve {
+    background: var(--swa-1);
+    color: #fff;
+  }
+  .action-approve:not(:disabled):hover { background: var(--swa-2); }
+  .action-reject {
+    background: #fff;
+    color: var(--danger, #b91c5c);
+    border-color: #fecaca;
+  }
+  .action-reject:not(:disabled):hover { background: #fef2f2; }
+</style>
+
+<script>
+  import { requireAuth } from '../../../scripts/auth-gate';
+
+  let allSubmissions: any[] = [];
+  let sortColumn: string | null = null;
+  let sortDirection: 'asc' | 'desc' = 'asc';
+
+  const INTENT_LABELS: Record<string, string> = {
+    administration: 'Administration',
+    services: 'Services',
+    supportive: 'Supportive',
+  };
+
+  function sortSubmissions() {
+    if (!sortColumn) return;
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    allSubmissions.sort((a: any, b: any) => {
+      let va: any = a[sortColumn!];
+      let vb: any = b[sortColumn!];
+      if (sortColumn === 'id') return (Number(va) - Number(vb)) * dir;
+      return String(va || '').toLowerCase().localeCompare(String(vb || '').toLowerCase()) * dir;
+    });
+  }
+
+  function updateSortHeaders() {
+    const thead = document.querySelector('.data-table thead');
+    if (!thead) return;
+    thead.querySelectorAll('th.sortable').forEach((th) => {
+      const col = (th as HTMLElement).dataset.sort;
+      if (col === sortColumn) {
+        th.setAttribute('aria-sort', sortDirection === 'asc' ? 'ascending' : 'descending');
+      } else {
+        th.removeAttribute('aria-sort');
+      }
+    });
+  }
+
+  async function loadSubmissions() {
+    const tbody = document.getElementById('submissions-list')!;
+    try {
+      const res = await fetch('/api/admin/forms/membership');
+      const data = await res.json();
+      if (data.success) {
+        allSubmissions = data.submissions;
+        renderSubmissions();
+      } else if (data.error_code === 'FORBIDDEN') {
+        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--danger);">You do not have permission to view submissions.</td></tr>';
+      } else {
+        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-muted);">Could not load submissions.</td></tr>';
+      }
+    } catch {
+      tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-muted);">Network error.</td></tr>';
+    }
+  }
+
+  function escapeHtml(s: string): string {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+
+  function formatDateTimeSg(iso: string): string {
+    if (!iso) return '';
+    const normalised = /^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}/.test(iso)
+      ? iso.replace(' ', 'T') + 'Z'
+      : iso;
+    const d = new Date(normalised);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString('en-GB', {
+      timeZone: 'Asia/Singapore',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  }
+
+  function dash(s: string): string {
+    const v = (s || '').trim();
+    return v.length > 0 ? escapeHtml(v) : '<span style="color:var(--text-muted);">&mdash;</span>';
+  }
+
+  function statusBadge(status: string): string {
+    const map: Record<string, { bg: string; color: string; label: string }> = {
+      pending: { bg: '#fef3c7', color: '#92400e', label: 'Pending' },
+      approved: { bg: '#dcfce7', color: '#166534', label: 'Approved' },
+      rejected: { bg: '#fee2e2', color: '#991b1b', label: 'Rejected' },
+    };
+    const m = map[status] || map.pending;
+    return `<span style="display:inline-block;padding:0.2rem 0.55rem;border-radius:9999px;font-size:0.72rem;font-weight:700;background:${m.bg};color:${m.color};text-transform:uppercase;letter-spacing:0.04em;">${m.label}</span>`;
+  }
+
+  function renderSubmissions() {
+    sortSubmissions();
+    updateSortHeaders();
+
+    const search = (document.getElementById('search-input') as HTMLInputElement).value.toLowerCase().trim();
+    const filtered = search
+      ? allSubmissions.filter((s: any) =>
+          (s.full_name || '').toLowerCase().includes(search) ||
+          (s.email || '').toLowerCase().includes(search) ||
+          (s.payment_reference || '').toLowerCase().includes(search) ||
+          (s.nric || '').toLowerCase().includes(search))
+      : allSubmissions;
+
+    const tbody = document.getElementById('submissions-list')!;
+    const countLabel = document.getElementById('count-label')!;
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-muted);">No submissions found.</td></tr>';
+      countLabel.textContent = allSubmissions.length === 0 ? '' : `${filtered.length} of ${allSubmissions.length}`;
+      return;
+    }
+
+    tbody.innerHTML = filtered.map((s: any) => {
+      const submitted = formatDateTimeSg(s.created_at);
+      const sigCell = s.signature_r2_key
+        ? `<a href="/api/admin/forms/membership/image/${s.id}/signature" target="_blank" style="color:var(--swa-1);">View</a>`
+        : '<span style="color:var(--text-muted);">&mdash;</span>';
+      const paynowCell = s.paynow_r2_key
+        ? `<a href="/api/admin/forms/membership/image/${s.id}/paynow" target="_blank" style="color:var(--swa-1);">View</a>`
+        : '<span style="color:var(--text-muted);">&mdash;</span>';
+      const statusCell = statusBadge(s.status || 'pending');
+      return `<tr>
+        <td style="font-family:'Courier New',monospace;font-size:0.78rem;color:var(--swa-2);white-space:nowrap;">${escapeHtml(s.payment_reference || '')}</td>
+        <td>${escapeHtml(s.full_name || '')}</td>
+        <td>${escapeHtml(s.email || '')}</td>
+        <td>${escapeHtml(s.nric || '')}</td>
+        <td>${dash(s.handphone || '')}</td>
+        <td>${dash(s.address_postal_code || '')}</td>
+        <td>${escapeHtml(INTENT_LABELS[s.membership_intent] || s.membership_intent || '')}</td>
+        <td>$${Number(s.payment_amount || 0).toFixed(2)}</td>
+        <td>${statusCell}</td>
+        <td>${sigCell}</td>
+        <td>${paynowCell}</td>
+        <td style="white-space:nowrap;font-size:0.85rem;">${escapeHtml(submitted)}</td>
+        <td><button class="row-view-btn" data-id="${s.id}">View</button></td>
+      </tr>`;
+    }).join('');
+
+    countLabel.textContent = search ? `${filtered.length} of ${allSubmissions.length} shown` : `${allSubmissions.length} total`;
+
+    tbody.querySelectorAll('.row-view-btn').forEach((btn) => {
+      btn.addEventListener('click', () => openDrawer(Number((btn as HTMLElement).dataset.id)));
+    });
+  }
+
+  function openDrawer(id: number) {
+    const s = allSubmissions.find((x) => Number(x.id) === id);
+    if (!s) return;
+    const body = document.getElementById('drawer-body')!;
+    const fullAddress = [s.address_line1, s.address_line2, s.address_postal_code]
+      .filter((x: string) => x && String(x).length > 0)
+      .join(', ');
+
+    const sigBlock = s.signature_r2_key
+      ? `<div class="detail-image-block"><h3>Signature (${escapeHtml(s.signature_method === 'draw' ? 'Drawn' : 'Uploaded')})</h3><img src="/api/admin/forms/membership/image/${s.id}/signature" alt="Signature" /></div>`
+      : `<div class="detail-image-block"><h3>Signature</h3><div class="missing">Not on file</div></div>`;
+    const paynowBlock = s.paynow_r2_key
+      ? `<div class="detail-image-block"><h3>PayNow Screenshot</h3><img src="/api/admin/forms/membership/image/${s.id}/paynow" alt="PayNow screenshot" /></div>`
+      : `<div class="detail-image-block"><h3>PayNow Screenshot</h3><div class="missing">Not uploaded</div></div>`;
+
+    body.innerHTML = `
+      <div class="detail-grid">
+        <dt>Reference</dt><dd style="font-family:'Courier New',monospace;color:var(--swa-2);">${escapeHtml(s.payment_reference || '')}</dd>
+        <dt>Full Name</dt><dd>${escapeHtml(s.full_name || '')}</dd>
+        <dt>NRIC/FIN</dt><dd>${escapeHtml(s.nric || '')}</dd>
+        <dt>Email</dt><dd>${escapeHtml(s.email || '')}</dd>
+        <dt>Mobile No.</dt><dd>${dash(s.handphone || '')}</dd>
+        <dt>Telephone (Home)</dt><dd>${dash(s.phone_home || '')}</dd>
+        <dt>Telephone (Office)</dt><dd>${dash(s.phone_office || '')}</dd>
+        <dt>Address</dt><dd>${dash(fullAddress)}</dd>
+        <dt>Date of Birth</dt><dd>${dash(s.date_of_birth || '')}</dd>
+        <dt>Place of Birth</dt><dd>${dash(s.place_of_birth || '')}</dd>
+        <dt>Citizenship</dt><dd>${dash(s.citizenship || '')}</dd>
+        <dt>Occupation</dt><dd>${dash(s.occupation || '')}</dd>
+        <dt>Membership Intent</dt><dd>${escapeHtml(INTENT_LABELS[s.membership_intent] || s.membership_intent || '')}</dd>
+        <dt>Recommended By</dt><dd>${dash(s.recommended_by || '')}</dd>
+        <dt>Hobbies / Interests</dt><dd>${dash(s.hobbies || '')}</dd>
+        <dt>Skills / Experiences</dt><dd>${dash(s.skills_experiences || '')}</dd>
+        <dt>Other Associations</dt><dd>${dash(s.other_associations || '')}</dd>
+        <dt>Payment Amount</dt><dd>$${Number(s.payment_amount || 0).toFixed(2)}</dd>
+        <dt>Status</dt><dd>${statusBadge(s.status || 'pending')}</dd>
+        ${s.member_id ? `<dt>Member ID</dt><dd><a href="/admin/settings/tables" style="color:var(--swa-1);">#${escapeHtml(String(s.member_id))}</a></dd>` : ''}
+        ${s.reviewed_by ? `<dt>Reviewed By</dt><dd>${escapeHtml(s.reviewed_by)}</dd>` : ''}
+        ${s.reviewed_at ? `<dt>Reviewed At</dt><dd>${escapeHtml(formatDateTimeSg(s.reviewed_at))}</dd>` : ''}
+        <dt>Submitted At</dt><dd>${escapeHtml(formatDateTimeSg(s.created_at))}</dd>
+        <dt>Submitter IP</dt><dd>${dash(s.submitted_ip || '')}</dd>
+      </div>
+      <div class="detail-images">
+        ${sigBlock}
+        ${paynowBlock}
+      </div>
+      <div class="detail-actions" id="detail-actions"></div>
+    `;
+    renderActions(s);
+    document.getElementById('drawer-overlay')!.hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  // Render the Approve / Reject footer. Only admins get the buttons; committee
+  // sees a read-only note. Pending is the only state that allows action.
+  function renderActions(s: any) {
+    const wrap = document.getElementById('detail-actions')!;
+    const status = s.status || 'pending';
+    if (status === 'approved') {
+      wrap.innerHTML = `<div class="action-info">Approved${s.member_id ? ' &mdash; Member #' + escapeHtml(String(s.member_id)) : ''}.</div>`;
+      return;
+    }
+    if (status === 'rejected') {
+      wrap.innerHTML = `<div class="action-info">Rejected${s.reviewed_by ? ' by ' + escapeHtml(s.reviewed_by) : ''}.</div>`;
+      return;
+    }
+    if (window.__role !== 'admin') {
+      wrap.innerHTML = `<div class="action-info">Only admins can approve or reject applications.</div>`;
+      return;
+    }
+    wrap.innerHTML = `
+      <button class="action-btn action-approve" id="btn-approve">Approve &amp; create member</button>
+      <button class="action-btn action-reject" id="btn-reject">Reject</button>
+    `;
+    document.getElementById('btn-approve')!.addEventListener('click', () => onApprove(s.id));
+    document.getElementById('btn-reject')!.addEventListener('click', () => onReject(s.id));
+  }
+
+  async function onApprove(id: number) {
+    if (!confirm('Approve this application? A member record and a one-year membership will be created, and a welcome email sent.')) return;
+    const btn = document.getElementById('btn-approve') as HTMLButtonElement;
+    btn.disabled = true; btn.textContent = 'Approving…';
+    try {
+      const res = await fetch(`/api/admin/forms/membership/${id}/approve`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        // Patch the in-memory row + re-render so the table badge and drawer update.
+        const s = allSubmissions.find((x) => Number(x.id) === id);
+        if (s) { s.status = 'approved'; s.member_id = data.member_id; }
+        renderSubmissions();
+        openDrawer(id);
+      } else {
+        alert(data.message || 'Could not approve.');
+        btn.disabled = false; btn.textContent = 'Approve & create member';
+      }
+    } catch {
+      alert('Network error.');
+      btn.disabled = false; btn.textContent = 'Approve & create member';
+    }
+  }
+
+  async function onReject(id: number) {
+    if (!confirm('Reject this application? This cannot be undone.')) return;
+    const btn = document.getElementById('btn-reject') as HTMLButtonElement;
+    btn.disabled = true; btn.textContent = 'Rejecting…';
+    try {
+      const res = await fetch(`/api/admin/forms/membership/${id}/reject`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        const s = allSubmissions.find((x) => Number(x.id) === id);
+        if (s) s.status = 'rejected';
+        renderSubmissions();
+        openDrawer(id);
+      } else {
+        alert(data.message || 'Could not reject.');
+        btn.disabled = false; btn.textContent = 'Reject';
+      }
+    } catch {
+      alert('Network error.');
+      btn.disabled = false; btn.textContent = 'Reject';
+    }
+  }
+
+  function closeDrawer() {
+    document.getElementById('drawer-overlay')!.hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  document.getElementById('search-input')!.addEventListener('input', renderSubmissions);
+  document.getElementById('export-btn')!.addEventListener('click', () => {
+    window.location.href = '/api/admin/forms/membership/export';
+  });
+
+  document.querySelector('.data-table thead')!.addEventListener('click', (e: Event) => {
+    const th = (e.target as HTMLElement).closest('th.sortable') as HTMLElement | null;
+    if (!th) return;
+    const col = th.dataset.sort!;
+    if (sortColumn === col) sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+    else { sortColumn = col; sortDirection = 'asc'; }
+    renderSubmissions();
+  });
+
+  document.getElementById('drawer-close')!.addEventListener('click', closeDrawer);
+  document.getElementById('drawer-overlay')!.addEventListener('click', (e: Event) => {
+    if (e.target === document.getElementById('drawer-overlay')) closeDrawer();
+  });
+  document.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Escape') closeDrawer();
+  });
+
+  requireAuth({
+    onAuthenticated(data) {
+      (window as any).__role = data.role;
+      loadSubmissions();
+    },
+  });
+</script>
