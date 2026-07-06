@@ -602,6 +602,7 @@ import '../../../styles/membership-form.css';
           paynowFile = file;
         }
         showPreview('paynow-preview', 'paynow-preview-img', paynowFile);
+        (paynowInput.closest('.mf-upload-area') as HTMLElement).classList.add('is-hidden');
         setError('paynow', '');
       });
       const paynowRemove = document.getElementById('paynow-remove');
@@ -610,6 +611,7 @@ import '../../../styles/membership-form.css';
           paynowFile = null;
           paynowInput.value = '';
           (document.getElementById('paynow-preview') as HTMLElement).classList.remove('is-open');
+          (paynowInput.closest('.mf-upload-area') as HTMLElement).classList.remove('is-hidden');
         });
       }
 
@@ -631,6 +633,7 @@ import '../../../styles/membership-form.css';
         }
         signatureUploadFile = file;
         showPreview('signature-preview', 'signature-preview-img', file);
+        (sigUpload.closest('.mf-upload-area') as HTMLElement).classList.add('is-hidden');
         setError('signature', '');
       });
       const sigRemove = document.getElementById('signature-remove');
@@ -639,6 +642,7 @@ import '../../../styles/membership-form.css';
           signatureUploadFile = null;
           sigUpload.value = '';
           (document.getElementById('signature-preview') as HTMLElement).classList.remove('is-open');
+          (sigUpload.closest('.mf-upload-area') as HTMLElement).classList.remove('is-hidden');
         });
       }
 

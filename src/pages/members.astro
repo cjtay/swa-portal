@@ -138,7 +138,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
         <td>${m.category}</td>
         <td><span class="badge ${m.has_namecard ? 'badge-approved' : 'badge-cancelled'}">${m.has_namecard ? 'Yes' : 'No'}</span></td>
         <td><span class="badge ${m.can_login ? 'badge-approved' : 'badge-cancelled'}">${m.can_login ? 'Yes' : 'No'}</span></td>
-        <td>${isAdmin ? `<button class="btn btn-secondary" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="editMember(${m.id})">Edit</button>` : '—'}</td>
+        <td>${isAdmin ? `<div style="display:flex;gap:0.4rem;"><button class="btn btn-secondary" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="editMember(${m.id})">Edit</button><button class="btn btn-danger" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="deleteMember(${m.id})">Delete</button></div>` : '—'}</td>
       </tr>`;
     }).join('');
   }
@@ -159,6 +159,39 @@ import AdminLayout from '../layouts/AdminLayout.astro';
     (document.getElementById('m-can-login') as HTMLInputElement).checked = !!m.can_login;
     (document.getElementById('modal-title') as HTMLElement).textContent = 'Edit Member';
     (document.getElementById('edit-modal') as HTMLElement).style.display = 'flex';
+  };
+
+  // @ts-ignore
+  window.deleteMember = async (id: number) => {
+    const m = allMembers.find((x: any) => x.id === id);
+    const name = m?.name ?? `member #${id}`;
+    let deps: { memberships?: number; bookings?: number; applications?: number } = {};
+    try {
+      const res = await fetch(`/api/members/${id}/dependencies`);
+      const data = await res.json();
+      if (data.success) deps = data;
+    } catch {
+      // Non-fatal — fall through to the simple confirm.
+    }
+
+    const bits: string[] = [];
+    if (deps.memberships) bits.push(`${deps.memberships} membership(s)`);
+    if (deps.bookings) bits.push(`${deps.bookings} booking(s)`);
+    if (deps.applications) bits.push(`${deps.applications} application(s)`);
+    const summary = bits.length ? `This member has ${bits.join(', ')}. Records are kept but they will be deactivated and cannot log in.` : 'This is reversible by an admin via D1.';
+    if (!confirm(`Delete ${name}? ${summary}`)) return;
+
+    try {
+      const res = await fetch(`/api/members/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        loadMembers();
+      } else {
+        alert(data.message || 'Delete failed.');
+      }
+    } catch {
+      alert('Network error.');
+    }
   };
 
   document.getElementById('search-input')!.addEventListener('input', renderMembers);

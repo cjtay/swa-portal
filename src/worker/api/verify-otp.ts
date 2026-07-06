@@ -97,7 +97,7 @@ export async function handleVerifyOtp(c: Context<{ Bindings: Env }>) {
   const isItAdmin = (IT_ADMIN_EMAILS as readonly string[]).includes(email);
 
   const member = await env.DB.prepare(
-    'SELECT name, category, reg_role FROM members WHERE email = ? AND can_login = 1'
+    'SELECT name, category, reg_role FROM members WHERE email = ? AND can_login = 1 AND deleted_at IS NULL'
   ).bind(email).first();
 
   const name = (member && member.name) ? member.name as string : email.split('@')[0].replace(/[._-]/g, ' ');

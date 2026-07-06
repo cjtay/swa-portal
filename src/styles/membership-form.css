@@ -290,6 +290,7 @@ body {
   color: #6b7280;
   margin-top: 0.2rem;
 }
+.mf-upload-area.is-hidden { display: none; }
 .mf-upload-preview {
   display: none;
   margin-top: 0.6rem;

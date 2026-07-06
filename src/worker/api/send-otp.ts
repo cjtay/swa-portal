@@ -88,7 +88,7 @@ export async function handleSendOtp(c: Context<{ Bindings: Env }>) {
   }
 
   const member = await env.DB.prepare(
-    'SELECT id FROM members WHERE email = ? AND can_login = 1'
+    'SELECT id FROM members WHERE email = ? AND can_login = 1 AND deleted_at IS NULL'
   ).bind(email).first();
 
   if (!member) {
