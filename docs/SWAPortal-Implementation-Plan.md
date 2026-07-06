@@ -2,7 +2,7 @@
 
 > **Status**: Phase 1 mostly complete. Auth, scaffold, office booking (with admin view), member directory, and namecard base UI done. Pagination, sync-website route, and domain setup still needed.
 > **Date planned**: 2026-05-11
-> **Last updated**: 2026-05-13
+> **Last updated**: 2026-07-06
 > **Repo**: `swa-portal` (separate from `swa2024` and `gtw2026`)
 > **Domain**: `admin.singaporewomenassociation.org` (pending domain transfer, 5-7 days)
 > **Dev URL**: `swa-portal.cjtay-4e0.workers.dev` (live, tested)
@@ -526,6 +526,7 @@ Use this section to track implementation progress across sessions. Update checkb
 | 2026-05-13 | Role from D1 `category` field | Removes email domain check; `can_login` determines login eligibility exclusively |
 | 2026-05-13 | General-purpose authenticated rate limiting | Per-user per-endpoint: 10 requests / 15 min for all write endpoints (members, bookings, sync) |
 | 2026-05-13 | Role-based UI controls | Hide Add/Edit/Sync buttons client-side based on `is_admin` / `is_it_admin` from session |
+| 2026-07-06 | Upgrade Astro 6.4.8 → 7.0.6 | Currency/security — stay on a supported, patched line. Rust compiler is stricter (unclosed tags now error; fixed missing `</body></html>` in `AdminLayout.astro`). Hono-Worker architecture unchanged. v7 content/SSR features (Sätteri, `src/fetch.ts`, route caching) not adopted — target enterprise-content platforms, not a 22-page static portal. |
 
 ---
 

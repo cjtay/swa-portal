@@ -49,6 +49,7 @@ Three tiers. See `docs/SWAPortal-Functional-Specs.md` for the full access matrix
 - **Cloudflare Workers** deployment with D1 (database), KV (sessions/OTP), R2 (uploads)
 - Auth files ported from GTW project — see `src/worker/` and `src/scripts/auth-gate.ts`
 - **D1-based auth** — no KV allowlist; `send-otp.ts` queries members table for `can_login=1`
+- **Astro 7** (Rust compiler, queue-based rendering, Sätteri markdown pipeline) — static build only, no SSR adapter. Upgraded from 6.4.8 on 2026-07-06; v7 content/SSR features (Sätteri, `src/fetch.ts`, route caching) intentionally not adopted — not relevant to a static admin portal.
 
 ## Cloudflare Edge Runtime Rules
 
@@ -100,6 +101,7 @@ Secrets: `OTP_SECRET`, `SESSION_SECRET`, `RESEND_API_KEY` (set interactively via
 4. **Session cookie**: `swa_session` (not `gtw_session`)
 5. **KV key prefix**: `swa:` (not `gtw:`)
 6. **`RESEND_API_KEY`** must be set interactively — piping values causes 502 from Resend
+7. **Astro 7 stricter HTML** — the Rust compiler throws hard errors on unclosed tags (the old Go compiler silently auto-closed them). `AdminLayout.astro` previously omitted `</body></html>` and had to be fixed on upgrade. Always close all non-void elements. Also, `compressHTML` defaults to `'jsx'` (strips whitespace between adjacent inline elements) — rely on flex/grid `gap` or explicit `{' '}` for inline spacing.
 
 ## Response Style
 - Be concise — no preamble or postamble

@@ -18,10 +18,11 @@
     "cf-typegen": "wrangler types src/worker/worker-configuration.d.ts"
   },
   "dependencies": {
-    "astro": "^6.4.8",
+    "astro": "^7",
     "hono": "^4.12.27"
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.9",
     "@cloudflare/workers-types": "^4.20260409.1",
     "qrcode": "^1.4.4",
     "typescript": "^5.9.3",
