@@ -18,7 +18,7 @@
     "cf-typegen": "wrangler types src/worker/worker-configuration.d.ts"
   },
   "dependencies": {
-    "astro": "^6.4.8",
+    "astro": "^7.0.6",
     "hono": "^4.12.27"
   },
   "devDependencies": {
