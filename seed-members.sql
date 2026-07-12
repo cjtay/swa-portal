@@ -1,27 +1,35 @@
--- Seed data: SWA Board Members
--- can_login = 1 for all committee and admin members (regardless of email domain)
--- Login eligibility is determined by can_login flag in D1, not by email domain
+-- DUMMY SEED DATA — NOT REAL MEMBERS.
+-- Safe for local development. Contains no real personal data. All names,
+-- emails (except the project owner's own test addresses), and addresses are
+-- fabricated. Every record shares one mobile number (the owner's test line)
+-- so login/OTP flows can be exercised without exposing anyone's real number.
+--
+-- Email policy:
+--   * The 4 real test addresses (cjtay@outlook.sg, cjtay888@gmail.com,
+--     cjtay@singaporewomenassociation.org, internal@singaporewomenassociation.org)
+--     are attached to login-capable members so you can test the OTP flow.
+--   * Remaining members use clearly-fake example.com addresses, because the
+--     members.email column is UNIQUE — duplicates are not allowed.
+--
+-- Login eligibility is determined by the can_login flag, not the email domain.
 
 INSERT INTO members (name, slug, role, email, mobile, job_title, photo_url, photo_alt, description, category, can_login, show_on_website, has_namecard, address_line1, address_line2, address_postal_code, address_country, facebook, linkedin, instagram, tiktok, youtube, sort_order) VALUES
-('Lee Li Hua', 'lihua', 'President', 'lihua.lee@singaporewomenassociation.org', '+65 9277 6949', 'President', 'lihua', 'Lee Li Hua', 'President of the Singapore Women''s Association, dedicated to empowering women and serving the community.', 'committee', 1, 1, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 1),
-('Dr Stephanie Young', 'stephanie', '1st Vice President', 'stephanieyoung83@gmail.com', '+65 9793 7038', '1st Vice President', 'stephanie', 'Dr Stephanie Young', '1st Vice President of SWA.', 'committee', 1, 1, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 2),
-('Angela Wong', 'angela', '2nd Vice President', 'angela.wong@singaporewomenassociation.org', '+65 9674 1022', '2nd Vice President', 'angela', 'Angela Wong', 'Angela served from 2016 till now in positions of Hon. Secretary of the Federation of Asia-Pacific Women''s Association (FAWA) and has travelled extensively to attend the various FAWA Conventions in Guam, Taiwan, Japan, Philippines, and South Korea.', 'committee', 1, 1, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 3),
-('Roxanne Zhang', 'roxanne', '3rd Vice President', 'roxanne.zhang@singaporewomenassociation.org', '+65 8168 3042', '3rd Vice President', 'roxanne', 'Roxanne Zhang', '3rd Vice President of SWA.', 'committee', 1, 1, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 4),
-('Lynette Lee', 'lynette', 'Honorary Secretary', 'lynettelee136@yahoo.com.sg', '+65 9851 8908', 'Honorary Secretary', 'lynette', 'Lynette Lee', 'Honorary Secretary of SWA.', 'committee', 1, 1, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 5),
-('Joyce Yeo', 'joyce', 'Honorary Treasurer', 'joyce.yeo@singaporewomenassociation.org', '+65 9728 5788', 'Honorary Treasurer', 'joyce', 'Joyce Yeo', 'Honorary Treasurer of SWA.', 'committee', 1, 1, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 6),
-('Cecilia Tan', 'ceciliatan', 'Finance', 'cecilia.tan@singaporewomenassociation.org', '+65 9270 8086', 'Finance', 'ceciliatan', 'Cecilia Tan', 'Finance lead at SWA.', 'committee', 1, 0, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 7),
-('Pauline Ng', 'pauline', 'Assistant Secretary', 'paulineng@bttan.com', '+65 9878 2263', 'Assistant Secretary', 'pauline', 'Pauline Ng', 'Assistant Secretary of SWA.', 'committee', 1, 1, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 8),
-('Serene Tan', 'serene', 'Assistant Treasurer', 'serenet.63@gmail.com', '+65 9152 0475', 'Assistant Treasurer', 'serene', 'Serene Tan', 'Assistant Treasurer of SWA.', 'committee', 1, 1, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 9),
-('Charlotte Chia', 'charlotte', 'Communications Director', 'cchi0508@outlook.com', '+65 9780 1568', 'Communications Director', 'charlotte', 'Charlotte Chia', 'Communications Director of SWA.', 'committee', 1, 1, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 10),
-('Feng Fang', 'fengfang', 'Board member', 'fengfang88@hotmail.com', '+65 8175 9916', 'Board member', 'fengfang', 'Feng Fang', 'Board member of SWA.', 'committee', 1, 1, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 11),
-('Kyla Tan', 'kyla', 'Programme Director', 'kyla.tan@singaporewomenassociation.org', '+65 9138 5234', 'Programme Director', 'kyla', 'Kyla Tan', 'Programme Director of SWA.', 'committee', 1, 1, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 12),
-('Kate Tan', 'kate', 'Executive Director', 'kate.tan@singaporewomenassociation.org', '+65 9272 9000', 'Executive Director', 'kate', 'Kate Tan', 'Kate has 16 years of experience in aviation and homeland security, with a strong foundation in leadership and entrepreneurship. Most recently, she served as Head of Transformation and Sustainability and Deputy General Manager at SATS Ltd since 2020.', 'committee', 1, 1, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 13),
-('Ho Shiong Yee', 'shiongyee', 'Programme Director', 'hoshiongyee@gmail.com', '+65 9780 0357', 'Programme Director', 'shiongyee', 'Ho Shiong Yee', 'Programme Director of SWA.', 'committee', 1, 1, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 14),
-('Catherine Ong', 'catherine', 'Board member', 'cat_ong2002@yahoo.com.sg', '+65 9748 9779', 'Board member', 'catherine', 'Catherine Ong', 'Board member of SWA.', 'committee', 1, 1, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 15),
-('Dr Blanche Lim', 'blanche', 'Board member', 'blanchelim@gmail.com', '+65 9189 2316', 'Board member', 'blanche', 'Dr Blanche Lim', 'Board member of SWA.', 'committee', 1, 1, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 16),
-('Sara Mei Woo', 'saramei', 'Advisor, President of SWA from 2002 to 2016', 'sarameiwoo@gmail.com', '+65 9023 6830', 'Advisor, President of SWA from 2002 to 2016', 'saramei', 'Sara Mei Woo', 'Advisor and former President of SWA.', 'committee', 1, 1, 1, '409 Serangoon Central', '#01-303', '550409', 'Singapore', '', '', '', '', '', 17);
+('Alice Cheng', 'alice', 'President', 'cjtay@outlook.sg', '+65 9323 1688', 'President', 'alice', 'Alice Cheng', 'Test president record for local development.', 'committee', 1, 1, 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', '', '', '', '', '', 1),
+('Bryan Tan', 'bryan', '1st Vice President', 'cjtay888@gmail.com', '+65 9323 1688', '1st Vice President', 'bryan', 'Bryan Tan', 'Test vice-president record for local development.', 'committee', 1, 1, 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', '', '', '', '', '', 2),
+('Candice Lim', 'candice', 'Honorary Secretary', 'internal@singaporewomenassociation.org', '+65 9323 1688', 'Honorary Secretary', 'candice', 'Candice Lim', 'Test secretary record for local development.', 'committee', 1, 1, 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', '', '', '', '', '', 3),
+('Denise Wong', 'denise', '2nd Vice President', 'testmember04@example.com', '+65 9323 1688', '2nd Vice President', 'denise', 'Denise Wong', 'Test vice-president record for local development.', 'committee', 1, 1, 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', '', '', '', '', '', 4),
+('Ethan Goh', 'ethan', '3rd Vice President', 'testmember05@example.com', '+65 9323 1688', '3rd Vice President', 'ethan', 'Ethan Goh', 'Test vice-president record for local development.', 'committee', 1, 1, 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', '', '', '', '', '', 5),
+('Felicia Ng', 'felicia', 'Honorary Treasurer', 'testmember06@example.com', '+65 9323 1688', 'Honorary Treasurer', 'felicia', 'Felicia Ng', 'Test treasurer record for local development.', 'committee', 1, 1, 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', '', '', '', '', '', 6),
+('Gerald Lee', 'gerald', 'Finance', 'testmember07@example.com', '+65 9323 1688', 'Finance', 'gerald', 'Gerald Lee', 'Test finance record for local development.', 'committee', 1, 0, 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', '', '', '', '', '', 7),
+('Hannah Koh', 'hannah', 'Assistant Secretary', 'testmember08@example.com', '+65 9323 1688', 'Assistant Secretary', 'hannah', 'Hannah Koh', 'Test assistant secretary record for local development.', 'committee', 1, 1, 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', '', '', '', '', '', 8),
+('Ivan Chua', 'ivan', 'Communications Director', 'testmember09@example.com', '+65 9323 1688', 'Communications Director', 'ivan', 'Ivan Chua', 'Test communications record for local development.', 'committee', 1, 1, 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', '', '', '', '', '', 9),
+('Jolene Yeo', 'jolene', 'Programme Director', 'testmember10@example.com', '+65 9323 1688', 'Programme Director', 'jolene', 'Jolene Yeo', 'Test programme director record for local development.', 'committee', 1, 1, 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', '', '', '', '', '', 10),
+('Khai Lim', 'khai', 'Board member', 'testmember11@example.com', '+65 9323 1688', 'Board member', 'khai', 'Khai Lim', 'Test board member record for local development.', 'committee', 1, 1, 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', '', '', '', '', '', 11),
+('Lena Tan', 'lena', 'Board member', 'testmember12@example.com', '+65 9323 1688', 'Board member', 'lena', 'Lena Tan', 'Test board member record for local development.', 'committee', 1, 1, 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', '', '', '', '', '', 12);
 
--- Also add the IT admin accounts (can_login = 1, but no namecard/website display)
+-- Admin accounts (can_login = 1, no namecard/website display). The first uses
+-- the project owner's address so it matches the dev-bypass IT-admin identity
+-- (IT_ADMIN_EMAILS[0] in src/constants/portal.ts).
 INSERT INTO members (name, slug, role, email, category, can_login, show_on_website, has_namecard, sort_order) VALUES
-('CJ Tay', 'cjtay', 'IT Admin', 'cjtay@singaporewomenassociation.org', 'admin', 1, 0, 0, 100),
-('System Account', 'system', 'System', 'system@singaporewomenassociation.org', 'admin', 1, 0, 0, 101);
+('Test Admin', 'testadmin', 'IT Admin', 'cjtay@singaporewomenassociation.org', 'admin', 1, 0, 0, 100),
+('System Account', 'system', 'System', 'system@example.com', 'admin', 1, 0, 0, 101);

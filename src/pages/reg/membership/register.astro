@@ -56,7 +56,7 @@ import '../../../styles/membership-form.css';
     // we can give an honest, actionable message instead of "please complete
     // the security verification" (which is impossible when the widget is
     // silent and failing for reasons the user can't see or fix).
-    let turnstileState: 'loading' | 'ready' | 'error' | 'expired' | 'unavailable' = 'loading';
+    let turnstileState: 'loading' | 'ready' | 'error' | 'expired' | 'unavailable' | 'bypassed' = 'loading';
 
     const TURNSTILE_MESSAGES: Record<typeof turnstileState, string> = {
       loading: 'Just a moment \u2014 the security check is still loading. Please wait a few seconds and try again.',
@@ -64,6 +64,7 @@ import '../../../styles/membership-form.css';
       error: 'The security check could not be loaded. Please refresh the page and try again.',
       expired: 'The security check has expired. Please tap Submit again.',
       unavailable: 'The security check is unavailable. Please refresh the page and try again.',
+      bypassed: '',
     };
 
     // PayNow QR live state
@@ -830,7 +831,7 @@ import '../../../styles/membership-form.css';
       }
 
       const submit = document.getElementById('mf-submit') as HTMLButtonElement;
-      if (!turnstileToken) {
+      if (!turnstileToken && turnstileState !== 'bypassed') {
         const msg = TURNSTILE_MESSAGES[turnstileState] || TURNSTILE_MESSAGES.loading;
         setError('turnstile', msg);
         showFormError(msg);
@@ -864,7 +865,7 @@ import '../../../styles/membership-form.css';
       fd.append('membershipIntent', intentEl ? intentEl.value : '');
       fd.append('recommendedBy', (document.getElementById('recommendedBy') as HTMLInputElement).value.trim());
       fd.append('signatureMethod', sigMethod);
-      fd.append('turnstileToken', turnstileToken);
+      fd.append('turnstileToken', turnstileToken || '');
 
       if (paynowFile) fd.append('paynowScreenshot', paynowFile);
       const sigBlob = getSignatureBlob();
@@ -932,9 +933,14 @@ import '../../../styles/membership-form.css';
           setError('turnstile', msg);
           return;
         }
-        if (!siteKey || !(window as any).turnstile) {
-          // No Turnstile configured (e.g. local dev with the dev bypass): the
-          // server will accept the submission without a token, so allow it.
+        if (!siteKey) {
+          // No Turnstile configured (e.g. local dev with the dev bypass active):
+          // the server skips siteverify in dev, so allow token-less submission.
+          turnstileState = 'bypassed';
+          submit.disabled = false;
+          return;
+        }
+        if (!(window as any).turnstile) {
           turnstileState = 'unavailable';
           submit.disabled = false;
           return;

@@ -15,7 +15,9 @@
     "dev:worker": "astro build && wrangler dev",
     "deploy": "astro build && wrangler deploy",
     "astro": "astro",
-    "cf-typegen": "wrangler types src/worker/worker-configuration.d.ts"
+    "cf-typegen": "wrangler types src/worker/worker-configuration.d.ts",
+    "db:setup": "node scripts/db-setup.mjs",
+    "db:seed": "node scripts/db-setup.mjs --seed-only"
   },
   "dependencies": {
     "astro": "^7",
