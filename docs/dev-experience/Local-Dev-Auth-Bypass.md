@@ -26,10 +26,23 @@ it) and restart `npm run dev:worker`. The real OTP login flow takes over again.
 
 ## What it does
 
-When the env var `DEV_BYPASS_AUTH=true` is present, the API auth middleware
-short-circuits every authenticated request with a fake IT-admin session. No
-HMAC cookie check runs, no OTP is needed, and the client-side auth gate sees
-`authenticated: true` so it never redirects to `/login`.
+When the env var `DEV_BYPASS_AUTH=true` is present, the dev bypass does two
+things:
+
+1. **Skips authentication.** The API auth middleware short-circuits every
+   authenticated request with a fake IT-admin session. No HMAC cookie check
+   runs, no OTP is needed, and the client-side auth gate sees
+   `authenticated: true` so it never redirects to `/login`.
+
+2. **Skips Turnstile.** The same flag drives a separate lightweight helper,
+   `isDevBypassActive()` (`src/worker/api/session.ts`), that the three public
+   form handlers (`send-otp`, `membership-reg`, `volunteer-reg`) and the
+   `/api/turnstile-config` endpoint consult. The config endpoint returns an
+   empty site key so the Turnstile widget never loads, and the handlers skip
+   server-side `siteverify`. Without this the forms couldn't submit on
+   `localhost` — the production site key isn't authorised for `localhost`.
+   See [Local-Dev-Database.md](./Local-Dev-Database.md) for the form-testing
+   walkthrough.
 
 ## Production safety
 
@@ -59,22 +72,15 @@ local-only and safe.
 2. `SESSION_SECRET` starts with `local-dev-` (defense against a prod flag leak), AND
 3. the request host is in the allow-list (defense against tunneling).
 
-If any one fails, the bypass aborts with `500 DEV_BYPASS_MISCONFIG` and normal
-auth runs. In production all three fail — the flag is absent, the secret is
-real, and the host is the production domain (matched, but irrelevant since the
-first two already abort).
+If the flag is **absent**, the bypass simply stays dormant (the helper returns
+`null`) and normal auth runs — no error. If the flag is set but either of the
+other two anchors fails, the worker returns `500 DEV_BYPASS_MISCONFIG` and
+normal auth runs. In production the flag is absent, so the bypass never
+activates regardless of host.
 
-**Commit checklist.** These files are uncommitted after the initial
-implementation; commit them when satisfied:
-- `src/worker/types.ts`
-- `src/worker/api/session.ts`
-- `src/worker/middleware.ts`
-- `.dev.vars.example`
-- `.gitignore` (now excludes `prod-dump.sql`)
-- `docs/dev-experience/Local-Dev-Auth-Bypass.md` (this file)
-- `docs/dev-experience/Local-Dev-Data-Mirror.md`
-
-Never commit `.dev.vars`, `prod-dump.sql`, or `.wrangler/` — all gitignored.
+**Never commit** `.dev.vars` or `.wrangler/` — both are gitignored. `.dev.vars`
+holds the bypass flag and local secrets; `.wrangler/` holds the local database.
+Only `.dev.vars.example` (no real secrets) is committed.
 
 ---
 
@@ -95,8 +101,9 @@ Authentication is enforced in two layers:
    `/login?redirect=…`.
 
 Public exemptions (`middleware.ts`): `/api/health`, `/api/session`,
-`/api/send-otp`, `/api/verify-otp`, `/api/turnstile-config`, plus the
-token-gated buyer and volunteer registration routes.
+`/api/send-otp`, `/api/verify-otp`, `/api/turnstile-config`, plus the public
+registration routes — buyer (token-gated), volunteer (Turnstile-gated), and
+membership (Turnstile-gated).
 
 The bypass hooks into **both layers** by making `/api/session` return
 `authenticated: true` — the server middleware accepts the fake session and the
@@ -133,6 +140,11 @@ The allow-list (`isDevBypassHost()`) accepts:
 - `c.env.SWA_ADMIN_DOMAIN` (i.e. `admin.singaporewomenassociation.org`) — see
   the host quirk below
 - any `*.workers.dev` host
+
+For Turnstile-only checks (not the full session injection), the lighter
+`isDevBypassActive(env, url)` helper applies the same three guards and returns
+a boolean. It's what the public form handlers and `/api/turnstile-config` use
+to skip the human-verification step in dev — see [What it does](#what-it-does).
 
 ### Where it plugs in
 
@@ -176,15 +188,19 @@ This is safe because the host check is **not** the trust anchor — the
 (e.g. via `cloudflared`) when the flag is on. In production the flag is
 absent, so the allow-list never gets evaluated.
 
-### Files changed
+### Files involved
 
-| File | Change |
+| File | Role |
 |---|---|
-| `src/worker/types.ts` | Added optional `DEV_BYPASS_AUTH?: string` to `Env` (optional so prod type-check stays valid). |
-| `src/worker/api/session.ts` | Added `DEV_BYPASS_HOSTS`, `isDevBypassHost()`, `getDevBypassSession()`; `handleSession` short-circuits when flag set. |
+| `src/worker/types.ts` | Optional `DEV_BYPASS_AUTH?: string` on `Env` (optional so prod type-check stays valid). |
+| `src/worker/api/session.ts` | `DEV_BYPASS_HOSTS`, `isDevBypassHost()`, `getDevBypassSession()` (session injection), and `isDevBypassActive()` (lightweight Turnstile-skip boolean); `handleSession` short-circuits when active. |
 | `src/worker/middleware.ts` | Calls `getDevBypassSession()` after public-path checks; injects session and runs rate limiter if active, otherwise falls through to real auth. |
-| `.dev.vars.example` | New committed template documenting the local vars. |
-| `.dev.vars` | New local file (gitignored), copied from the example. |
+| `src/worker/api/send-otp.ts` | Guards Turnstile siteverify with `isDevBypassActive()`. |
+| `src/worker/api/membership-reg.ts` | Guards Turnstile siteverify with `isDevBypassActive()`. |
+| `src/worker/api/volunteer-reg.ts` | Guards Turnstile siteverify with `isDevBypassActive()`. |
+| `src/worker/index.ts` | `/api/turnstile-config` returns an empty site key when `isDevBypassActive()`. |
+| `.dev.vars.example` | Committed template documenting the local vars (no real secrets). |
+| `.dev.vars` | Local file (gitignored), copied from the example. |
 
 ### Type-check note
 
@@ -214,7 +230,7 @@ uses esbuild) is unaffected and passes.
 **`/api/members` returns 500 but `/api/session` works**
 - Auth bypass is working; the 500 is the D1 binding. The local wrangler D1
   emulator is empty by default. See
-  [Local-Dev-Data-Mirror.md](./Local-Dev-Data-Mirror.md) to populate it.
+  [Local-Dev-Database.md](./Local-Dev-Database.md) to populate it.
 
 **Logout doesn't work — I bounce straight back to the dashboard**
 - Expected while the bypass is on. `handleSession()` consults
