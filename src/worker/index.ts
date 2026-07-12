@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from './types';
 import { authMiddleware } from './middleware';
-import { handleSession, handleLogout } from './api/session';
+import { handleSession, handleLogout, isDevBypassActive } from './api/session';
 import { handleSendOtp } from './api/send-otp';
 import { handleVerifyOtp } from './api/verify-otp';
 import { handleBookings, handleBookingById, handleBookingCancel } from './api/bookings';
@@ -39,6 +39,14 @@ app.get('/api/health', (c) => {
 });
 
 app.get('/api/turnstile-config', (c) => {
+  // In local dev (DEV_BYPASS_AUTH active), return an empty siteKey so the
+  // client never loads the Turnstile widget — the sitekey in wrangler.jsonc
+  // is authorised for production hostnames only and would fail with
+  // Turnstile error 110200 on localhost. Server-side siteverify is also
+  // skipped in dev (see the per-handler guards). Production is unaffected.
+  if (isDevBypassActive(c.env, c.req.url)) {
+    return c.json({ siteKey: '' });
+  }
   const siteKey = c.env.TURNSTILE_SITE_KEY || '';
   return c.json({ siteKey });
 });

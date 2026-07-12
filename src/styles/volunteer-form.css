@@ -384,6 +384,44 @@ body {
   font-weight: 600;
 }
 
+/* Submit-level alert — compact variant of .vf-alert-error that sits flush
+   above the submit bar. Shown alongside the top alert so users on mobile
+   (whose viewport is on the Submit button) see the message without
+   scrolling back up. */
+.vf-submit-alert:empty { display: none; }
+.vf-submit-alert {
+  border-radius: 0.6rem;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.85rem;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+  margin-bottom: 0.5rem;
+  outline: none;
+}
+.vf-submit-alert:focus { box-shadow: 0 0 0 2px var(--swa-4); }
+
+/* Inline Turnstile error — uses .vf-error base; this override adds a bit
+   of breathing room so it doesn't crowd the widget or the submit bar. */
+.vf-turnstile-error.is-open {
+  text-align: center;
+  margin: 0.4rem 0 0.2rem;
+}
+
+/* Submit-button shake — fires briefly when a submit-time error occurs so
+   users on mobile get a strong non-text cue that their tap was blocked. */
+@keyframes vf-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+.vf-btn-primary.is-shake { animation: vf-shake 0.3s ease-in-out; }
+@media (prefers-reduced-motion: reduce) {
+  .vf-btn-primary.is-shake { animation: none; }
+}
+
 /* ---------- Success screen ---------- */
 .vf-success {
   background: #fff;

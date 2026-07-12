@@ -30,6 +30,29 @@ export function isDevBypassHost(host: string, adminDomain?: string): boolean {
   return false;
 }
 
+// Lightweight boolean check for non-auth dev-bypass uses (e.g. skipping
+// Turnstile in local dev). Returns true ONLY when all three guards pass:
+//   1. DEV_BYPASS_AUTH === 'true'  (only ever set in .dev.vars)
+//   2. SESSION_SECRET starts with 'local-dev-'  (prod's real secret never will)
+//   3. Request host is in the dev-bypass allowlist  (localhost / *.workers.dev / SWA_ADMIN_DOMAIN)
+// Takes `env` + `url` rather than the full Hono Context to avoid the Context
+// generic variance issue when called from `app.get` handlers (whose `c`
+// carries app-level Variables the bare `Context<{ Bindings: Env }>` doesn't).
+// No logging here — getDevBypassSession retains the detailed abort diagnostics
+// for the auth path; this helper stays silent so it can be cheaply sprinkled
+// into other handlers (Turnstile, etc.) without noise.
+export function isDevBypassActive(env: Env, url: string): boolean {
+  if (env.DEV_BYPASS_AUTH !== 'true') return false;
+  if (!env.SESSION_SECRET || !env.SESSION_SECRET.startsWith('local-dev-')) return false;
+  let host = '';
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return false;
+  }
+  return isDevBypassHost(host, env.SWA_ADMIN_DOMAIN);
+}
+
 export type DevBypassResult =
   | { kind: 'abort' }
   | { kind: 'session'; data: SessionData }

@@ -86,6 +86,19 @@ import '../../../styles/volunteer-form.css';
     let closed = false;
     let turnstileToken: string | null = null;
     let turnstileWidgetId: string | null = null;
+    // Tracks what's actually happening with the invisible Turnstile widget so
+    // we can give an honest, actionable message instead of "please complete
+    // the security verification" (which is impossible when the widget is
+    // silent and failing for reasons the user can't see or fix).
+    let turnstileState: 'loading' | 'ready' | 'error' | 'expired' | 'unavailable' = 'loading';
+
+    const TURNSTILE_MESSAGES: Record<typeof turnstileState, string> = {
+      loading: 'Just a moment \u2014 the security check is still loading. Please wait a few seconds and try again.',
+      ready: '',
+      error: 'The security check could not be loaded. Please refresh the page and try again.',
+      expired: 'The security check has expired. Please tap Submit again.',
+      unavailable: 'The security check is unavailable. Please refresh the page and try again.',
+    };
 
     async function init() {
       try {
@@ -176,7 +189,7 @@ import '../../../styles/volunteer-form.css';
         '<span class="vf-choice-main">Other</span></label>';
 
       content.innerHTML =
-        '<div id="vf-top-alert"></div>' +
+        '<div id="vf-top-alert" role="alert" aria-live="assertive"></div>' +
 
         '<section class="vf-section vf-intro">' + intro + enquiryBlock() + '</section>' +
 
@@ -239,6 +252,8 @@ import '../../../styles/volunteer-form.css';
         '</fieldset>' +
 
         '<div class="vf-turnstile-wrap" id="turnstile-container"></div>' +
+        '<div class="vf-error vf-turnstile-error" id="err-turnstile" role="alert"></div>' +
+        '<div class="vf-submit-alert" id="vf-submit-alert" role="alert" aria-live="assertive" tabindex="-1"></div>' +
 
         '<div class="vf-submitbar">' +
         '<div class="vf-submit-meta">All fields marked <b>*</b> are required.</div>' +
@@ -322,6 +337,37 @@ import '../../../styles/volunteer-form.css';
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    // Form-level error shown at submit time. Renders the same message to BOTH
+    // the top alert and a compact alert above the Submit button, briefly shakes
+    // the Submit button (strong mobile cue), and scrolls the submit-level
+    // alert into view (centred) — keeping the user near the button they just
+    // tapped instead of jumping away.
+    function showFormError(msg: string) {
+      const html = '<div class="vf-alert vf-alert-error">' + escapeHtml(msg) + '</div>';
+      const top = document.getElementById('vf-top-alert');
+      const sub = document.getElementById('vf-submit-alert');
+      if (top) top.innerHTML = html;
+      if (sub) sub.innerHTML = html;
+      const submit = document.getElementById('vf-submit') as HTMLButtonElement | null;
+      if (submit) {
+        submit.classList.remove('is-shake');
+        // Force reflow so the animation restarts on repeated taps.
+        void submit.offsetWidth;
+        submit.classList.add('is-shake');
+      }
+      if (sub) {
+        sub.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        try { sub.focus({ preventScroll: true }); } catch { /* older browsers */ }
+      }
+    }
+
+    function clearFormAlerts() {
+      const top = document.getElementById('vf-top-alert');
+      const sub = document.getElementById('vf-submit-alert');
+      if (top) top.innerHTML = '';
+      if (sub) sub.innerHTML = '';
+    }
+
     function wireForm() {
       const form = document.getElementById('vf-form') as HTMLFormElement;
 
@@ -362,6 +408,9 @@ import '../../../styles/volunteer-form.css';
         const t = e.target as HTMLElement;
         const name = (t as HTMLInputElement).name;
         if (name && document.getElementById('err-' + name)) setError(name, '');
+        // Any user activity clears the form-level alerts so the red boxes
+        // don't linger after the user has started fixing the issue.
+        clearFormAlerts();
       });
       form.addEventListener('change', (e: Event) => {
         const t = e.target as HTMLInputElement;
@@ -374,6 +423,9 @@ import '../../../styles/volunteer-form.css';
         if (name === 'affiliationChoice') setError('affiliation', '');
         if (name === 'consent') setError('consent', '');
         if (name === 'declaration') setError('declaration', '');
+        // Any user activity clears the form-level alerts so the red boxes
+        // don't linger after the user has started fixing the issue.
+        clearFormAlerts();
       });
 
       form.addEventListener('submit', onSubmit);
@@ -390,19 +442,40 @@ import '../../../styles/volunteer-form.css';
           const data = await res.json();
           siteKey = data.siteKey;
         } catch {
-          topAlert('Security verification could not be loaded. Please refresh.');
+          turnstileState = 'unavailable';
+          const msg = TURNSTILE_MESSAGES.unavailable;
+          setError('turnstile', msg);
           return;
         }
         if (!siteKey || !(window as any).turnstile) {
-          // No Turnstile configured (e.g. local dev): allow submit anyway.
+          // No Turnstile configured (e.g. local dev with the dev bypass): the
+          // server will accept the submission without a token, so allow it.
+          turnstileState = 'unavailable';
           submit.disabled = false;
           return;
         }
         turnstileWidgetId = (window as any).turnstile.render('#' + container.id, {
           sitekey: siteKey,
-          callback: (token: string) => { turnstileToken = token; submit.disabled = false; },
-          'error-callback': () => { topAlert('Security verification failed. Please refresh.'); },
-          'expired-callback': () => { turnstileToken = null; submit.disabled = true; },
+          callback: (token: string) => {
+            turnstileToken = token;
+            turnstileState = 'ready';
+            setError('turnstile', '');
+            submit.disabled = false;
+          },
+          'error-callback': () => {
+            turnstileState = 'error';
+            turnstileToken = null;
+            submit.disabled = true;
+            const msg = TURNSTILE_MESSAGES.error;
+            setError('turnstile', msg);
+          },
+          'expired-callback': () => {
+            turnstileState = 'expired';
+            turnstileToken = null;
+            submit.disabled = true;
+            const msg = TURNSTILE_MESSAGES.expired;
+            setError('turnstile', msg);
+          },
         });
       }
       load();
@@ -460,7 +533,7 @@ import '../../../styles/volunteer-form.css';
         for (const k of Object.keys(errors)) setError(k, errors[k]);
         const firstErr = document.querySelector('.vf-error.is-open');
         if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        topAlert('Please correct the highlighted fields.');
+        showFormError('Please correct the highlighted fields.');
         return null;
       }
 
@@ -487,7 +560,9 @@ import '../../../styles/volunteer-form.css';
 
       const submit = document.getElementById('vf-submit') as HTMLButtonElement;
       if (!turnstileToken) {
-        topAlert('Please complete the security verification.');
+        const msg = TURNSTILE_MESSAGES[turnstileState] || TURNSTILE_MESSAGES.loading;
+        setError('turnstile', msg);
+        showFormError(msg);
         return;
       }
 
@@ -510,21 +585,21 @@ import '../../../styles/volunteer-form.css';
         // Falls through (no early return) so the shared cleanup below re-enables the
         // submit button and resets Turnstile for the retry.
         if (res.status === 503 && data.error_code === 'D1_WRITE_FAILED') {
-          topAlert(data.message || 'We couldn\u2019t save your registration this time. Please click Submit again \u2014 your details are kept.');
+          showFormError(data.message || 'We couldn\u2019t save your registration this time. Please click Submit again \u2014 your details are kept.');
         } else if (data.errors && typeof data.errors === 'object') {
           // server returned known errors object?
           clearAllErrors();
           for (const k of Object.keys(data.errors)) setError(k, data.errors[k]);
           const firstErr = document.querySelector('.vf-error.is-open');
           if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          topAlert(data.message || 'Please correct the highlighted fields.');
+          showFormError(data.message || 'Please correct the highlighted fields.');
         } else if (data.error_code === 'FORM_CLOSED') {
           renderClosed();
         } else {
-          topAlert(data.message || 'Submission failed. Please try again.');
+          showFormError(data.message || 'Submission failed. Please try again.');
         }
       } catch {
-        topAlert('Network error. Please check your connection and try again.');
+        showFormError('Network error. Please check your connection and try again.');
       }
 
       if ((window as any).turnstile && turnstileWidgetId) {

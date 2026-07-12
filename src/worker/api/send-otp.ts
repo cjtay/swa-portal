@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import { buildOtpEmail } from '../lib/email-otp';
 import { signHmac } from '../lib/crypto';
 import { handleApiError } from '../lib/error-handler';
+import { isDevBypassActive } from './session';
 import { OTP_TTL_SECONDS, OTP_RATE_LIMIT_WINDOW_SECONDS, OTP_RATE_LIMIT_MAX_REQUESTS } from '../../constants/portal';
 
 function generateOtp(): string {
@@ -65,21 +66,26 @@ export async function handleSendOtp(c: Context<{ Bindings: Env }>) {
     return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid request body.' }, 400);
   }
 
-  const turnstileToken = typeof body.turnstileToken === 'string' ? body.turnstileToken.trim() : '';
-  if (!turnstileToken) {
-    return c.json({ success: false, error_code: 'TURNSTILE_MISSING', message: 'Security verification required.' }, 400);
-  }
+  // Turnstile (skipped in local dev — see isDevBypassActive in session.ts).
+  // Note: in dev, DEV_BYPASS_AUTH short-circuits login entirely, so this
+  // endpoint is rarely reached locally. The guard keeps the layers consistent.
+  if (!isDevBypassActive(env, c.req.url)) {
+    const turnstileToken = typeof body.turnstileToken === 'string' ? body.turnstileToken.trim() : '';
+    if (!turnstileToken) {
+      return c.json({ success: false, error_code: 'TURNSTILE_MISSING', message: 'Security verification required.' }, 400);
+    }
 
-  if (!env.TURNSTILE_SECRET) {
-    return c.json({ success: false, error_code: 'CONFIG_ERROR', message: 'Server configuration error.' }, 500);
-  }
+    if (!env.TURNSTILE_SECRET) {
+      return c.json({ success: false, error_code: 'CONFIG_ERROR', message: 'Server configuration error.' }, 500);
+    }
 
-  const turnstileValid = await verifyTurnstile(turnstileToken, env.TURNSTILE_SECRET, ip);
-  if (!turnstileValid) {
-    return c.json(
-      { success: false, error_code: 'TURNSTILE_FAILED', message: 'Security verification failed. Please try again.' },
-      403,
-    );
+    const turnstileValid = await verifyTurnstile(turnstileToken, env.TURNSTILE_SECRET, ip);
+    if (!turnstileValid) {
+      return c.json(
+        { success: false, error_code: 'TURNSTILE_FAILED', message: 'Security verification failed. Please try again.' },
+        403,
+      );
+    }
   }
 
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';

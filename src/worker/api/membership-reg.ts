@@ -4,6 +4,7 @@ import { handleApiError } from '../lib/error-handler';
 import { logError } from '../lib/log-error';
 import { buildMembershipNotificationEmail } from '../lib/email-membership-notification';
 import { buildMembershipReference } from '../lib/paynow-qr';
+import { isDevBypassActive } from './session';
 import {
   MEMBERSHIP_NOTIFY_EMAILS,
   SWA_UEN,
@@ -101,20 +102,22 @@ export async function handleMembershipRegister(c: AppContext) {
     return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid request body.' }, 400);
   }
 
-  // 3. Turnstile
-  const turnstileToken = typeof form['turnstileToken'] === 'string' ? form['turnstileToken'].trim() : '';
-  if (!turnstileToken) {
-    return c.json({ success: false, error_code: 'TURNSTILE_MISSING', message: 'Security verification required.' }, 400);
-  }
-  if (!env.TURNSTILE_SECRET) {
-    return c.json({ success: false, error_code: 'CONFIG_ERROR', message: 'Server configuration error.' }, 500);
-  }
-  const turnstileValid = await verifyTurnstile(turnstileToken, env.TURNSTILE_SECRET, ip);
-  if (!turnstileValid) {
-    return c.json(
-      { success: false, error_code: 'TURNSTILE_FAILED', message: 'Security verification failed. Please try again.' },
-      403,
-    );
+  // 3. Turnstile (skipped in local dev — see isDevBypassActive in session.ts)
+  if (!isDevBypassActive(env, c.req.url)) {
+    const turnstileToken = typeof form['turnstileToken'] === 'string' ? form['turnstileToken'].trim() : '';
+    if (!turnstileToken) {
+      return c.json({ success: false, error_code: 'TURNSTILE_MISSING', message: 'Security verification required.' }, 400);
+    }
+    if (!env.TURNSTILE_SECRET) {
+      return c.json({ success: false, error_code: 'CONFIG_ERROR', message: 'Server configuration error.' }, 500);
+    }
+    const turnstileValid = await verifyTurnstile(turnstileToken, env.TURNSTILE_SECRET, ip);
+    if (!turnstileValid) {
+      return c.json(
+        { success: false, error_code: 'TURNSTILE_FAILED', message: 'Security verification failed. Please try again.' },
+        403,
+      );
+    }
   }
 
   // 4. Validate text fields

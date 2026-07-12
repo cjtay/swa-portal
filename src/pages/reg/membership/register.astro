@@ -52,6 +52,19 @@ import '../../../styles/membership-form.css';
     let config: any = null;
     let turnstileToken: string | null = null;
     let turnstileWidgetId: string | null = null;
+    // Tracks what's actually happening with the invisible Turnstile widget so
+    // we can give an honest, actionable message instead of "please complete
+    // the security verification" (which is impossible when the widget is
+    // silent and failing for reasons the user can't see or fix).
+    let turnstileState: 'loading' | 'ready' | 'error' | 'expired' | 'unavailable' = 'loading';
+
+    const TURNSTILE_MESSAGES: Record<typeof turnstileState, string> = {
+      loading: 'Just a moment \u2014 the security check is still loading. Please wait a few seconds and try again.',
+      ready: '',
+      error: 'The security check could not be loaded. Please refresh the page and try again.',
+      expired: 'The security check has expired. Please tap Submit again.',
+      unavailable: 'The security check is unavailable. Please refresh the page and try again.',
+    };
 
     // PayNow QR live state
     let currentName = '';
@@ -330,7 +343,7 @@ import '../../../styles/membership-form.css';
     function renderForm() {
       content.innerHTML = `
         <form id="mf-form" novalidate>
-          <div id="mf-top-alert"></div>
+          <div id="mf-top-alert" role="alert" aria-live="assertive"></div>
 
           <section class="mf-section">
             <span class="mf-section-title">Membership Application</span>
@@ -535,13 +548,15 @@ import '../../../styles/membership-form.css';
             <div class="mf-error" id="err-consent"></div>
           </section>
 
-          <div class="mf-section">
+          <section class="mf-section">
             <div class="mf-turnstile-wrap" id="turnstile-container"></div>
+            <div class="mf-error mf-turnstile-error" id="err-turnstile" role="alert"></div>
+            <div class="mf-submit-alert" id="mf-submit-alert" role="alert" aria-live="assertive" tabindex="-1"></div>
             <div class="mf-submitbar">
               <div class="mf-submit-meta">All fields marked <b>*</b> are required.</div>
               <button type="submit" class="mf-btn mf-btn-primary" id="mf-submit" disabled>Submit Application</button>
             </div>
-          </div>
+          </section>
         </form>
       `;
     }
@@ -658,6 +673,9 @@ import '../../../styles/membership-form.css';
         const t = e.target as HTMLElement;
         const name = (t as HTMLInputElement).name;
         if (name && document.getElementById('err-' + name)) setError(name, '');
+        // Any user activity clears the form-level alerts so the red boxes
+        // don't linger after the user has started fixing the issue.
+        clearFormAlerts();
       });
 
       form.addEventListener('submit', onSubmit);
@@ -720,6 +738,37 @@ import '../../../styles/membership-form.css';
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    // Form-level error shown at submit time. Renders the same message to BOTH
+    // the top alert and a compact alert above the Submit button, briefly shakes
+    // the Submit button (strong mobile cue), and scrolls the submit-level
+    // alert into view (centred) — keeping the user near the button they just
+    // tapped instead of jumping away.
+    function showFormError(msg: string) {
+      const html = '<div class="mf-alert mf-alert-error">' + escapeHtml(msg) + '</div>';
+      const top = document.getElementById('mf-top-alert');
+      const sub = document.getElementById('mf-submit-alert');
+      if (top) top.innerHTML = html;
+      if (sub) sub.innerHTML = html;
+      const submit = document.getElementById('mf-submit') as HTMLButtonElement | null;
+      if (submit) {
+        submit.classList.remove('is-shake');
+        // Force reflow so the animation restarts on repeated taps.
+        void submit.offsetWidth;
+        submit.classList.add('is-shake');
+      }
+      if (sub) {
+        sub.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        try { sub.focus({ preventScroll: true }); } catch { /* older browsers */ }
+      }
+    }
+
+    function clearFormAlerts() {
+      const top = document.getElementById('mf-top-alert');
+      const sub = document.getElementById('mf-submit-alert');
+      if (top) top.innerHTML = '';
+      if (sub) sub.innerHTML = '';
+    }
+
     function escapeHtml(s: string): string {
       return s
         .replace(/&/g, '&amp;')
@@ -776,13 +825,15 @@ import '../../../styles/membership-form.css';
         for (const k of Object.keys(errors)) setError(k, errors[k]);
         const firstErr = document.querySelector('.mf-error.is-open');
         if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        topAlert('Please correct the highlighted fields.');
+        showFormError('Please correct the highlighted fields.');
         return;
       }
 
       const submit = document.getElementById('mf-submit') as HTMLButtonElement;
       if (!turnstileToken) {
-        topAlert('Please complete the security verification.');
+        const msg = TURNSTILE_MESSAGES[turnstileState] || TURNSTILE_MESSAGES.loading;
+        setError('turnstile', msg);
+        showFormError(msg);
         return;
       }
 
@@ -827,18 +878,18 @@ import '../../../styles/membership-form.css';
           return;
         }
         if (res.status === 503 && data.error_code === 'D1_WRITE_FAILED') {
-          topAlert(data.message || 'We couldn\u2019t save your application this time. Please click Submit again.');
+          showFormError(data.message || 'We couldn\u2019t save your application this time. Please click Submit again.');
         } else if (data.errors && typeof data.errors === 'object') {
           clearAllErrors();
           for (const k of Object.keys(data.errors)) setError(k, data.errors[k]);
           const firstErr = document.querySelector('.mf-error.is-open');
           if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          topAlert(data.message || 'Please correct the highlighted fields.');
+          showFormError(data.message || 'Please correct the highlighted fields.');
         } else {
-          topAlert(data.message || 'Submission failed. Please try again.');
+          showFormError(data.message || 'Submission failed. Please try again.');
         }
       } catch {
-        topAlert('Network error. Please check your connection and try again.');
+        showFormError('Network error. Please check your connection and try again.');
       }
 
       if ((window as any).turnstile && turnstileWidgetId) {
@@ -876,18 +927,40 @@ import '../../../styles/membership-form.css';
           const data = await res.json();
           siteKey = data.siteKey;
         } catch {
-          topAlert('Security verification could not be loaded. Please refresh.');
+          turnstileState = 'unavailable';
+          const msg = TURNSTILE_MESSAGES.unavailable;
+          setError('turnstile', msg);
           return;
         }
         if (!siteKey || !(window as any).turnstile) {
+          // No Turnstile configured (e.g. local dev with the dev bypass): the
+          // server will accept the submission without a token, so allow it.
+          turnstileState = 'unavailable';
           submit.disabled = false;
           return;
         }
         turnstileWidgetId = (window as any).turnstile.render('#' + container.id, {
           sitekey: siteKey,
-          callback: (token: string) => { turnstileToken = token; submit.disabled = false; },
-          'error-callback': () => { topAlert('Security verification failed. Please refresh.'); },
-          'expired-callback': () => { turnstileToken = null; submit.disabled = true; },
+          callback: (token: string) => {
+            turnstileToken = token;
+            turnstileState = 'ready';
+            setError('turnstile', '');
+            submit.disabled = false;
+          },
+          'error-callback': () => {
+            turnstileState = 'error';
+            turnstileToken = null;
+            submit.disabled = true;
+            const msg = TURNSTILE_MESSAGES.error;
+            setError('turnstile', msg);
+          },
+          'expired-callback': () => {
+            turnstileState = 'expired';
+            turnstileToken = null;
+            submit.disabled = true;
+            const msg = TURNSTILE_MESSAGES.expired;
+            setError('turnstile', msg);
+          },
         });
       }
       load();
