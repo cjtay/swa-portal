@@ -92,6 +92,9 @@ function isCurrent(item: NavItem): boolean {
   </header>
 
   <div class="mobile-drawer" id="mobile-drawer" hidden>
+    <div class="mobile-user" id="mobile-drawer-user" hidden>
+      <span class="user-name" id="mobile-drawer-user-name"></span>
+    </div>
     <nav aria-label="Mobile">
       {navItems.map((item) => (
         <a href={item.href}
@@ -181,9 +184,16 @@ function isCurrent(item: NavItem): boolean {
     onAuthenticated(data: SessionResponse) {
       const userEl = document.getElementById('topbar-user');
       const nameEl = document.getElementById('topbar-user-name');
+      const drawerUserEl = document.getElementById('mobile-drawer-user');
+      const drawerNameEl = document.getElementById('mobile-drawer-user-name');
+      const displayName = data.name || data.email || '';
       if (userEl && nameEl) {
-        nameEl.textContent = data.name || data.email || '';
+        nameEl.textContent = displayName;
         userEl.hidden = false;
+      }
+      if (drawerUserEl && drawerNameEl) {
+        drawerNameEl.textContent = displayName;
+        drawerUserEl.hidden = false;
       }
       updateNavVisibility(data);
     },

@@ -83,7 +83,7 @@ Secrets: `OTP_SECRET`, `SESSION_SECRET`, `RESEND_API_KEY` (set interactively via
 | `src/worker/lib/rate-limit.ts` | General-purpose authenticated endpoint rate limiting |
 | `src/constants/portal.ts` | `IT_ADMIN_EMAILS`, session config, OTP TTL, rate limit constants |
 | `src/pages/login.astro` | Standalone login (NO AdminLayout — avoids redirect loop) |
-| `src/layouts/AdminLayout.astro` | Sidebar nav with auth gate |
+| `src/layouts/AdminLayout.astro` | Topbar nav with auth gate |
 | `schema.sql` | D1 schema with `can_login`, `slug`, `error_log` |
 | `seed-members.sql` | 19 member seed data (17 board + 2 IT admin) |
 

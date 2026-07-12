@@ -20,20 +20,22 @@ import AdminLayout from '../layouts/AdminLayout.astro';
       </div>
       <button class="btn btn-primary" id="add-member-btn" style="display:none;">Add Member</button>
     </div>
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Role</th>
-          <th>Email</th>
-          <th>Category</th>
-          <th>Namecard</th>
-          <th>Login</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody id="members-list"></tbody>
-    </table>
+    <div style="overflow-x:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Role</th>
+            <th>Email</th>
+            <th>Category</th>
+            <th>Namecard</th>
+            <th>Login</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="members-list"></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- Edit Modal -->

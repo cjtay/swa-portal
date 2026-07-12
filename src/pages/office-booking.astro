@@ -288,7 +288,12 @@ import AdminLayout from '../layouts/AdminLayout.astro';
     const statusVal = statusFilter.value;
     const now = new Date().toISOString();
 
-    let filtered = allBookings.filter((b: any) => b.start_datetime >= now.slice(0, 10) || b.end_datetime >= now);
+    let filtered = allBookings.filter((b: any) => {
+      if (!b.start_datetime) return false;
+      const start = new Date(b.start_datetime);
+      const end = b.end_datetime ? new Date(b.end_datetime) : start;
+      return end >= new Date(now);
+    });
     if (statusVal) {
       filtered = filtered.filter((b: any) => b.status === statusVal);
     }

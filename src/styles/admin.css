@@ -185,6 +185,17 @@ body {
   border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 
+.mobile-drawer .mobile-user {
+  padding: 0.5rem 0.85rem 0.25rem;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 0.4rem;
+}
+.mobile-drawer .mobile-user .user-name {
+  color: rgba(255,255,255,0.9);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
 .mobile-drawer nav {
   display: flex;
   flex-direction: column;
@@ -419,6 +430,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   margin-bottom: 1rem;
 }
 
@@ -723,6 +736,10 @@ body {
   }
   .data-table {
     font-size: 0.75rem;
+  }
+  .calendar-header > div:last-child {
+    width: 100%;
+    justify-content: flex-end;
   }
   .data-table th, .data-table td {
     padding: 0.5rem 0.5rem;
