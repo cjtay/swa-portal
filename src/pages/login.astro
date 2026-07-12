@@ -86,7 +86,14 @@ import '../styles/admin.css';
       return;
     }
 
-    if (!turnstileSiteKey || !(window as any).turnstile) {
+    if (!turnstileSiteKey) {
+      // No Turnstile configured (e.g. local dev with the dev bypass active):
+      // send-otp.ts skips siteverify in dev, so allow proceeding without a token.
+      btnSendOtp.disabled = false;
+      return;
+    }
+
+    if (!(window as any).turnstile) {
       emailError.textContent = 'Security verification unavailable. Please refresh.';
       emailError.style.display = '';
       return;

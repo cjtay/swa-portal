@@ -216,6 +216,15 @@ uses esbuild) is unaffected and passes.
   emulator is empty by default. See
   [Local-Dev-Data-Mirror.md](./Local-Dev-Data-Mirror.md) to populate it.
 
+**Logout doesn't work — I bounce straight back to the dashboard**
+- Expected while the bypass is on. `handleSession()` consults
+  `getDevBypassSession()` *before* the real cookie, so it re-synthesises the
+  fake IT-admin session on every request regardless of whether the
+  `swa_session` cookie was cleared. Clicking "Log out" clears the cookie but
+  the next `/api/session` call authenticates you again. The bypass is
+  intentionally an "always logged in" shim, so logout can't take effect while
+  it's active. To exercise login/logout, disable the bypass (next item).
+
 **Want to test the real auth flow locally**
 - Set `DEV_BYPASS_AUTH=false` (or delete the line) in `.dev.vars`, restart
   `npm run dev:worker`, and the OTP login flow takes over. You'll also need a
