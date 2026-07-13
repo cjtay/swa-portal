@@ -7,10 +7,16 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   <p style="color:var(--text-muted);margin-bottom:2rem;">Public forms and their submissions.</p>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;">
-    <a href="/admin/forms/volunteer" class="card" style="text-decoration:none;color:inherit;display:block;">
-      <h2>Volunteer Registration</h2>
-      <p style="color:var(--text-muted);font-size:0.85rem;">View volunteer registration submissions from the public form.</p>
-    </a>
+    <div class="card">
+      <a href="/admin/forms/volunteer" style="text-decoration:none;color:inherit;display:block;">
+        <h2>Volunteer Registration</h2>
+        <p style="color:var(--text-muted);font-size:0.85rem;">View volunteer registration submissions from the public form.</p>
+      </a>
+      <a href="/reg/volunteer/register" target="_blank" rel="noopener"
+         style="display:inline-block;margin-top:0.75rem;font-size:0.85rem;color:var(--swa-1);text-decoration:none;font-weight:600;">
+        View public form &rarr;
+      </a>
+    </div>
     <div class="card">
       <a href="/admin/forms/membership" style="text-decoration:none;color:inherit;display:block;">
         <h2>Membership Application</h2>
