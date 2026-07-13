@@ -342,30 +342,27 @@ import '../../../styles/membership-form.css';
     }
 
     function renderForm() {
+      // Tier-aware fee values for the eligibility callout. Server returns the
+      // tier-resolved `fee` for the QR; both raw tier values are also exposed
+      // for the eligibility block so the applicant can see the half-year split.
+      const beforeJulyFee = Number(config?.firstYearFeeBeforeJuly ?? 20);
+      const fromJulyFee = Number(config?.firstYearFeeFromJuly ?? 10);
+      const renewalFee = Number(config?.renewalFee ?? 20);
+
       content.innerHTML = `
         <form id="mf-form" novalidate>
           <div id="mf-top-alert" role="alert" aria-live="assertive"></div>
 
           <section class="mf-section">
             <span class="mf-section-title">Membership Application</span>
-            <div class="mf-fee-callout">
-              Membership fee: <strong>S$${config.fee.toFixed(2)}</strong> for the first year.
-              From the second year onwards, the renewal fee is <strong>S$${(config.renewalFee ?? 20).toFixed(2)}</strong>.
+            <div class="mf-fee-callout mf-eligibility-callout">
+              <strong>Eligibility:</strong> This membership is open to <strong>Singapore Citizens and Singapore Permanent Residents</strong> only.
+              <br /><br />
+              <strong>Annual fee:</strong> <strong>S$${beforeJulyFee.toFixed(2)}</strong> if you apply between <strong>January and June</strong>; <strong>S$${fromJulyFee.toFixed(2)}</strong> if you apply between <strong>July and December</strong>. All memberships renew on <strong>31 January</strong> each year at <strong>S$${renewalFee.toFixed(2)}</strong>. You may wish to time your application accordingly.
             </div>
             <p style="font-size:0.88rem;color:#4b5563;margin:0;">
-              Please complete all fields below. Once you have entered your name, a PayNow QR will be generated. Scan it with your bank&rsquo;s PayNow feature to pay the first-year fee, then upload a screenshot of the successful transfer before submitting.
+              Please complete the fields below. Once you have entered your name, a PayNow QR will be generated. Scan it with your bank&rsquo;s PayNow feature to pay the first-year fee, then upload a screenshot of the successful transfer before submitting.
             </p>
-          </section>
-
-          <section class="mf-section">
-            <span class="mf-section-title">Membership Intent</span>
-            <p style="font-size:0.85rem;color:#6b7280;margin:0 0 0.6rem;">I wish to join the Singapore Women&rsquo;s Association to:</p>
-            <div class="mf-choice-list" id="intent-row">
-              <label class="mf-choice"><input type="radio" name="membershipIntent" value="administration" /><span>Take an active part in the administration of the Association</span></label>
-              <label class="mf-choice"><input type="radio" name="membershipIntent" value="services" /><span>Render services to the Association</span></label>
-              <label class="mf-choice"><input type="radio" name="membershipIntent" value="supportive" /><span>Be a supportive member only</span></label>
-            </div>
-            <div class="mf-error" id="err-membershipIntent"></div>
           </section>
 
           <section class="mf-section">
@@ -377,95 +374,23 @@ import '../../../styles/membership-form.css';
                 <div class="mf-error" id="err-fullName"></div>
               </div>
               <div class="mf-field">
-                <label class="mf-label" for="nric">NRIC / FIN (last 4 characters) <span class="mf-req">*</span></label>
-                <input class="mf-input" type="text" id="nric" name="nric" inputmode="text" maxlength="4" placeholder="e.g. 567D" />
-                <span class="mf-hint">Last 3 digits and the final letter, as per your NRIC/FIN.</span>
-                <div class="mf-error" id="err-nric"></div>
-              </div>
-            </div>
-
-            <div class="mf-field">
-              <label class="mf-label" for="addressLine1">Address Line 1 <span class="mf-req">*</span></label>
-              <input class="mf-input" type="text" id="addressLine1" name="addressLine1" autocomplete="address-line1" placeholder="Block / Street / Unit" />
-              <div class="mf-error" id="err-addressLine1"></div>
-            </div>
-            <div class="mf-grid2">
-              <div class="mf-field">
-                <label class="mf-label" for="addressLine2">Address Line 2</label>
-                <input class="mf-input" type="text" id="addressLine2" name="addressLine2" autocomplete="address-line2" placeholder="Building name (optional)" />
-              </div>
-              <div class="mf-field">
-                <label class="mf-label" for="addressPostalCode">Postal Code <span class="mf-req">*</span></label>
-                <input class="mf-input" type="text" id="addressPostalCode" name="addressPostalCode" inputmode="numeric" placeholder="6-digit postal code" autocomplete="postal-code" />
-                <div class="mf-error" id="err-addressPostalCode"></div>
-              </div>
-            </div>
-
-            <div class="mf-grid2">
-              <div class="mf-field">
-                <label class="mf-label" for="phoneHome">Telephone (Home)</label>
-                <input class="mf-input" type="tel" id="phoneHome" name="phoneHome" autocomplete="tel" />
-              </div>
-              <div class="mf-field">
-                <label class="mf-label" for="phoneOffice">Telephone (Office)</label>
-                <input class="mf-input" type="tel" id="phoneOffice" name="phoneOffice" />
-              </div>
-            </div>
-
-            <div class="mf-grid2">
-              <div class="mf-field">
                 <label class="mf-label" for="email">Email Address <span class="mf-req">*</span></label>
                 <input class="mf-input" type="email" id="email" name="email" autocomplete="email" />
                 <div class="mf-error" id="err-email"></div>
               </div>
+            </div>
+
+            <div class="mf-grid2">
               <div class="mf-field">
                 <label class="mf-label" for="handphone">Mobile No. <span class="mf-req">*</span></label>
                 <input class="mf-input" type="tel" id="handphone" name="handphone" autocomplete="tel" placeholder="e.g. 9123 4567" />
                 <div class="mf-error" id="err-handphone"></div>
               </div>
-            </div>
-
-            <div class="mf-grid2">
               <div class="mf-field">
-                <label class="mf-label" for="dateOfBirth">Date of Birth</label>
-                <input class="mf-input" type="date" id="dateOfBirth" name="dateOfBirth" />
+                <label class="mf-label" for="recommendedBy">Recommended By <span class="mf-req">*</span></label>
+                <input class="mf-input" type="text" id="recommendedBy" name="recommendedBy" placeholder="SWA Board Member" />
+                <div class="mf-error" id="err-recommendedBy"></div>
               </div>
-              <div class="mf-field">
-                <label class="mf-label" for="placeOfBirth">Place of Birth</label>
-                <input class="mf-input" type="text" id="placeOfBirth" name="placeOfBirth" />
-              </div>
-            </div>
-
-            <div class="mf-grid2">
-              <div class="mf-field">
-                <label class="mf-label" for="citizenship">Citizenship</label>
-                <input class="mf-input" type="text" id="citizenship" name="citizenship" placeholder="e.g. Singaporean" />
-              </div>
-              <div class="mf-field">
-                <label class="mf-label" for="occupation">Occupation</label>
-                <input class="mf-input" type="text" id="occupation" name="occupation" />
-              </div>
-            </div>
-          </section>
-
-          <section class="mf-section">
-            <span class="mf-section-title">Profile</span>
-            <div class="mf-field">
-              <label class="mf-label" for="hobbies">Hobbies / Special Interests</label>
-              <textarea class="mf-textarea" id="hobbies" name="hobbies"></textarea>
-            </div>
-            <div class="mf-field">
-              <label class="mf-label" for="skillsExperiences">Skills / Experiences</label>
-              <textarea class="mf-textarea" id="skillsExperiences" name="skillsExperiences"></textarea>
-            </div>
-            <div class="mf-field">
-              <label class="mf-label" for="otherAssociations">Member / Position in Other Associations</label>
-              <textarea class="mf-textarea" id="otherAssociations" name="otherAssociations"></textarea>
-            </div>
-            <div class="mf-field">
-              <label class="mf-label" for="recommendedBy">Recommended By <span class="mf-req">*</span></label>
-              <input class="mf-input" type="text" id="recommendedBy" name="recommendedBy" placeholder="Name of an existing SWA member" />
-              <div class="mf-error" id="err-recommendedBy"></div>
             </div>
           </section>
 
@@ -539,14 +464,14 @@ import '../../../styles/membership-form.css';
           </section>
 
           <section class="mf-section">
-            <span class="mf-section-title">Declaration</span>
+            <span class="mf-section-title">PDPA Consent <span class="mf-req">*</span></span>
             <div class="mf-choice-list">
               <label class="mf-choice">
-                <input type="checkbox" name="consent" id="consent" />
-                <span>I confirm that the particulars given above are true and accurate, and I agree to be bound by the Constitution of the Singapore Women&rsquo;s Association.</span>
+                <input type="checkbox" name="pdpaConsent" id="consent" value="true" />
+                <span>I consent to the Singapore Women&rsquo;s Association collecting, using and disclosing the personal data provided in this form for the purpose of processing and administering my membership application, in accordance with the Personal Data Protection Act (PDPA).</span>
               </label>
             </div>
-            <div class="mf-error" id="err-consent"></div>
+            <div class="mf-error" id="err-pdpaConsent"></div>
           </section>
 
           <section class="mf-section">
@@ -565,17 +490,6 @@ import '../../../styles/membership-form.css';
     function wireForm() {
       const form = document.getElementById('mf-form') as HTMLFormElement;
 
-      // NRIC: last 4 chars only (3 digits + final letter), uppercased
-      const nric = document.getElementById('nric') as HTMLInputElement;
-      nric.addEventListener('input', function () {
-        this.value = this.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 4);
-      });
-      // Postal code digits only
-      const postal = document.getElementById('addressPostalCode') as HTMLInputElement;
-      postal.addEventListener('input', function () {
-        this.value = this.value.replace(/[^0-9]/g, '').slice(0, 6);
-      });
-
       // Live QR: regenerate when name changes
       const fullName = document.getElementById('fullName') as HTMLInputElement;
       fullName.addEventListener('input', () => {
@@ -592,15 +506,6 @@ import '../../../styles/membership-form.css';
       // QR download
       const dlBtn = document.getElementById('mf-qr-download');
       if (dlBtn) dlBtn.addEventListener('click', downloadQr);
-
-      // Membership intent clear
-      const intentRow = document.getElementById('intent-row');
-      if (intentRow) {
-        intentRow.addEventListener('change', (e: Event) => {
-          const t = e.target as HTMLInputElement;
-          if (t.name === 'membershipIntent') setError('membershipIntent', '');
-        });
-      }
 
       // PayNow screenshot upload
       const paynowInput = document.getElementById('paynowScreenshot') as HTMLInputElement;
@@ -662,11 +567,11 @@ import '../../../styles/membership-form.css';
         });
       }
 
-      // Consent
+      // PDPA consent
       const consent = document.getElementById('consent') as HTMLInputElement;
       consent.addEventListener('change', () => {
         consentChecked = consent.checked;
-        if (consentChecked) setError('consent', '');
+        if (consentChecked) setError('pdpaConsent', '');
       });
 
       // Live error clearing
@@ -786,17 +691,6 @@ import '../../../styles/membership-form.css';
       if (!fullName) errors.fullName = 'Full name is required.';
       else if (fullName.length < 2) errors.fullName = 'Please enter your full name.';
 
-      const nric = (document.getElementById('nric') as HTMLInputElement).value.trim().toUpperCase();
-      if (!nric) errors.nric = 'NRIC/FIN is required.';
-      else if (!/^\d{3}[A-Z]$/.test(nric)) errors.nric = 'Enter the last 4 characters of your NRIC/FIN (3 digits + final letter, e.g. 567D).';
-
-      const addressLine1 = (document.getElementById('addressLine1') as HTMLInputElement).value.trim();
-      if (!addressLine1) errors.addressLine1 = 'Address is required.';
-
-      const addressPostalCode = (document.getElementById('addressPostalCode') as HTMLInputElement).value.trim();
-      if (!addressPostalCode) errors.addressPostalCode = 'Postal code is required.';
-      else if (!/^\d{6}$/.test(addressPostalCode)) errors.addressPostalCode = 'Enter a 6-digit Singapore postal code.';
-
       const email = (document.getElementById('email') as HTMLInputElement).value.trim();
       if (!email) errors.email = 'Email is required.';
       else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Enter a valid email address.';
@@ -807,13 +701,10 @@ import '../../../styles/membership-form.css';
       const recommendedBy = (document.getElementById('recommendedBy') as HTMLInputElement).value.trim();
       if (!recommendedBy) errors.recommendedBy = 'Please state who recommended you.';
 
-      const intentEl = document.querySelector('input[name="membershipIntent"]:checked') as HTMLInputElement | null;
-      if (!intentEl) errors.membershipIntent = 'Please select your membership intent.';
-
       const sigBlob = getSignatureBlob();
       if (!sigBlob) errors.signature = 'Please draw or upload your signature.';
 
-      if (!consentChecked) errors.consent = 'Please confirm the declaration to continue.';
+      if (!consentChecked) errors.pdpaConsent = 'Please provide your PDPA consent to continue.';
 
       return errors;
     }
@@ -846,24 +737,10 @@ import '../../../styles/membership-form.css';
 
       const fd = new FormData();
       fd.append('fullName', (document.getElementById('fullName') as HTMLInputElement).value.trim());
-      fd.append('nric', (document.getElementById('nric') as HTMLInputElement).value.trim().toUpperCase());
-      fd.append('addressLine1', (document.getElementById('addressLine1') as HTMLInputElement).value.trim());
-      fd.append('addressLine2', (document.getElementById('addressLine2') as HTMLInputElement).value.trim());
-      fd.append('addressPostalCode', (document.getElementById('addressPostalCode') as HTMLInputElement).value.trim());
-      fd.append('phoneHome', (document.getElementById('phoneHome') as HTMLInputElement).value.trim());
-      fd.append('phoneOffice', (document.getElementById('phoneOffice') as HTMLInputElement).value.trim());
       fd.append('email', (document.getElementById('email') as HTMLInputElement).value.trim().toLowerCase());
       fd.append('handphone', (document.getElementById('handphone') as HTMLInputElement).value.trim());
-      fd.append('dateOfBirth', (document.getElementById('dateOfBirth') as HTMLInputElement).value);
-      fd.append('placeOfBirth', (document.getElementById('placeOfBirth') as HTMLInputElement).value);
-      fd.append('citizenship', (document.getElementById('citizenship') as HTMLInputElement).value);
-      fd.append('occupation', (document.getElementById('occupation') as HTMLInputElement).value);
-      fd.append('hobbies', (document.getElementById('hobbies') as HTMLTextAreaElement).value);
-      fd.append('skillsExperiences', (document.getElementById('skillsExperiences') as HTMLTextAreaElement).value);
-      fd.append('otherAssociations', (document.getElementById('otherAssociations') as HTMLTextAreaElement).value);
-      const intentEl = document.querySelector('input[name="membershipIntent"]:checked') as HTMLInputElement;
-      fd.append('membershipIntent', intentEl ? intentEl.value : '');
       fd.append('recommendedBy', (document.getElementById('recommendedBy') as HTMLInputElement).value.trim());
+      fd.append('pdpaConsent', consentChecked ? 'true' : 'false');
       fd.append('signatureMethod', sigMethod);
       fd.append('turnstileToken', turnstileToken || '');
 

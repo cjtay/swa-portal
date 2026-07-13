@@ -148,6 +148,7 @@ CREATE TABLE IF NOT EXISTS membership_applications (
   payment_amount REAL NOT NULL DEFAULT 30,
   submitted_ip TEXT,
   user_agent TEXT,
+  pdpa_consent INTEGER NOT NULL DEFAULT 0, -- 1 = applicant ticked PDPA consent (added by migration 005)
   created_at TEXT DEFAULT (datetime('now'))
 );
 

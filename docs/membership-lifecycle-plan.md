@@ -1,8 +1,8 @@
 # Membership Lifecycle — Implementation Plan
 
-> **Status**: Planning complete. Awaiting Phase 1 build. Phased, additive rollout — no destructive changes to production data.
+> **Status**: Phase 1 pre-work in progress. Membership form simplified + tiered fees wired (Q1–Q6, 2026-07-13). Awaiting Phase 1 build (migration 005, role rename, members UI). Phased, additive rollout — no destructive changes to production data.
 > **Date planned**: 06-07-2026
-> **Last updated**: 13-07-2026 (revised fee schedule, approver allowlist, form simplification per SWA review)
+> **Last updated**: 13-07-2026 (revised fee schedule, approver allowlist, form simplification per SWA review; executed form-cleanup batch Q1–Q6)
 > **Replaces**: The half-built membership feature (commits `5684268`, `2f49cd0`) — 3 confusing tables, only first-year intake wired up, no renewals, no reminders.
 > **Repo**: `swa-portal`
 
@@ -234,13 +234,21 @@ The approve/reject handlers in `src/worker/api/membership-reg.ts` swap their `se
 - [ ] **1F. Record-payment API**
   - [ ] `POST /api/members/:id/payments` → inserts `membership_payments` row, advances `fee_due_date` by 1 year, sets `membership_status='active'`
   - [ ] `GET /api/members/:id/payments` → list payment history
-- [ ] **1G. Simplify approve flow**
+- [ ] **1G. Simplify approve flow** — *constant prep done 2026-07-13; handler wiring deferred until Angela/Roxanne seeded (open question §11)*
+  - [x] `MEMBERSHIP_APPROVER_EMAILS` constant added to `src/constants/portal.ts` (not yet imported anywhere; includes dev-mode note about widening to cjtay@)
   - [ ] On approval: set `fee_due_date` = **next 31 January after approval** (not approval + 12 months), `category='member'`, `membership_status='active'`
   - [ ] Resolve first-year fee by **submission month** (`MONTH(membership_applications.created_at)`): 1–6 → `firstYearFeeBeforeJuly` ($20); 7–12 → `firstYearFeeFromJuly` ($10)
   - [ ] Replace `if (getSessionRole(c) !== 'admin')` gates in `handleMembershipApprove` and `handleMembershipReject` with `MEMBERSHIP_APPROVER_EMAILS.includes(sessionEmail)` — only Angela and Roxanne can transition `pending → approved` or `pending → rejected`
   - [ ] Log the initial PayNow payment in `membership_payments` with the tier-resolved amount
   - [ ] Stop writing to the old `memberships` table
-- [ ] **1H. Simplify public registration form** (see §7)
+- [x] **1H. Simplify public registration form** (see §7) — *form UI + tiered fees wired 2026-07-13; approve-flow tier re-check at approval time still pending (1G)*
+  - [x] Remove address/NRIC/citizenship/place of birth/DOB/occupation/hobbies/skills/associations/telephone/Intent from the public form
+  - [x] Referrer placeholder → "SWA Board Member"
+  - [x] Replace Declaration checkbox with **PDPA consent** (also stored in D1 — migration `005_pdpa_consent.sql`, column `membership_applications.pdpa_consent`)
+  - [x] Add eligibility + tiered-fee callout at top of form
+  - [x] `/api/membership/config` returns tiered fees (`firstYearFeeBeforeJuly`, `firstYearFeeFromJuly`, `renewalFee`); form's QR uses the tier-resolved `fee`
+  - [x] `payment_amount` tier-resolved at **submission time** (server reads current month via `resolveFirstYearFee(new Date().getMonth())`)
+  - [ ] `payment_amount` tier re-check at **approval time** (deferred to 1G — server re-reads `membership_applications.created_at` month)
 - [ ] **1I. Retire old table writes** — confirm no code writes `memberships` / `membership_types` (tables left dormant in DB)
 - [ ] **1J. Verify** — build, typecheck, test locally, smoke-test prod after deploy
 
@@ -329,7 +337,7 @@ The previous "Declaration" checkbox (binding to the constitution) is removed. In
 
 > **PDPA Consent** *(required)*
 >
-> ☐ I consent to the Singapore Women's Association collecting, using and disclosing the personal data provided in this form for the purpose of processing and administering my membership application, in accordance with the SWA Privacy Policy.
+> ☐ I consent to the Singapore Women's Association collecting, using and disclosing the personal data provided in this form for the purpose of processing and administering my membership application, in accordance with the Personal Data Protection Act (PDPA).
 
 Form validation: submission is blocked unless this checkbox is ticked. The existing `consentChecked` state variable and `err-consent` error slot can be reused — only the label text and the surrounding section title change.
 
@@ -385,6 +393,7 @@ This plan never deletes anything. The only non-additive change is the `committee
 | 13-07-2026 | Registration form: "Recommended By" placeholder changed to **"SWA Board Member"** | Per SWA review |
 | 13-07-2026 | Registration form: replace "Declaration" checkbox with a **PDPA consent** checkbox | Per SWA review: standard data-use disclaimer for processing/administering membership |
 | 13-07-2026 | Registration form: add top-of-form instruction block — Singaporean/PR eligibility + fee-tier explanation | Per SWA review: "so they can decide when to apply" |
+| 13-07-2026 | **Form cleanup batch (Q1–Q6) executed**: removed NRIC/address/DOB/citizenship/occupation/hobbies/skills/associations/intent/telephone from the public registration form; replaced Constitution Declaration with PDPA consent (stored in new `pdpa_consent` column via migration 005); referrer placeholder → "SWA Board Member"; added eligibility + tiered-fee callout; added `MEMBERSHIP_APPROVER_EMAILS` constant (not yet wired); extended `/api/membership/config` to return tiered fees; `payment_amount` now tier-resolved at submission by month. Tiered fees hardcoded in `portal.ts` (will migrate to KV in Batch B). | Pre-Phase-1 form hygiene per §7. No destructive schema change; removed fields stay as columns (harmless, reversible). Approver-email wiring and `exco` rename deferred (D1, D2). Tier re-check at approval time deferred to 1G. |
 
 ---
 

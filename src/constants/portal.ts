@@ -36,6 +36,31 @@ export const MEMBERSHIP_NOTIFY_EMAILS = [
   'angela.wong@singaporewomenassociation.org',
 ];
 
+// Restricted set of admins who can approve or reject membership applications.
+// Other admins retain member/booking CRUD but cannot transition
+// membership_applications.status. See docs/membership-lifecycle-plan.md §3.
+//
+// NOTE: this constant is defined here for discovery but is NOT yet wired
+// into handleMembershipApprove/handleMembershipReject — that wiring is
+// deferred until Angela and Roxanne are seeded as members rows with
+// can_login=1 (plan item D1). When the wiring lands, the dev-mode bypass
+// (isDevBypassActive in session.ts) should also widen the allowlist to
+// include cjtay@ so local `npm run dev:worker` testing still works.
+export const MEMBERSHIP_APPROVER_EMAILS = [
+  'angela.wong@singaporewomenassociation.org',
+  'roxanne.zhang@singaporewomenassociation.org',
+] as const;
+
+// First-year membership fee tier (per 2026-07-13 SWA review).
+// Tier resolved by submission month: Jan–Jun → $20; Jul–Dec → $10.
+// Renewal fee is $20 every year, anchored to 31 January.
+// These are the hardcoded defaults; the lifecycle plan (§5) will migrate
+// them to KV `swa:membership:config` so admins can change fees without a
+// redeploy. See docs/membership-lifecycle-plan.md §3, decision 13-07-2026.
+export const MEMBERSHIP_FIRST_YEAR_FEE_BEFORE_JULY = 20;
+export const MEMBERSHIP_FIRST_YEAR_FEE_FROM_JULY = 10;
+export const MEMBERSHIP_RENEWAL_FEE = 20;
+
 // Membership fee schedule lives in D1 (membership_types rows, ids 1 and 2)
 // so admins can change fees without a redeploy. The membership-reg config
 // handler reads them at runtime.

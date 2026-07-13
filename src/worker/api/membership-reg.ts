@@ -12,6 +12,9 @@ import {
   MEMBERSHIP_RATE_LIMIT_WINDOW_SECONDS,
   MEMBERSHIP_RATE_LIMIT_MAX_REQUESTS,
   MEMBERSHIP_MAX_FILE_BYTES,
+  MEMBERSHIP_FIRST_YEAR_FEE_BEFORE_JULY,
+  MEMBERSHIP_FIRST_YEAR_FEE_FROM_JULY,
+  MEMBERSHIP_RENEWAL_FEE,
 } from '../../constants/portal';
 
 type AppContext = Context<{ Bindings: Env }>;
@@ -58,21 +61,46 @@ async function loadMembershipTypes(env: Env): Promise<{ firstYear?: MembershipTy
 /* ----------------------------------------------------
    GET /api/membership/config  (public)
    Returns fee + PayNow merchant info for client QR.
+
+   The first-year fee is tier-resolved by the current month (Jan–Jun → $20,
+   Jul–Dec → $10) per the 2026-07-13 SWA review. Both tier values are also
+   returned individually so the form can render the eligibility callout.
+   The `fee` field stays tier-resolved for back-compat with callers that
+   only read `config.fee` (the form's QR generator, payment amount label).
    ---------------------------------------------------- */
 export async function handleMembershipConfig(c: AppContext) {
   const types = await loadMembershipTypes(c.env);
-  const fee = types.firstYear?.fee_amount ?? 30;
-  const renewalFee = types.renewal?.fee_amount ?? 20;
+  // Renewal fee prefers D1 row 2 if an admin has overridden it; otherwise
+  // falls back to the hardcoded constant.
+  const renewalFee = types.renewal?.fee_amount ?? MEMBERSHIP_RENEWAL_FEE;
   return c.json({
     success: true,
     config: {
-      fee,
+      fee: resolveFirstYearFee(new Date().getMonth()),
+      firstYearFeeBeforeJuly: MEMBERSHIP_FIRST_YEAR_FEE_BEFORE_JULY,
+      firstYearFeeFromJuly: MEMBERSHIP_FIRST_YEAR_FEE_FROM_JULY,
       renewalFee,
       uen: SWA_UEN,
       merchantName: SWA_PAYNOW_MERCHANT_NAME,
       currency: 'SGD',
     },
   });
+}
+
+/**
+ * Tier resolution for the first-year membership fee.
+ * Month is 0-indexed (0=Jan … 11=Dec), matching `Date.prototype.getMonth()`.
+ * Jan–Jun (0–5) → beforeJuly fee; Jul–Dec (6–11) → fromJuly fee.
+ *
+ * Used by both the config endpoint (current month, for the form's PayNow QR)
+ * and the submission handler (submission month, for the stored payment_amount).
+ * The lifecycle plan §3 calls for an approval-time re-check using
+ * `membership_applications.created_at`; that wiring is deferred to Phase 1G.
+ */
+function resolveFirstYearFee(monthZeroIndexed: number): number {
+  return monthZeroIndexed <= 5
+    ? MEMBERSHIP_FIRST_YEAR_FEE_BEFORE_JULY
+    : MEMBERSHIP_FIRST_YEAR_FEE_FROM_JULY;
 }
 
 /* ----------------------------------------------------
@@ -130,10 +158,14 @@ export async function handleMembershipRegister(c: AppContext) {
   }
   const d = v.data;
 
-  // 4b. Look up the first-year fee from D1 (admins can change it without a
-  //     redeploy). Falls back to the schema default if the row is missing.
-  const types = await loadMembershipTypes(env);
-  const firstYearFee = types.firstYear?.fee_amount ?? 30;
+  // 4b. Tier-resolved first-year fee (Jan–Jun → $20; Jul–Dec → $10) per the
+  //     2026-07-13 SWA review. We use the submission month (server's view of
+  //     "now") rather than trusting any client-supplied date — applicants who
+  //     loaded the form in June but submit in July should be charged the
+  //     July tier. The lifecycle plan (§3) calls for a re-check at approval
+  //     time using `membership_applications.created_at`; that's deferred to
+  //     Phase 1G, so for now the submission-time tier is authoritative.
+  const firstYearFee = resolveFirstYearFee(new Date().getMonth());
 
   // 5. Read + validate files
   const paynowFile = form['paynowScreenshot'];
@@ -238,8 +270,8 @@ export async function handleMembershipRegister(c: AppContext) {
         'phone_home, phone_office, email, handphone, date_of_birth, place_of_birth, citizenship, occupation, ' +
         'hobbies, skills_experiences, other_associations, membership_intent, recommended_by, ' +
         'paynow_r2_key, signature_r2_key, signature_method, payment_reference, payment_amount, ' +
-        'submitted_ip, user_agent) ' +
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        'submitted_ip, user_agent, pdpa_consent) ' +
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     )
       .bind(
         'new',
@@ -268,6 +300,7 @@ export async function handleMembershipRegister(c: AppContext) {
         firstYearFee,
         ip,
         userAgent,
+        d.pdpaConsent ? 1 : 0,
       )
       .run();
 
@@ -833,30 +866,17 @@ interface Validated {
   otherAssociations: string;
   membershipIntent: string;
   recommendedBy: string;
+  pdpaConsent: boolean;
 }
 
 function validateSubmission(b: Record<string, unknown>): { data: Validated; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
 
+  // Required fields (per simplified form, plan §7 — only fullName, email,
+  // handphone, recommendedBy, and PDPA consent are collected now).
   const fullName = str(b, 'fullName');
   if (!fullName) errors.fullName = 'Full name is required.';
   else if (fullName.length < 2) errors.fullName = 'Please enter your full name.';
-
-  const nric = str(b, 'nric').toUpperCase();
-  if (!nric) errors.nric = 'NRIC/FIN is required.';
-  else if (!/^\d{3}[A-Z]$/.test(nric)) errors.nric = 'Enter the last 4 characters of your NRIC/FIN (3 digits + final letter, e.g. 567D).';
-
-  const addressLine1 = str(b, 'addressLine1');
-  if (!addressLine1) errors.addressLine1 = 'Address is required.';
-
-  const addressLine2 = str(b, 'addressLine2');
-
-  const addressPostalCode = str(b, 'addressPostalCode');
-  if (!addressPostalCode) errors.addressPostalCode = 'Postal code is required.';
-  else if (!/^\d{6}$/.test(addressPostalCode)) errors.addressPostalCode = 'Enter a 6-digit Singapore postal code.';
-
-  const phoneHome = str(b, 'phoneHome');
-  const phoneOffice = str(b, 'phoneOffice');
 
   const email = str(b, 'email').toLowerCase();
   if (!email) errors.email = 'Email is required.';
@@ -865,22 +885,36 @@ function validateSubmission(b: Record<string, unknown>): { data: Validated; erro
   const handphone = str(b, 'handphone');
   if (!handphone) errors.handphone = 'Mobile number is required.';
 
+  const recommendedBy = str(b, 'recommendedBy');
+  if (!recommendedBy) errors.recommendedBy = 'Please state who recommended you.';
+
+  // PDPA consent — required. The form sends 'true' (string) when the checkbox
+  // is ticked. Empty / missing / 'false' → fail.
+  const pdpaConsent =
+    str(b, 'pdpaConsent') === 'true' ||
+    str(b, 'pdpaConsent') === '1' ||
+    str(b, 'pdpaConsent') === 'on';
+  if (!pdpaConsent) errors.pdpaConsent = 'Please provide your PDPA consent to continue.';
+
+  // Removed-from-form fields are still extracted so the existing INSERT,
+  // notification email, admin drawer, and CSV export all keep working
+  // unchanged. They will be empty strings for new submissions (bound as NULL
+  // by the `|| null` pattern in the INSERT). Historical records that still
+  // have these columns populated continue to display normally.
+  const nric = str(b, 'nric').toUpperCase();
+  const addressLine1 = str(b, 'addressLine1');
+  const addressLine2 = str(b, 'addressLine2');
+  const addressPostalCode = str(b, 'addressPostalCode');
+  const phoneHome = str(b, 'phoneHome');
+  const phoneOffice = str(b, 'phoneOffice');
   const dateOfBirth = str(b, 'dateOfBirth');
   const placeOfBirth = str(b, 'placeOfBirth');
   const citizenship = str(b, 'citizenship');
   const occupation = str(b, 'occupation');
-
   const hobbies = str(b, 'hobbies');
   const skillsExperiences = str(b, 'skillsExperiences');
   const otherAssociations = str(b, 'otherAssociations');
-
   const membershipIntent = str(b, 'membershipIntent');
-  if (!['administration', 'services', 'supportive'].includes(membershipIntent)) {
-    errors.membershipIntent = 'Please select your membership intent.';
-  }
-
-  const recommendedBy = str(b, 'recommendedBy');
-  if (!recommendedBy) errors.recommendedBy = 'Please state who recommended you.';
 
   return {
     data: {
@@ -902,6 +936,7 @@ function validateSubmission(b: Record<string, unknown>): { data: Validated; erro
       otherAssociations,
       membershipIntent,
       recommendedBy,
+      pdpaConsent,
     },
     errors,
   };

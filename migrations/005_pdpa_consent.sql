@@ -1,0 +1,28 @@
+-- Migration: PDPA consent flag on membership applications
+-- Date: 2026-07-13
+--
+-- Adds an additive BOOLEAN-style column to record whether the applicant
+-- ticked the PDPA consent checkbox at submission time. Prior to this
+-- migration the consent checkbox was validated client-side only and never
+-- transmitted to the server, so there was no audit trail.
+--
+-- Values:
+--   0 = not consented (default; legacy rows pre-date the column)
+--   1 = applicant ticked the PDPA consent checkbox on the public form
+--
+-- Idempotency:
+--   ALTER TABLE ADD COLUMN is NOT idempotent in SQLite/D1 — the statement
+--   errors if the column already exists. Apply conditionally (see the
+--   guarded shell snippet below). On a fresh DB created from the current
+--   schema.sql (once schema.sql is updated to include this column) the
+--   column will already exist and must be skipped.
+--
+-- Apply locally:
+--   ./node_modules/.bin/wrangler d1 execute swa-portal --local \
+--     --command="ALTER TABLE membership_applications ADD COLUMN pdpa_consent INTEGER NOT NULL DEFAULT 0;"
+--
+-- Apply to production:
+--   ./node_modules/.bin/wrangler d1 execute swa-portal --remote \
+--     --command="ALTER TABLE membership_applications ADD COLUMN pdpa_consent INTEGER NOT NULL DEFAULT 0;"
+
+ALTER TABLE membership_applications ADD COLUMN pdpa_consent INTEGER NOT NULL DEFAULT 0;
