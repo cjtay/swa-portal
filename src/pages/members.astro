@@ -12,8 +12,9 @@ import AdminLayout from '../layouts/AdminLayout.astro';
         <input type="search" id="search-input" class="form-input" placeholder="Search members..." style="width:240px;" />
         <select id="category-filter" class="form-input" style="width:auto;">
           <option value="">All categories</option>
-          <option value="committee">Committee</option>
+          <option value="exco">Exco</option>
           <option value="member">Member</option>
+          <option value="advisor">Advisor</option>
           <option value="admin">Admin</option>
           <option value="volunteer">Volunteer</option>
         </select>
@@ -28,6 +29,9 @@ import AdminLayout from '../layouts/AdminLayout.astro';
             <th>Role</th>
             <th>Email</th>
             <th>Category</th>
+            <th>Status</th>
+            <th>Fee Due</th>
+            <th>Waived</th>
             <th>Namecard</th>
             <th>Login</th>
             <th>Actions</th>
@@ -56,8 +60,9 @@ import AdminLayout from '../layouts/AdminLayout.astro';
           <div class="form-group">
             <label class="form-label">Category</label>
               <select id="m-category" class="form-input">
-                <option value="committee">Committee</option>
+                <option value="exco">Exco</option>
                 <option value="member">Member</option>
+                <option value="advisor">Advisor</option>
                 <option value="admin">Admin</option>
                 <option value="volunteer">Volunteer</option>
               </select>
@@ -89,11 +94,65 @@ import AdminLayout from '../layouts/AdminLayout.astro';
             Can log in
           </label>
         </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-top:0.75rem;">
+          <div class="form-group">
+            <label class="form-label">Fee Due Date</label>
+            <input type="date" id="m-fee-due-date" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Membership Status</label>
+            <select id="m-membership-status" class="form-input">
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        </div>
+        <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;margin-top:0.5rem;">
+          <input type="checkbox" id="m-fee-waived" style="accent-color:var(--swa-3);" />
+          Fee waived (no payment required)
+        </label>
         <div style="display:flex;gap:0.5rem;margin-top:1.5rem;">
           <button type="submit" class="btn btn-primary">Save</button>
           <button type="button" class="btn btn-secondary" id="cancel-edit">Cancel</button>
         </div>
         <p id="member-form-error" class="form-error" style="display:none;"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Record Payment Modal -->
+  <div id="payment-modal" style="display:none;position:fixed;inset:0;background:rgba(69,10,94,0.4);z-index:50;align-items:center;justify-content:center;">
+    <div class="card" style="width:400px;">
+      <h2>Record Payment</h2>
+      <p id="payment-member-name" style="color:var(--text-muted);margin-bottom:1rem;"></p>
+      <form id="payment-form">
+        <input type="hidden" id="payment-member-id" />
+        <div class="form-group">
+          <label class="form-label">Amount (SGD)</label>
+          <input type="number" id="payment-amount" class="form-input" step="0.01" min="0" value="20" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Method</label>
+          <select id="payment-method" class="form-input">
+            <option value="paynow">PayNow</option>
+            <option value="cash">Cash</option>
+            <option value="cheque">Cheque</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Reference</label>
+          <input type="text" id="payment-reference" class="form-input" placeholder="PayNow ref / receipt no." />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Paid Date</label>
+          <input type="date" id="payment-date" class="form-input" />
+        </div>
+        <div style="display:flex;gap:0.5rem;margin-top:1.5rem;">
+          <button type="submit" class="btn btn-primary">Record</button>
+          <button type="button" class="btn btn-secondary" id="cancel-payment">Cancel</button>
+        </div>
+        <p id="payment-form-error" class="form-error" style="display:none;"></p>
       </form>
     </div>
   </div>
@@ -105,6 +164,11 @@ import AdminLayout from '../layouts/AdminLayout.astro';
   let allMembers: any[] = [];
   let isAdmin = false;
 
+  function isoToSg(iso: string): string {
+    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? `${m[3]}-${m[2]}-${m[1]}` : iso;
+  }
+
   async function loadMembers() {
     try {
       const res = await fetch('/api/members');
@@ -114,7 +178,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
         renderMembers();
       } else if (data.error_code === 'FORBIDDEN') {
         const tbody = document.getElementById('members-list')!;
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--danger);">You do not have permission to view members.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--danger);">You do not have permission to view members.</td></tr>';
       }
     } catch (err) {
       console.error('Failed to load members', err);
@@ -133,14 +197,29 @@ import AdminLayout from '../layouts/AdminLayout.astro';
 
     const tbody = document.getElementById('members-list')!;
     tbody.innerHTML = filtered.map((m: any) => {
+      const feeDue = m.fee_due_date ? isoToSg(m.fee_due_date) : '\u2014';
+      const statusBadge = m.membership_status === 'inactive'
+        ? '<span class="badge badge-cancelled">Inactive</span>'
+        : '<span class="badge badge-approved">Active</span>';
+      const waived = m.fee_waived ? '<span class="badge badge-approved">Yes</span>' : '\u2014';
+      const actions = isAdmin
+        ? `<div style="display:flex;gap:0.4rem;">
+            <button class="btn btn-secondary" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="editMember(${m.id})">Edit</button>
+            ${m.fee_waived ? '' : `<button class="btn btn-secondary" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="recordPayment(${m.id})">Payment</button>`}
+            <button class="btn btn-danger" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="deleteMember(${m.id})">Delete</button>
+          </div>`
+        : '\u2014';
       return `<tr>
         <td>${m.name}</td>
-        <td>${m.role || '—'}</td>
-        <td>${m.email || '—'}</td>
+        <td>${m.role || '\u2014'}</td>
+        <td>${m.email || '\u2014'}</td>
         <td>${m.category}</td>
+        <td>${statusBadge}</td>
+        <td>${feeDue}</td>
+        <td>${waived}</td>
         <td><span class="badge ${m.has_namecard ? 'badge-approved' : 'badge-cancelled'}">${m.has_namecard ? 'Yes' : 'No'}</span></td>
         <td><span class="badge ${m.can_login ? 'badge-approved' : 'badge-cancelled'}">${m.can_login ? 'Yes' : 'No'}</span></td>
-        <td>${isAdmin ? `<div style="display:flex;gap:0.4rem;"><button class="btn btn-secondary" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="editMember(${m.id})">Edit</button><button class="btn btn-danger" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="deleteMember(${m.id})">Delete</button></div>` : '—'}</td>
+        <td>${actions}</td>
       </tr>`;
     }).join('');
   }
@@ -152,13 +231,16 @@ import AdminLayout from '../layouts/AdminLayout.astro';
     (document.getElementById('member-id') as HTMLInputElement).value = String(m.id);
     (document.getElementById('m-name') as HTMLInputElement).value = m.name || '';
     (document.getElementById('m-role') as HTMLInputElement).value = m.role || '';
-    (document.getElementById('m-category') as HTMLSelectElement).value = m.category || 'committee';
+    (document.getElementById('m-category') as HTMLSelectElement).value = m.category || 'exco';
     (document.getElementById('m-email') as HTMLInputElement).value = m.email || '';
     (document.getElementById('m-mobile') as HTMLInputElement).value = m.mobile || '';
     (document.getElementById('m-job-title') as HTMLInputElement).value = m.job_title || '';
     (document.getElementById('m-show-on-website') as HTMLInputElement).checked = !!m.show_on_website;
     (document.getElementById('m-has-namecard') as HTMLInputElement).checked = !!m.has_namecard;
     (document.getElementById('m-can-login') as HTMLInputElement).checked = !!m.can_login;
+    (document.getElementById('m-fee-due-date') as HTMLInputElement).value = m.fee_due_date || '';
+    (document.getElementById('m-membership-status') as HTMLSelectElement).value = m.membership_status || 'active';
+    (document.getElementById('m-fee-waived') as HTMLInputElement).checked = !!m.fee_waived;
     (document.getElementById('modal-title') as HTMLElement).textContent = 'Edit Member';
     (document.getElementById('edit-modal') as HTMLElement).style.display = 'flex';
   };
@@ -177,7 +259,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
     }
 
     const bits: string[] = [];
-    if (deps.memberships) bits.push(`${deps.memberships} membership(s)`);
+    if (deps.payments) bits.push(`${deps.payments} payment(s)`);
     if (deps.bookings) bits.push(`${deps.bookings} booking(s)`);
     if (deps.applications) bits.push(`${deps.applications} application(s)`);
     const summary = bits.length ? `This member has ${bits.join(', ')}. Records are kept but they will be deactivated and cannot log in.` : 'This is reversible by an admin via D1.';
@@ -198,6 +280,14 @@ import AdminLayout from '../layouts/AdminLayout.astro';
 
   document.getElementById('search-input')!.addEventListener('input', renderMembers);
   document.getElementById('category-filter')!.addEventListener('change', renderMembers);
+
+  // When category changes to 'advisor', auto-check fee_waived (per plan §3).
+  document.getElementById('m-category')!.addEventListener('change', (e) => {
+    const cat = (e.target as HTMLSelectElement).value;
+    const waivedEl = document.getElementById('m-fee-waived') as HTMLInputElement;
+    if (cat === 'advisor') waivedEl.checked = true;
+    if (cat === 'admin' || cat === 'volunteer') waivedEl.checked = true;
+  });
   document.getElementById('cancel-edit')!.addEventListener('click', () => {
     (document.getElementById('edit-modal') as HTMLElement).style.display = 'none';
   });
@@ -227,6 +317,9 @@ import AdminLayout from '../layouts/AdminLayout.astro';
       show_on_website: (document.getElementById('m-show-on-website') as HTMLInputElement).checked ? 1 : 0,
       has_namecard: (document.getElementById('m-has-namecard') as HTMLInputElement).checked ? 1 : 0,
       can_login: (document.getElementById('m-can-login') as HTMLInputElement).checked ? 1 : 0,
+      fee_due_date: (document.getElementById('m-fee-due-date') as HTMLInputElement).value || null,
+      membership_status: (document.getElementById('m-membership-status') as HTMLSelectElement).value,
+      fee_waived: (document.getElementById('m-fee-waived') as HTMLInputElement).checked ? 1 : 0,
     };
 
     try {
@@ -243,6 +336,58 @@ import AdminLayout from '../layouts/AdminLayout.astro';
         loadMembers();
       } else {
         errEl.textContent = data.message || 'Save failed.';
+        errEl.style.display = '';
+      }
+    } catch {
+      errEl.textContent = 'Network error.';
+      errEl.style.display = '';
+    }
+  });
+
+  // --- Record Payment ---
+  // @ts-ignore
+  window.recordPayment = (id: number) => {
+    const m = allMembers.find((x: any) => x.id === id);
+    if (!m) return;
+    (document.getElementById('payment-member-id') as HTMLInputElement).value = String(id);
+    (document.getElementById('payment-member-name') as HTMLElement).textContent = `${m.name} (${m.category})`;
+    (document.getElementById('payment-amount') as HTMLInputElement).value = '20';
+    (document.getElementById('payment-method') as HTMLSelectElement).value = 'paynow';
+    (document.getElementById('payment-reference') as HTMLInputElement).value = '';
+    (document.getElementById('payment-date') as HTMLInputElement).value = new Date().toISOString().slice(0, 10);
+    (document.getElementById('payment-form-error') as HTMLElement).style.display = 'none';
+    (document.getElementById('payment-modal') as HTMLElement).style.display = 'flex';
+  };
+
+  document.getElementById('cancel-payment')!.addEventListener('click', () => {
+    (document.getElementById('payment-modal') as HTMLElement).style.display = 'none';
+  });
+
+  document.getElementById('payment-form')!.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('payment-form-error')!;
+    errEl.style.display = 'none';
+    const memberId = (document.getElementById('payment-member-id') as HTMLInputElement).value;
+
+    const payload = {
+      amount: parseFloat((document.getElementById('payment-amount') as HTMLInputElement).value),
+      method: (document.getElementById('payment-method') as HTMLSelectElement).value,
+      reference: (document.getElementById('payment-reference') as HTMLInputElement).value,
+      paid_date: (document.getElementById('payment-date') as HTMLInputElement).value,
+    };
+
+    try {
+      const res = await fetch(`/api/members/${memberId}/payments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.success) {
+        (document.getElementById('payment-modal') as HTMLElement).style.display = 'none';
+        loadMembers();
+      } else {
+        errEl.textContent = data.message || 'Could not record payment.';
         errEl.style.display = '';
       }
     } catch {

@@ -21,7 +21,7 @@ The middleware (`middleware.ts`) only checks `session.role` on every request —
 
 ## Why This Is Critical
 
-1. **Privilege revocation is ineffective** — If an admin is demoted (e.g., `category` changed from `admin` to `committee`, or removed from `IT_ADMIN_EMAILS`), their existing session cookie still grants admin access for the full session lifetime.
+1. **Privilege revocation is ineffective** — If an admin is demoted (e.g., `category` changed from `admin` to `exco`, or removed from `IT_ADMIN_EMAILS`), their existing session cookie still grants admin access for the full session lifetime.
 2. **"Remember me" extends exposure to 30 days** — A demoted IT admin with a remembered session retains full admin privileges for up to a month.
 3. **No server-side re-validation** — The auth middleware trusts the cookie completely; the database is never consulted for role checks.
 

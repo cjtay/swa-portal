@@ -130,7 +130,7 @@ SWA board members and senior committee members. Determined by having `category =
 - Everything in the gala dinner registration system (see table below)
 
 #### Committee Member
-SWA committee members. Determined by having `category = 'committee'` in the member database AND `can_login = 1`. This is the largest group of portal users.
+SWA committee members. Determined by having `category = 'exco'` (or `'advisor'`) in the member database AND `can_login = 1`. This is the largest group of portal users.
 
 **Can do:**
 - Book and cancel their own office bookings
@@ -342,7 +342,7 @@ The member directory (`/members`) is a searchable, filterable table of all SWA m
 | `name` | Full name of the member |
 | `slug` | URL-safe version of the name (e.g., `angela-wong`). Used for public website namecard URLs |
 | `role` | Display role (e.g., "President", "Treasurer") |
-| `category` | Member type: `admin`, `committee`, `member`, or `volunteer`. Determines portal access level |
+| `category` | Member type: `admin`, `exco`, `advisor`, `member`, or `volunteer`. Determines portal access level |
 | `can_login` | `1` means this person can log into the portal. `0` means they cannot. Only admins can toggle this |
 | `reg_role` | Registration sub-role for gala dinner: `reg_admin`, `reg_volunteer`, or blank (no registration access) |
 | `show_on_website` | `1` means this member appears on the public website's namecard directory |
@@ -972,7 +972,7 @@ The buyer form is the only public-facing feature. It uses its own token-based se
 | `photo_url` | TEXT | NULL | R2 path to uploaded photo |
 | `photo_alt` | TEXT | NULL | Alt text for photo |
 | `description` | TEXT | NULL | Bio / description for public website |
-| `category` | TEXT | `'committee'` | `admin`, `committee`, `member`, or `volunteer` |
+| `category` | TEXT | `'exco'` | `admin`, `exco`, `advisor`, `member`, or `volunteer` |
 | `can_login` | INTEGER | `0` | `1` = can log into the portal |
 | `reg_role` | TEXT | NULL | `reg_admin`, `reg_volunteer`, or NULL |
 | `show_on_website` | INTEGER | `1` | `1` = visible on public website namecard directory |

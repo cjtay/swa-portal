@@ -2,7 +2,7 @@
 
 > **Status**: Strategy confirmed 13-07-2026. Ready to execute.
 > **Companion to**: `docs/membership-lifecycle-plan.md` (the implementation plan this strategy validates).
-> **Goal**: Test the membership lifecycle — especially the Phase 2 cron-driven email reminders — without risking production data, and in a way that lets SWA team members (Angela Wong, Roxanne Zhange) participate in UAT without access to the developer's laptop.
+> **Goal**: Test the membership lifecycle — especially the Phase 2 cron-driven email reminders — without risking production data, and in a way that lets SWA team members (Angela Wong, Roxanne Zhang) participate in UAT without access to the developer's laptop.
 
 ---
 
@@ -100,7 +100,7 @@ Coverage matrix (~12 rows) designed so that a single cron run with a chosen `fak
 | 11 | member | active | 0 | fakeToday + 1d | Between Reminder #2 and #3 — no email |
 | 12 | member | inactive | 0 | fakeToday + 30d | Inactive member in Reminder #1 window — still gets it |
 
-Plus real rows for the actual human testers (Angela Wong, Roxanne Zhange, the developer) with their **real** emails so OTP login works. These people are also added to `MEMBERSHIP_APPROVER_EMAILS` in `src/constants/portal.ts` so they can exercise the approve/reject flow in staging.
+Plus real rows for the actual human testers (Angela Wong, Roxanne Zhang, the developer) with their **real** emails so OTP login works. The approve/reject flow is gated by `isMembershipApprover(email)` in `src/constants/portal.ts`, which checks `MEMBERSHIP_APPROVER_EMAILS ∪ IT_ADMIN_EMAILS` — so Angela (in both lists), Roxanne, and the developer (via `IT_ADMIN_EMAILS`) can all exercise the flow in staging.
 
 ## 5. Email safety: recipient override
 
@@ -172,7 +172,7 @@ Verify each step via:
 | Step | Action | Risk to prod |
 |---|---|---|
 | **S0** | Create staging D1 + KV namespaces + R2 bucket. Apply `schema.sql` + migration `005_membership_lifecycle.sql` to staging D1. Run the `committee → exco` rename on staging. | None |
-| **S1** | Seed staging D1 with `seed-members.sql` + new `seed-membership-staging.sql`. Confirm `MEMBERSHIP_APPROVER_EMAILS` includes Angela, Roxanne, and the developer. | None |
+| **S1** | Seed staging D1 with `seed-members.sql` + new `seed-membership-staging.sql`. Confirm `isMembershipApprover()` covers Angela, Roxanne, and the developer (via `MEMBERSHIP_APPROVER_EMAILS ∪ IT_ADMIN_EMAILS`). | None |
 | **S2** | Build Phase 1 features (members page UI, payment endpoints, simplified approve flow). Deploy to staging. Angela/Roxanne do UAT on the members page. **No cron yet.** | None |
 | **S3** | Add `scheduled()` handler + `runReminders(env, today)` pure function. Unit-test the date math with Vitest (no Cloudflare needed). | None |
 | **S4** | Add `env.staging` block with hourly cron. Deploy `--env staging`. Set `fakeToday`, `reminderRecipientOverride`, `membershipRemindersEnabled=true` in staging `SWA_CONFIG`. | None |

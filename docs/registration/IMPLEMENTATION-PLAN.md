@@ -249,7 +249,7 @@ The original GTW registration plan assumed an "existing bookings table" for tabl
 ### Current swa-portal auth (unchanged for existing features)
 
 - Session cookie: `swa_session` with `{ email, name, role, exp }`
-- Role: `admin` (IT_ADMIN_EMAILS or `category='admin'`) or `committee` (`category='committee'` with `can_login=1`)
+- Role: `admin` (IT_ADMIN_EMAILS or `category='admin'`) or `committee` (`category='exco'` with `can_login=1`)
 - Middleware: public paths, IT-admin-only paths, admin-write paths, authenticated paths
 
 ### New: `reg_role` column on members table

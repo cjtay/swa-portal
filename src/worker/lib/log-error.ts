@@ -7,6 +7,7 @@ interface ErrorLogEntry {
   error_message: string;
   http_status: number;
   user_email?: string;
+  request_body?: string;
 }
 
 export async function logError(env: Env, entry: ErrorLogEntry): Promise<void> {
@@ -14,8 +15,8 @@ export async function logError(env: Env, entry: ErrorLogEntry): Promise<void> {
   try {
     await env.DB.prepare(`
       INSERT INTO error_log
-        (logged_at, endpoint, error_type, error_message, http_status, user_email)
-      VALUES (?, ?, ?, ?, ?, ?)
+        (logged_at, endpoint, error_type, error_message, http_status, user_email, request_body)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).bind(
       logged_at,
       entry.endpoint,
@@ -23,6 +24,7 @@ export async function logError(env: Env, entry: ErrorLogEntry): Promise<void> {
       entry.error_message,
       entry.http_status,
       entry.user_email ?? null,
+      entry.request_body ?? null,
     ).run();
   } catch (logErr) {
     console.error('[SWA PORTAL ERROR LOG WRITE FAILED]', logErr);

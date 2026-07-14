@@ -460,7 +460,7 @@ All committee and admin members see the Check-in link. Non-committee/non-admin u
 | `photo_url` | TEXT | — | R2 path |
 | `photo_alt` | TEXT | — | |
 | `description` | TEXT | — | |
-| `category` | TEXT | `'committee'` | `admin`, `committee`, `member`, `volunteer` |
+| `category` | TEXT | `'exco'` | `admin`, `exco`, `advisor`, `member`, `volunteer` |
 | `can_login` | INTEGER | `0` | `1` = can log in |
 | `reg_role` | TEXT | NULL | `reg_admin`, `reg_volunteer`, or NULL |
 | `show_on_website` | INTEGER | `1` | `1` = visible on public site |

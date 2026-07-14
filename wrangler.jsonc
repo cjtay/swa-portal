@@ -34,6 +34,9 @@
       "bucket_name": "swa-portal-uploads"
     }
   ],
+  "limits": {
+    "max_request_body_size": 20971520
+  },
   "workers_dev": true,
   "observability": {
     "enabled": false,

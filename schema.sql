@@ -1,4 +1,6 @@
 -- Members (core data, replaces markdown frontmatter for admin-managed data)
+-- category values: 'admin', 'exco', 'advisor', 'member', 'volunteer'.
+-- (Legacy 'committee' value renamed to 'exco' — see migration 005 + plan §1B.)
 CREATE TABLE IF NOT EXISTS members (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -10,7 +12,7 @@ CREATE TABLE IF NOT EXISTS members (
   photo_url TEXT,
   photo_alt TEXT,
   description TEXT,
-  category TEXT DEFAULT 'committee',
+  category TEXT DEFAULT 'exco',
   can_login INTEGER DEFAULT 0,
   show_on_website INTEGER DEFAULT 1,
   has_namecard INTEGER DEFAULT 0,
@@ -24,6 +26,10 @@ CREATE TABLE IF NOT EXISTS members (
   tiktok TEXT,
   youtube TEXT,
   sort_order INTEGER DEFAULT 0,
+  -- Membership lifecycle fields (migration 005)
+  membership_status TEXT DEFAULT 'active',
+  fee_due_date TEXT,
+  fee_waived INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -74,6 +80,8 @@ CREATE TABLE IF NOT EXISTS memberships (
 );
 
 -- Error Log
+-- request_body added in migration 005 for post-incident forensics
+-- (pattern adopted from gtw2026's gtw_error_log).
 CREATE TABLE IF NOT EXISTS error_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   logged_at TEXT DEFAULT (datetime('now')),
@@ -81,12 +89,29 @@ CREATE TABLE IF NOT EXISTS error_log (
   error_type TEXT NOT NULL,
   error_message TEXT NOT NULL,
   http_status INTEGER,
-  user_email TEXT
+  user_email TEXT,
+  request_body TEXT
+);
+
+-- Membership Payments (append-only log — migration 005)
+-- One row per payment. Replaces the memberships/membership_types tables
+-- as the fee tracking source of truth. Those tables stay dormant in the DB.
+CREATE TABLE IF NOT EXISTS membership_payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id INTEGER NOT NULL REFERENCES members(id),
+  paid_date TEXT NOT NULL,
+  amount REAL NOT NULL,
+  method TEXT DEFAULT 'paynow',
+  reference TEXT,
+  recorded_by TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_members_slug ON members(slug);
 CREATE INDEX IF NOT EXISTS idx_members_email ON members(email);
 CREATE INDEX IF NOT EXISTS idx_members_can_login ON members(can_login);
+CREATE INDEX IF NOT EXISTS idx_mempay_member ON membership_payments(member_id);
+CREATE INDEX IF NOT EXISTS idx_mempay_date ON membership_payments(paid_date);
 
 -- Volunteer Registrations (public form at /reg/volunteer/register)
 -- Generic/reusable: event_key ties rows to a configured event in KV

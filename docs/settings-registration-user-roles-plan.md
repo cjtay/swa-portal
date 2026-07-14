@@ -14,7 +14,7 @@ The settings page (`src/pages/admin/settings.astro`) currently has one card: **R
 
 Data flow: D1 `members.reg_role` → `verify-otp.ts` reads it → session cookie → `middleware.ts` enforces API access → `AdminLayout.astro` controls sidebar nav visibility → `auth-gate.ts` client-side gates.
 
-**Note:** All committee members (`category='committee'` with `can_login=1`) can access check-in features (search, mark arrived, add walk-ins) regardless of their `reg_role` value. `reg_role` only gates registration **admin** features (bookings, exports, magic links).
+**Note:** All exco members (`category='exco'` with `can_login=1`) can access check-in features (search, mark arrived, add walk-ins) regardless of their `reg_role` value. `reg_role` only gates registration **admin** features (bookings, exports, magic links).
 
 ### Current Gap
 

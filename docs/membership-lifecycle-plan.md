@@ -1,8 +1,8 @@
 # Membership Lifecycle — Implementation Plan
 
-> **Status**: Phase 1 pre-work in progress. Membership form simplified + tiered fees wired (Q1–Q6, 2026-07-13). Awaiting Phase 1 build (migration 005, role rename, members UI). Phased, additive rollout — no destructive changes to production data.
+> **Status**: Phase 1 **code complete** (14-07-2026) — build passes, typecheck clean. Migration written but **not yet applied to D1** (local or prod). One-time `committee→exco` data rename pending. Awaiting migration apply + prod deploy. Phased, additive rollout — no destructive changes to production data.
 > **Date planned**: 06-07-2026
-> **Last updated**: 13-07-2026 (revised fee schedule, approver allowlist, form simplification per SWA review; executed form-cleanup batch Q1–Q6)
+> **Last updated**: 14-07-2026 (Phase 1 build executed: migration 005 written, approve-flow rewritten with gtw2026 patterns, members UI + payment API shipped, all docs swept)
 > **Replaces**: The half-built membership feature (commits `5684268`, `2f49cd0`) — 3 confusing tables, only first-year intake wired up, no renewals, no reminders.
 > **Repo**: `swa-portal`
 
@@ -90,7 +90,7 @@ Based on a full audit of the codebase (06-07-2026):
 | First-year fee tier | **$20 if form submitted Jan–Jun; $10 if form submitted Jul–Dec.** Tier resolved from `membership_applications.created_at` (submission date), NOT from approval date or activation date. | Per 13-07-2026 review: "based on date of membership form submission date, not based on date of membership status become active." |
 | Renewal fee | **$20 per year, every year.** | Per 13-07-2026 review. |
 | Application default status | **`pending`** on every form submission (already the DB default on `membership_applications.status`). Stays pending until an approver acts. | Per 13-07-2026 review: "Upon submission of form, default status is Pending." |
-| Approver authority | **Application approve/reject restricted to `MEMBERSHIP_APPROVER_EMAILS`** (hardcoded in `src/constants/portal.ts`, sibling of `IT_ADMIN_EMAILS`). Initial set: `angela.wong@…`, `roxanne.zhange@…`. Other admins retain member/booking CRUD but cannot approve or reject applications. | Per 13-07-2026 review: "Status can only be changed by Angela and Roxanne — configured based on email address by IT admin." |
+| Approver authority | **Application approve/reject restricted to `isMembershipApprover(email)`** — the union of `MEMBERSHIP_APPROVER_EMAILS` (Angela Wong, Roxanne Zhang) **and `IT_ADMIN_EMAILS`** (cjtay, angela.wong, system), all hardcoded in `src/constants/portal.ts`. Other admins retain member/booking CRUD but cannot approve or reject applications. | Per 13-07-2026 review + 14-07-2026 update: "IT admin to be able to approve or reject membership." |
 | Hard-delete authority | **IT admin can delete members at any time** (already implemented as soft-delete in `members.ts:117-147`, admin-gated via middleware). Inactive members are not auto-purged. | Per 13-07-2026 review: "IT admin can delete members anytime." |
 | Auto-inactivation | After the 31-01 deadline + configurable grace window (default 30 days) if unpaid → `inactive`. | Per business rule. |
 | Reactivation | Recording any payment flips `membership_status` from `inactive` → `active` and advances `fee_due_date` to the next 31 January. | Per 13-07-2026 review: "If it is paid anytime later, will change back from inactive to active." |
@@ -120,7 +120,7 @@ The 4 offsets (−1 month / −half month / 0 / +half month) and the inactivatio
 | Today | New plan |
 |---|---|
 | `memberships` table | **Retire (dormant).** Leave the table in place — harmless. Live state moves onto `members`. |
-| `membership_types` table | **Retire (dormant).** Fees move to KV config. |
+| `membership_types` table | **Retire (dormant).** Fees hardcoded in `portal.ts` constants — no KV, no D1 lookup. |
 | `membership_applications` table | **Keep.** Working intake record. Approve flow simplified. |
 | `category='committee'` (17 board rows) | **Rename to `exco`.** One-time data update + login logic update. |
 | Public registration form (~20 fields) | **Simplify** to essentials (see §7). |
@@ -169,35 +169,43 @@ The role derivation currently maps `category='committee'` → login role `commit
 
 ### Config in `SWA_CONFIG` KV (key `swa:membership:config`)
 
+> **Per 14-07-2026 SWA review**: fee amounts are **hardcoded in `src/constants/portal.ts`** — not in KV. The form reads them via `/api/membership/config`. The KV key below stores **only Phase 2 cron tuning** (reminder offsets, anchor date, inactivation window). Phase 1 does not need it.
+
 ```json
 {
-  "firstYearFeeBeforeJuly": 20,
-  "firstYearFeeFromJuly": 10,
-  "renewalFee": 20,
-  "currency": "SGD",
   "reminderOffsetsDays": { "first": -30, "second": -15, "third": 0, "overdue": 15 },
-  "inactiveAfterDays": 30,
+  "inactiveAfterDays": 0,
   "annualAnchorMonth": 1,
   "annualAnchorDay": 31
 }
 ```
 
+> **`inactiveAfterDays: 0`** — per 14-07-2026 SWA review: zero grace. Members flip to `inactive` on 01-February (the day after the 31-January deadline).
+
 > **Tier resolution**: at approval time, the worker inspects `MONTH(membership_applications.created_at)`. Months 1–6 → charge `firstYearFeeBeforeJuly` ($20). Months 7–12 → charge `firstYearFeeFromJuly` ($10). The PayNow QR shown on the public form must render the correct tier based on the **current** month at form load (so the applicant sees the right amount before deciding when to apply).
 
 ### Approver allowlist in `src/constants/portal.ts`
 
-A new exported constant, sibling of `IT_ADMIN_EMAILS`:
+A helper function that checks the union of two hardcoded lists:
 
 ```ts
 export const MEMBERSHIP_APPROVER_EMAILS = [
   'angela.wong@singaporewomenassociation.org',
-  'roxanne.zhange@singaporewomenassociation.org',
+  'roxanne.zhang@singaporewomenassociation.org',
 ] as const;
+
+export function isMembershipApprover(email: string): boolean {
+  const lower = email.toLowerCase();
+  return (
+    (IT_ADMIN_EMAILS as readonly string[]).includes(lower) ||
+    (MEMBERSHIP_APPROVER_EMAILS as readonly string[]).includes(lower)
+  );
+}
 ```
 
-The approve/reject handlers in `src/worker/api/membership-reg.ts` swap their `session.role === 'admin'` check for `MEMBERSHIP_APPROVER_EMAILS.includes(sessionEmail)`.
+The approve/reject handlers in `src/worker/api/membership-reg.ts` swap their `session.role === 'admin'` check for `isMembershipApprover(sessionEmail)`. Per 14-07-2026: IT admins are in the union, so they can also approve/reject.
 
-> **Roxanne's portal access**: to log in at all she also needs a `members` row with `category='committee'` (or `'exco'` after the §1B rename), `can_login=1`, and `deleted_at IS NULL`. Adding her email to `MEMBERSHIP_APPROVER_EMAILS` alone is not sufficient — the D1-based auth in `verify-otp.ts` requires the members row to exist. Seed her as part of Phase 1B alongside the `committee → exco` rename.
+> **Roxanne's portal access**: to log in at all she also needs a `members` row with `category='exco'` (after the §1B rename), `can_login=1`, and `deleted_at IS NULL`. Adding her email to `MEMBERSHIP_APPROVER_EMAILS` alone is not sufficient — the D1-based auth in `verify-otp.ts` requires the members row to exist. Onboarding specific individuals is an operational task outside this plan's scope.
 
 ---
 
@@ -208,51 +216,56 @@ The approve/reject handlers in `src/worker/api/membership-reg.ts` swap their `se
 **Goal**: a correct, simple foundation you can see and touch. Nothing automatic runs.
 
 - [ ] **1A. Migration `005_membership_lifecycle.sql`**
-  - [ ] Write migration (additive columns + payments table — see §5)
+  - [x] Write migration (additive columns + payments table — see §5)
   - [ ] Test on local D1
   - [ ] Back up production D1 (`wrangler d1 export swa-portal --remote --output=backup.sql`)
   - [ ] Show migration to user for explicit approval
   - [ ] Apply to production D1
-- [ ] **1B. Rename `committee` → `exco`**
-  - [ ] Update `verify-otp.ts` login mapping (`exco` → committee login tier)
-  - [ ] Update members page dropdown/filter (committee → exco)
+- [x] **1B. Rename `committee` → `exco`** — *code changes deployed 14-07-2026; data rename still pending*
+  - [x] Update `verify-otp.ts` login mapping (`exco` → committee login tier)
+  - [x] Update members page dropdown/filter (committee → exco)
   - [ ] Run the one-time `UPDATE members SET category='exco' WHERE category='committee'` on prod (after backup + approval)
   - [ ] Verify all 17 board members still log in correctly
-- [ ] **1C. Seed `SWA_CONFIG` KV** with membership config (fees, offsets, anchor date)
+- [ ] **1C. Seed `SWA_CONFIG` KV** with reminder **offsets + anchor date only** (Phase 2 prerequisite). **Fees are hardcoded in `portal.ts` — no KV.**
 - [ ] **1D. Seed existing members' status/fee_due_date/fee_waived**
   - [ ] Board members (`exco`) → `fee_due_date='2027-01-31'` (stored ISO), `membership_status='active'`
   - [ ] Advisors → `fee_waived=1`
   - [ ] Admin/IT accounts → `fee_waived=1`
   - [ ] Existing `category='member'` rows → `fee_due_date` set to the next 31 January (aligned with the all-members anchor)
-  - [ ] **User reviews and adjusts in the UI** (not a blind bulk update)
-- [ ] **1E. Members page UI — membership fields**
-  - [ ] Show `category` (role), `membership_status`, `fee_due_date` (DD-MM-YYYY), `fee_waived` per member
-  - [ ] **Role editable**: dropdown (member / exco / advisor) — changing to advisor auto-sets `fee_waived=1`
-  - [ ] **Fee due date editable**: date picker (DD-MM-YYYY display, ISO storage)
-  - [ ] `fee_waived` toggle
-  - [ ] "Record payment" button → opens small form (amount, method, reference)
-- [ ] **1F. Record-payment API**
-  - [ ] `POST /api/members/:id/payments` → inserts `membership_payments` row, advances `fee_due_date` by 1 year, sets `membership_status='active'`
-  - [ ] `GET /api/members/:id/payments` → list payment history
-- [ ] **1G. Simplify approve flow** — *constant prep done 2026-07-13; handler wiring deferred until Angela/Roxanne seeded (open question §11)*
-  - [x] `MEMBERSHIP_APPROVER_EMAILS` constant added to `src/constants/portal.ts` (not yet imported anywhere; includes dev-mode note about widening to cjtay@)
-  - [ ] On approval: set `fee_due_date` = **next 31 January after approval** (not approval + 12 months), `category='member'`, `membership_status='active'`
-  - [ ] Resolve first-year fee by **submission month** (`MONTH(membership_applications.created_at)`): 1–6 → `firstYearFeeBeforeJuly` ($20); 7–12 → `firstYearFeeFromJuly` ($10)
-  - [ ] Replace `if (getSessionRole(c) !== 'admin')` gates in `handleMembershipApprove` and `handleMembershipReject` with `MEMBERSHIP_APPROVER_EMAILS.includes(sessionEmail)` — only Angela and Roxanne can transition `pending → approved` or `pending → rejected`
-  - [ ] Log the initial PayNow payment in `membership_payments` with the tier-resolved amount
-  - [ ] Stop writing to the old `memberships` table
-- [x] **1H. Simplify public registration form** (see §7) — *form UI + tiered fees wired 2026-07-13; approve-flow tier re-check at approval time still pending (1G)*
+  - [ ] **User reviews and adjusts in the UI** (not a blind bulk update) — *UI is now available (1E shipped)*
+- [x] **1E. Members page UI — membership fields** — *shipped 14-07-2026*
+  - [x] Show `category` (role), `membership_status`, `fee_due_date` (DD-MM-YYYY), `fee_waived` per member
+  - [x] **Role editable**: dropdown (member / exco / advisor) — changing to advisor auto-sets `fee_waived=1`
+  - [x] **Fee due date editable**: date picker (DD-MM-YYYY display, ISO storage)
+  - [x] `fee_waived` toggle
+  - [x] "Record payment" button → opens small form (amount, method, reference)
+- [x] **1F. Record-payment API** — *shipped 14-07-2026*
+  - [x] `POST /api/members/:id/payments` → inserts `membership_payments` row, advances `fee_due_date` to next 31 Jan, sets `membership_status='active'`
+  - [x] `GET /api/members/:id/payments` → list payment history
+- [x] **1G. Simplify approve flow** — *rewritten 14-07-2026*
+  - [x] `MEMBERSHIP_APPROVER_EMAILS` constant added to `src/constants/portal.ts`. Wired into `isMembershipApprover(email)` helper (14-07-2026) which checks `IT_ADMIN_EMAILS ∪ MEMBERSHIP_APPROVER_EMAILS`.
+  - [x] On approval: set `fee_due_date` = **next 31 January after approval** (not approval + 12 months), `category='member'`, `membership_status='active'`
+  - [x] Resolve first-year fee by **submission month** (`MONTH(membership_applications.created_at)`): 1–6 → `firstYearFeeBeforeJuly` ($20); 7–12 → `firstYearFeeFromJuly` ($10)
+  - [x] Replace `if (getSessionRole(c) !== 'admin')` gates in `handleMembershipApprove` and `handleMembershipReject` with `isMembershipApprover(sessionEmail)` — the union of `MEMBERSHIP_APPROVER_EMAILS` and `IT_ADMIN_EMAILS` can transition `pending → approved` or `pending → rejected`
+  - [x] Log the initial PayNow payment in `membership_payments` with the tier-resolved amount
+  - [x] Stop writing to the old `memberships` table
+- [x] **1H. Simplify public registration form** (see §7) — *form UI + tiered fees wired 2026-07-13; server-side hardening (idempotent retry, waitUntil, request_body in error_log) added 14-07-2026*
   - [x] Remove address/NRIC/citizenship/place of birth/DOB/occupation/hobbies/skills/associations/telephone/Intent from the public form
   - [x] Referrer placeholder → "SWA Board Member"
   - [x] Replace Declaration checkbox with **PDPA consent** (also stored in D1 — migration `005_pdpa_consent.sql`, column `membership_applications.pdpa_consent`)
   - [x] Add eligibility + tiered-fee callout at top of form
   - [x] `/api/membership/config` returns tiered fees (`firstYearFeeBeforeJuly`, `firstYearFeeFromJuly`, `renewalFee`); form's QR uses the tier-resolved `fee`
   - [x] `payment_amount` tier-resolved at **submission time** (server reads current month via `resolveFirstYearFee(new Date().getMonth())`)
-  - [ ] `payment_amount` tier re-check at **approval time** (deferred to 1G — server re-reads `membership_applications.created_at` month)
-- [ ] **1I. Retire old table writes** — confirm no code writes `memberships` / `membership_types` (tables left dormant in DB)
-- [ ] **1J. Verify** — build, typecheck, test locally, smoke-test prod after deploy
+  - [x] `payment_amount` tier re-check at **approval time** — server re-reads `membership_applications.created_at` month in `handleMembershipApprove`
+  - [x] Idempotent retry on UNIQUE constraint failure (gtw2026 pattern)
+  - [x] Non-blocking notification email via `c.executionCtx.waitUntil()` (gtw2026 pattern)
+  - [x] `request_body` captured in `error_log` for post-incident forensics
+- [x] **1I. Retire old table writes** — confirmed no code writes `memberships` / `membership_types` (tables left dormant in DB). Verified via grep 14-07-2026.
+- [ ] **1J. Verify** — build ✅, typecheck ✅, test locally, smoke-test prod after deploy
 
 **Phase 1 deliverable**: A clean members list where each person has a clear role (editable), status, and editable fee due date. You can record payments manually. The public form is simpler. The old confusing tables are dormant. **Nothing automatic has run.**
+
+> **14-07-2026 progress**: All Phase 1 code is written and builds clean. Items 1B (code), 1E, 1F, 1G, 1H (incl. server hardening), and 1I are **complete**. Remaining: **1A** (apply migration to D1), **1B** (run data rename on prod), **1C** (Phase 2 KV seed), **1D** (seed members via UI), **1J** (smoke-test). The gtw2026 patterns (atomic DB.batch, idempotent retry, waitUntil for emails, request_body in error_log) were adopted throughout.
 
 ### Phase 2 — Automated email reminders
 
@@ -385,7 +398,12 @@ This plan never deletes anything. The only non-additive change is the `committee
 | 13-07-2026 | All members (existing board + new joins) anchored to **31 January** each year; new-join `fee_due_date` = next 31 Jan after approval | Per SWA review. **Supersedes** the 06-07-2026 "approval + 12 months" decision |
 | 13-07-2026 | Renewal fee locked at **$20/year** | Per SWA review |
 | 13-07-2026 | Application status defaults to `pending` on every form submission (already the DB default) | Per SWA review: "Upon submission of form, default status is Pending" |
-| 13-07-2026 | Approve/reject authority restricted to **`MEMBERSHIP_APPROVER_EMAILS`** (Angela Wong, Roxanne Zhange), hardcoded in `portal.ts` | Per SWA review. Other admins retain member/booking CRUD. **Supersedes** the implicit "any admin can approve" behaviour in current code |
+| 13-07-2026 | Approve/reject authority restricted to **`MEMBERSHIP_APPROVER_EMAILS`** (Angela Wong, Roxanne Zhang), hardcoded in `portal.ts` | Per SWA review. Other admins retain member/booking CRUD. **Supersedes** the implicit "any admin can approve" behaviour in current code. **Updated 14-07-2026**: union expanded to include `IT_ADMIN_EMAILS` — see below. |
+| 14-07-2026 | **IT admins can also approve/reject membership applications** — approver set = `isMembershipApprover(email)` = `MEMBERSHIP_APPROVER_EMAILS ∪ IT_ADMIN_EMAILS` | Per SWA review: "IT admin to be able to approve or reject membership." `isMembershipApprover()` helper added to `portal.ts`. |
+| 14-07-2026 | **Fees hardcoded in `portal.ts` constants — no KV storage** | Per SWA review: "controlled by the registration form." Drops plan item 1C's fee-seeding portion. The legacy `membership_types` D1 table is dormant and no longer read. Reminder offsets (Phase 2) still go in KV. |
+| 14-07-2026 | **Advisor session role = `'committee'`** (same as exco). The only difference: `fee_waived=1` permanently. | Per SWA review: "Advisor role is the same as committee role — the only difference is advisor does not need to pay." No new session tier needed. |
+| 14-07-2026 | **Auto-inactivation: zero grace** — `inactiveAfterDays: 0`. Members flip to `inactive` on 01-February (day after 31-January deadline). | Per SWA review: "Option B - zero grace." |
+| 14-07-2026 | **Phase 1 code build executed**: migration 005 written; `committee→exco` code changes (verify-otp, members.ts, members.astro, 9 docs); approve flow rewritten with gtw2026 patterns (atomic batch, isMembershipApprover gate, tier-resolve by submission month, next-31-Jan fee_due_date, stop writing memberships); members UI shipped (status/fee_due/waived columns, record-payment modal, edit fields); payment API endpoints; server hardening (idempotent retry, waitUntil, request_body in error_log). Build ✅ typecheck ✅. **Not yet applied to D1 or deployed.** | gtw2026 production-tested patterns adopted throughout. 19 files changed. |
 | 13-07-2026 | IT admin may delete members at any time (already implemented) | Per SWA review: "IT admin can delete members anytime" |
 | 13-07-2026 | Recording any payment flips `inactive` → `active` and advances `fee_due_date` to next 31 Jan | Per SWA review: "If it is paid anytime later, will change back from inactive to active" |
 | 13-07-2026 | Reminder cron targets **all non-waived members regardless of active/inactive status** | Per SWA review: "Inactive members will still be sent the same reminders as active members" |
@@ -393,7 +411,7 @@ This plan never deletes anything. The only non-additive change is the `committee
 | 13-07-2026 | Registration form: "Recommended By" placeholder changed to **"SWA Board Member"** | Per SWA review |
 | 13-07-2026 | Registration form: replace "Declaration" checkbox with a **PDPA consent** checkbox | Per SWA review: standard data-use disclaimer for processing/administering membership |
 | 13-07-2026 | Registration form: add top-of-form instruction block — Singaporean/PR eligibility + fee-tier explanation | Per SWA review: "so they can decide when to apply" |
-| 13-07-2026 | **Form cleanup batch (Q1–Q6) executed**: removed NRIC/address/DOB/citizenship/occupation/hobbies/skills/associations/intent/telephone from the public registration form; replaced Constitution Declaration with PDPA consent (stored in new `pdpa_consent` column via migration 005); referrer placeholder → "SWA Board Member"; added eligibility + tiered-fee callout; added `MEMBERSHIP_APPROVER_EMAILS` constant (not yet wired); extended `/api/membership/config` to return tiered fees; `payment_amount` now tier-resolved at submission by month. Tiered fees hardcoded in `portal.ts` (will migrate to KV in Batch B). | Pre-Phase-1 form hygiene per §7. No destructive schema change; removed fields stay as columns (harmless, reversible). Approver-email wiring and `exco` rename deferred (D1, D2). Tier re-check at approval time deferred to 1G. |
+| 13-07-2026 | **Form cleanup batch (Q1–Q6) executed**: removed NRIC/address/DOB/citizenship/occupation/hobbies/skills/associations/intent/telephone from the public registration form; replaced Constitution Declaration with PDPA consent (stored in new `pdpa_consent` column via migration 005); referrer placeholder → "SWA Board Member"; added eligibility + tiered-fee callout; added `MEMBERSHIP_APPROVER_EMAILS` constant (not yet wired); extended `/api/membership/config` to return tiered fees; `payment_amount` now tier-resolved at submission by month. Tiered fees hardcoded in `portal.ts`. | Pre-Phase-1 form hygiene per §7. No destructive schema change; removed fields stay as columns (harmless, reversible). Approver-email wiring and `exco` rename deferred (D1, D2). Tier re-check at approval time deferred to 1G. |
 
 ---
 
@@ -413,12 +431,14 @@ This plan never deletes anything. The only non-additive change is the `committee
 
 - [x] **Default fee due date for existing board members** — **31-01-2027** (confirmed). Extended 13-07-2026: this anchor now applies to **all members**, not just existing board.
 - [x] **Fee cycle basis** — submission date for tier resolution; 31 January each year for the due date (confirmed 13-07-2026).
-- [x] **Approver authority** — Angela Wong + Roxanne Zhange via `MEMBERSHIP_APPROVER_EMAILS` (confirmed 13-07-2026).
+- [x] **Approver authority** — Angela Wong + Roxanne Zhang via `MEMBERSHIP_APPROVER_EMAILS`, **plus IT admins via `IT_ADMIN_EMAILS`** (confirmed 14-07-2026). `isMembershipApprover()` helper checks the union.
 - [x] **Renewal fee** — $20/year (confirmed 13-07-2026).
 - [x] **Form fields** — address, NRIC, citizenship, place of birth, home/office telephone removed; referrer placeholder → "SWA Board Member"; PDPA checkbox replaces Declaration (confirmed 13-07-2026).
 - [ ] **Which current board members are genuinely advisors** (should be `category='advisor'`, `fee_waived=1`)? The seed data has one member with "Advisor" in their `role` text — confirm who is an advisor vs. a paying exco member before the one-time rename.
-- [ ] **Roxanne Zhange onboarding** — confirm her email spelling (`roxanne.zhange@…` per SWA review) and seed her as a `members` row with `category='committee'` (→ `'exco'` after §1B rename), `can_login=1`, so she can actually log in to call the approve/reject endpoints. Adding her email to `MEMBERSHIP_APPROVER_EMAILS` alone is not sufficient.
-- [ ] **Auto-inactivation grace period** — plan defaults to `inactiveAfterDays: 30` (i.e. ~28-02 inactivation). The 13-07-2026 wording "after Jan" was ambiguous; confirm whether zero grace (inactivate on 01-02) or the existing 30-day grace is intended.
+- [x] **Roxanne Zhang's email** — confirmed `roxanne.zhang@singaporewomenassociation.org` (14-07-2026). Onboarding specific individuals (creating their `members` row) is an operational task outside this plan's scope.
+- [x] **Auto-inactivation grace period** — **zero grace** (`inactiveAfterDays: 0`). Members flip to inactive on 01-February (confirmed 14-07-2026).
+- [x] **Advisor session role** — same as committee (`role='committee'`); the only difference is `fee_waived=1` permanently (confirmed 14-07-2026).
+- [x] **Fee storage** — hardcoded in `portal.ts` constants; **no KV** (confirmed 14-07-2026).
 
 ---
 
@@ -427,7 +447,7 @@ This plan never deletes anything. The only non-additive change is the `committee
 | File | Phase | Purpose |
 |---|---|---|
 | `migrations/005_membership_lifecycle.sql` | 1A | Additive columns + payments table |
-| `src/constants/portal.ts` | 1G | New `MEMBERSHIP_APPROVER_EMAILS` constant (Angela Wong, Roxanne Zhange) |
+| `src/constants/portal.ts` | 1G | `MEMBERSHIP_APPROVER_EMAILS` constant + `isMembershipApprover()` helper (Angela Wong, Roxanne Zhang + IT_ADMIN_EMAILS union) |
 | `src/worker/api/verify-otp.ts` | 1B | Map `category='exco'` → committee login tier |
 | `src/worker/api/members.ts` | 1E, 1F | Membership fields + payment endpoints + role editing |
 | `src/worker/api/membership-reg.ts` | 1G | Approve flow: tier-resolved fee by submission month; `fee_due_date` = next 31 Jan; gate approve/reject by `MEMBERSHIP_APPROVER_EMAILS`; update `/api/membership/config` to return `firstYearFeeBeforeJuly` + `firstYearFeeFromJuly` |

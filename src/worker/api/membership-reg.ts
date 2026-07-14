@@ -15,6 +15,7 @@ import {
   MEMBERSHIP_FIRST_YEAR_FEE_BEFORE_JULY,
   MEMBERSHIP_FIRST_YEAR_FEE_FROM_JULY,
   MEMBERSHIP_RENEWAL_FEE,
+  isMembershipApprover,
 } from '../../constants/portal';
 
 type AppContext = Context<{ Bindings: Env }>;
@@ -33,29 +34,20 @@ function getSessionRole(c: AppContext): string {
 
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
 
-/* Membership type ids — fixed by schema.sql so handlers reference them
-   deterministically without a round-trip lookup on every request. */
-const MEMBERSHIP_TYPE_FIRST_YEAR = 1;
-const MEMBERSHIP_TYPE_RENEWAL = 2;
-
-interface MembershipTypeRow {
-  id: number;
-  name: string;
-  fee_amount: number;
-  duration_months: number;
-}
-
-async function loadMembershipTypes(env: Env): Promise<{ firstYear?: MembershipTypeRow; renewal?: MembershipTypeRow }> {
-  try {
-    const res = await env.DB.prepare('SELECT id, name, fee_amount, duration_months FROM membership_types WHERE id IN (1, 2) AND is_active = 1').all();
-    const rows = (res.results || []) as unknown as MembershipTypeRow[];
-    return {
-      firstYear: rows.find((r) => r.id === MEMBERSHIP_TYPE_FIRST_YEAR),
-      renewal: rows.find((r) => r.id === MEMBERSHIP_TYPE_RENEWAL),
-    };
-  } catch {
-    return {};
+/**
+ * Compute the next 31 January (ISO date) from the given date.
+ * If `from` is on or before 31 Jan of its year, returns 31 Jan of that year.
+ * Otherwise returns 31 Jan of the following year.
+ *
+ * Per plan §3: all members' fee_due_date is anchored to 31 January each year.
+ */
+function nextFeeDueDate(from: Date = new Date()): string {
+  const year = from.getFullYear();
+  const thisYearJan31 = new Date(year, 0, 31);
+  if (from <= thisYearJan31) {
+    return `${year}-01-31`;
   }
+  return `${year + 1}-01-31`;
 }
 
 /* ----------------------------------------------------
@@ -67,19 +59,17 @@ async function loadMembershipTypes(env: Env): Promise<{ firstYear?: MembershipTy
    returned individually so the form can render the eligibility callout.
    The `fee` field stays tier-resolved for back-compat with callers that
    only read `config.fee` (the form's QR generator, payment amount label).
+
+   Per 14-07-2026: fees are hardcoded constants — no D1/KV lookup.
    ---------------------------------------------------- */
 export async function handleMembershipConfig(c: AppContext) {
-  const types = await loadMembershipTypes(c.env);
-  // Renewal fee prefers D1 row 2 if an admin has overridden it; otherwise
-  // falls back to the hardcoded constant.
-  const renewalFee = types.renewal?.fee_amount ?? MEMBERSHIP_RENEWAL_FEE;
   return c.json({
     success: true,
     config: {
       fee: resolveFirstYearFee(new Date().getMonth()),
       firstYearFeeBeforeJuly: MEMBERSHIP_FIRST_YEAR_FEE_BEFORE_JULY,
       firstYearFeeFromJuly: MEMBERSHIP_FIRST_YEAR_FEE_FROM_JULY,
-      renewalFee,
+      renewalFee: MEMBERSHIP_RENEWAL_FEE,
       uen: SWA_UEN,
       merchantName: SWA_PAYNOW_MERCHANT_NAME,
       currency: 'SGD',
@@ -304,40 +294,66 @@ export async function handleMembershipRegister(c: AppContext) {
       )
       .run();
 
-    // 9. Email notification (non-blocking)
-    await sendNotification(env, {
-      reference: paymentReference,
-      fullName: d.fullName,
-      nric: d.nric,
-      email: d.email,
-      handphone: d.handphone,
-      phoneHome: d.phoneHome,
-      phoneOffice: d.phoneOffice,
-      addressLine1: d.addressLine1,
-      addressLine2: d.addressLine2,
-      addressPostalCode: d.addressPostalCode,
-      dateOfBirth: d.dateOfBirth,
-      placeOfBirth: d.placeOfBirth,
-      citizenship: d.citizenship,
-      occupation: d.occupation,
-      hobbies: d.hobbies,
-      skillsExperiences: d.skillsExperiences,
-      otherAssociations: d.otherAssociations,
-      membershipIntent: d.membershipIntent,
-      recommendedBy: d.recommendedBy,
-      paymentReference,
-      paymentAmount: firstYearFee,
-      signatureMethod,
-      paynowUploaded: paynowR2Key !== null,
-      submittedAt: new Date().toISOString(),
-      submittedIp: ip,
-      userAgent,
-      adminUrl: `https://${env.SWA_ADMIN_DOMAIN || 'admin.singaporewomenassociation.org'}/admin/forms/membership`,
-    }).catch(() => { /* swallow — already logged inside */ });
+    // 9. Email notification — non-blocking via waitUntil (gtw2026 pattern).
+    //    Never lets an email failure fail the submission.
+    c.executionCtx.waitUntil(
+      sendNotification(env, {
+        reference: paymentReference,
+        fullName: d.fullName,
+        nric: d.nric,
+        email: d.email,
+        handphone: d.handphone,
+        phoneHome: d.phoneHome,
+        phoneOffice: d.phoneOffice,
+        addressLine1: d.addressLine1,
+        addressLine2: d.addressLine2,
+        addressPostalCode: d.addressPostalCode,
+        dateOfBirth: d.dateOfBirth,
+        placeOfBirth: d.placeOfBirth,
+        citizenship: d.citizenship,
+        occupation: d.occupation,
+        hobbies: d.hobbies,
+        skillsExperiences: d.skillsExperiences,
+        otherAssociations: d.otherAssociations,
+        membershipIntent: d.membershipIntent,
+        recommendedBy: d.recommendedBy,
+        paymentReference,
+        paymentAmount: firstYearFee,
+        signatureMethod,
+        paynowUploaded: paynowR2Key !== null,
+        submittedAt: new Date().toISOString(),
+        submittedIp: ip,
+        userAgent,
+        adminUrl: `https://${env.SWA_ADMIN_DOMAIN || 'admin.singaporewomenassociation.org'}/admin/forms/membership`,
+      }).catch(() => { /* swallow — already logged inside */ }),
+    );
 
     return c.json({ success: true, reference: paymentReference });
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
+
+    // Idempotent retry: if the payment_reference already exists (client
+    // timeout + retry), treat as success — the original submission went
+    // through. Pattern adopted from gtw2026 submit-tickets.ts.
+    if (errMsg.includes('UNIQUE constraint failed') && errMsg.includes('payment_reference')) {
+      try {
+        const existing = await env.DB.prepare(
+          'SELECT payment_reference FROM membership_applications WHERE payment_reference = ?',
+        ).bind(paymentReference).first();
+        if (existing) {
+          return c.json({ success: true, reference: paymentReference, is_duplicate: true });
+        }
+      } catch {
+        // Fall through to error handling below
+      }
+    }
+
+    const requestBodySummary = JSON.stringify({
+      reference: paymentReference,
+      fullName: d.fullName,
+      email: d.email,
+      fee: firstYearFee,
+    });
 
     if (isRetryableD1Error(errMsg)) {
       await logError(env, {
@@ -345,6 +361,7 @@ export async function handleMembershipRegister(c: AppContext) {
         error_type: 'D1_WRITE_FAILED',
         error_message: `membership-register: ${errMsg}`,
         http_status: 503,
+        request_body: requestBodySummary,
       });
       return c.json(
         {
@@ -551,20 +568,25 @@ export async function handleMembershipImage(c: AppContext) {
 }
 
 /* ----------------------------------------------------
-   POST /api/admin/forms/membership/:id/approve  (admin only)
-   Approves a pending application:
-     a) creates a members row (category='member', can_login=0)
-     b) creates a one-year memberships row (paid, links back via application_id)
+   POST /api/admin/forms/membership/:id/approve
+   Approves a pending application using the new lifecycle model:
+     a) creates a members row (category='member', membership_status='active',
+        fee_due_date=next 31 January)
+     b) logs the initial payment in membership_payments (tier-resolved by
+        application submission month)
      c) marks the application approved, captures reviewer + member_id
-     d) sends a welcome email to the applicant
+     d) sends a welcome email (non-blocking via waitUntil)
    Idempotent: re-approving a row that already has member_id returns the
    existing member without duplicating it.
+
+   Gate: isMembershipApprover(email) — MEMBERSHIP_APPROVER_EMAILS ∪ IT_ADMIN_EMAILS.
+   Pattern adopted from gtw2026's submit-tickets.ts: atomic DB.batch,
+   non-blocking side-effects, idempotent on retry.
    ---------------------------------------------------- */
 export async function handleMembershipApprove(c: AppContext) {
   const endpoint = 'admin-forms-membership-approve';
-  // ONLINE_FORMS_API allows committee to view, but creating members is admin-only.
-  if (getSessionRole(c) !== 'admin') {
-    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Admin access required to approve applications.' }, 403);
+  if (!isMembershipApprover(getSessionEmail(c))) {
+    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'You do not have authority to approve applications.' }, 403);
   }
   const id = c.req.param('id') || '';
   if (!/^\d+$/.test(id)) {
@@ -596,16 +618,17 @@ export async function handleMembershipApprove(c: AppContext) {
     return c.json({ success: false, error_code: 'CONFLICT', message: 'Application was already rejected.' }, 409);
   }
 
-  // 2. Resolve first-year fee + duration from D1.
-  const types = await loadMembershipTypes(c.env);
-  const fee = types.firstYear?.fee_amount ?? 30;
-  const durationMonths = types.firstYear?.duration_months ?? 12;
+  // 2. Tier-resolve first-year fee by APPLICATION SUBMISSION MONTH.
+  //    Per plan §3: Jan–Jun submission → $20; Jul–Dec submission → $10.
+  //    The payment_amount stored at submission time used the current month;
+  //    this re-check is authoritative (covers the edge case where the form
+  //    was loaded in June but submitted in July).
+  const submittedAt = new Date(String(app.created_at));
+  const fee = resolveFirstYearFee(submittedAt.getMonth());
 
-  const today = new Date();
-  const todayIso = today.toISOString().slice(0, 10);
-  const end = new Date(today);
-  end.setMonth(end.getMonth() + durationMonths);
-  const endIso = end.toISOString().slice(0, 10);
+  // 3. Compute fee_due_date = next 31 January after today (plan §3).
+  const feeDueDate = nextFeeDueDate();
+  const todayIso = new Date().toISOString().slice(0, 10);
 
   const fullName = String(app.full_name || '');
   const email = String(app.email || '').toLowerCase();
@@ -613,58 +636,54 @@ export async function handleMembershipApprove(c: AppContext) {
   const paymentRef = String(app.payment_reference || '');
 
   let memberId: number | undefined;
-  let membershipId: number | undefined;
 
+  // 4. Atomic batch: INSERT member + INSERT payment + UPDATE application.
+  //    All-or-nothing — gtw2026 pattern from submit-tickets.ts.
   try {
-    // a) Insert members row. category='member' is distinct from 'committee'/
-    //    'admin' (the auth tiers), so the new row has no portal access by
-    //    default. show_on_website=0 — admin can list publicly later if desired.
-    const memberRes = await c.env.DB.prepare(
+    const memberStmt = c.env.DB.prepare(
       `INSERT INTO members (name, nric, email, mobile, role, category, can_login, show_on_website,
-                            address_line1, address_line2, address_postal_code)
-       VALUES (?, ?, ?, ?, ?, 'member', 0, 0, ?, ?, ?)`,
-    )
-      .bind(
-        fullName || null,
-        nric || null,
-        email || null,
-        String(app.handphone || app.phone_home || app.phone_office || '') || null,
-        'Member',
-        String(app.address_line1 || '') || null,
-        String(app.address_line2 || '') || null,
-        String(app.address_postal_code || '') || null,
-      )
-      .run();
+                            address_line1, address_line2, address_postal_code,
+                            membership_status, fee_due_date, fee_waived)
+       VALUES (?, ?, ?, ?, ?, 'member', 0, 0, ?, ?, ?, 'active', ?, 0)`,
+    ).bind(
+      fullName || null,
+      nric || null,
+      email || null,
+      String(app.handphone || app.phone_home || app.phone_office || '') || null,
+      'Member',
+      String(app.address_line1 || '') || null,
+      String(app.address_line2 || '') || null,
+      String(app.address_postal_code || '') || null,
+      feeDueDate,
+    );
+
+    // We need the member ID for the payment log + application update, so
+    // the batch runs in two steps: (1) insert member, (2) payment + update.
+    const memberRes = await memberStmt.run();
     memberId = Number(memberRes.meta?.last_row_id);
 
-    // b) Insert memberships row for the first year (paid at intake).
-    const memRes = await c.env.DB.prepare(
-      `INSERT INTO memberships
-        (member_id, membership_type_id, application_id, start_date, end_date,
-         fee_amount, payment_status, payment_method, payment_reference, payment_date)
-       VALUES (?, ?, ?, ?, ?, ?, 'paid', 'paynow', ?, ?)`,
-    )
-      .bind(
+    if (!memberId) {
+      throw new Error('Failed to get member ID from insert');
+    }
+
+    // b + c) Payment log + application status — atomic batch.
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO membership_payments (member_id, paid_date, amount, method, reference, recorded_by)
+         VALUES (?, ?, ?, 'paynow', ?, ?)`,
+      ).bind(
         memberId,
-        MEMBERSHIP_TYPE_FIRST_YEAR,
-        Number(id),
         todayIso,
-        endIso,
         fee,
         paymentRef,
-        todayIso,
-      )
-      .run();
-    membershipId = Number(memRes.meta?.last_row_id);
-
-    // c) Mark application approved.
-    await c.env.DB.prepare(
-      `UPDATE membership_applications
-         SET status = 'approved', member_id = ?, reviewed_by = ?, reviewed_at = datetime('now')
-       WHERE id = ?`,
-    )
-      .bind(memberId, reviewer, Number(id))
-      .run();
+        reviewer,
+      ),
+      c.env.DB.prepare(
+        `UPDATE membership_applications
+           SET status = 'approved', member_id = ?, reviewed_by = ?, reviewed_at = datetime('now')
+         WHERE id = ? AND status = 'pending'`,
+      ).bind(memberId, reviewer, Number(id)),
+    ]);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (isRetryableD1Error(msg)) {
@@ -679,26 +698,32 @@ export async function handleMembershipApprove(c: AppContext) {
     });
   }
 
-  // d) Welcome email to the applicant (non-blocking).
-  await sendWelcomeEmail(c.env, {
-    fullName,
-    email,
-    memberId: String(memberId),
-    endDate: endIso,
-    fee,
-  }).catch(() => { /* swallow — already logged inside */ });
+  // 5. Welcome email — non-blocking via waitUntil (gtw2026 pattern).
+  //    Never lets an email failure fail the approval.
+  c.executionCtx.waitUntil(
+    sendWelcomeEmail(c.env, {
+      fullName,
+      email,
+      memberId: String(memberId),
+      endDate: feeDueDate,
+      fee,
+    }).catch(() => { /* swallow — already logged inside */ }),
+  );
 
-  return c.json({ success: true, member_id: memberId, membership_id: membershipId });
+  return c.json({ success: true, member_id: memberId, fee_due_date: feeDueDate });
 }
 
 /* ----------------------------------------------------
-   POST /api/admin/forms/membership/:id/reject  (admin only)
-   Marks a pending application rejected. Does NOT touch members/memberships.
+   POST /api/admin/forms/membership/:id/reject
+   Marks a pending application rejected. Does NOT touch members/payments.
+   Atomic conditional UPDATE — race-safe (gtw2026 confirm-payment pattern).
+
+   Gate: isMembershipApprover(email) — MEMBERSHIP_APPROVER_EMAILS ∪ IT_ADMIN_EMAILS.
    ---------------------------------------------------- */
 export async function handleMembershipReject(c: AppContext) {
   const endpoint = 'admin-forms-membership-reject';
-  if (getSessionRole(c) !== 'admin') {
-    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Admin access required to reject applications.' }, 403);
+  if (!isMembershipApprover(getSessionEmail(c))) {
+    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'You do not have authority to reject applications.' }, 403);
   }
   const id = c.req.param('id') || '';
   if (!/^\d+$/.test(id)) {
@@ -728,13 +753,22 @@ export async function handleMembershipReject(c: AppContext) {
   }
 
   try {
-    await c.env.DB.prepare(
+    // Atomic conditional UPDATE — only flips pending → rejected.
+    // If rows affected = 0, another approver raced us.
+    const res = await c.env.DB.prepare(
       `UPDATE membership_applications
          SET status = 'rejected', reviewed_by = ?, reviewed_at = datetime('now')
-       WHERE id = ?`,
+       WHERE id = ? AND status = 'pending'`,
     )
       .bind(reviewer, Number(id))
       .run();
+
+    if (res.meta?.changes === 0) {
+      return c.json(
+        { success: false, error_code: 'CONFLICT', message: 'Application is no longer pending. It may have been actioned by another approver.' },
+        409,
+      );
+    }
   } catch (err) {
     return handleApiError(c, endpoint, err, 'Could not reject application.', {
       error_type: 'D1_REJECT',
@@ -1017,6 +1051,13 @@ interface WelcomePayload {
   fee: number;
 }
 
+/** Convert ISO date (YYYY-MM-DD) to Singapore display format (DD-MM-YYYY). */
+function isoToSgDate(iso: string): string {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return iso;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
 function buildWelcomeEmailHtml(d: WelcomePayload): string {
   const esc = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -1029,7 +1070,7 @@ function buildWelcomeEmailHtml(d: WelcomePayload): string {
     '<p>Your membership application has been approved. We are delighted to welcome you as a member of the Singapore Women&rsquo;s Association.</p>' +
     '<p style="background:#faf5ff;border:1px solid #f3d2ff;border-radius:6px;padding:12px;">' +
     '<strong>Member ID:</strong> ' + esc(d.memberId) + '<br />' +
-    '<strong>Membership valid until:</strong> ' + esc(d.endDate) + '<br />' +
+    '<strong>Next fee due date:</strong> ' + esc(isoToSgDate(d.endDate)) + '<br />' +
     '<strong>Annual fee:</strong> $' + d.fee.toFixed(2) +
     '</p>' +
     '<p>From next year, your renewal fee will be $20.00. We will send you a reminder before your membership expires.</p>' +

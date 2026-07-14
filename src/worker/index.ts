@@ -5,7 +5,7 @@ import { handleSession, handleLogout, isDevBypassActive } from './api/session';
 import { handleSendOtp } from './api/send-otp';
 import { handleVerifyOtp } from './api/verify-otp';
 import { handleBookings, handleBookingById, handleBookingCancel } from './api/bookings';
-import { handleMembers, handleMemberById, handleMemberPhoto, handleMemberDependencies } from './api/members';
+import { handleMembers, handleMemberById, handleMemberPhoto, handleMemberDependencies, handleMemberPayments } from './api/members';
 import { handleAdminBookings, handleAdminBookingById } from './api/reg/admin-bookings';
 import { handleAdminGuests, handleAdminGuestById } from './api/reg/admin-guests';
 import { handleAdminExport } from './api/reg/admin-export';
@@ -71,6 +71,8 @@ app.patch('/api/members/:id', handleMemberById);
 app.delete('/api/members/:id', handleMemberById);
 app.post('/api/members/:id/photo', handleMemberPhoto);
 app.get('/api/members/:id/dependencies', handleMemberDependencies);
+app.get('/api/members/:id/payments', handleMemberPayments);
+app.post('/api/members/:id/payments', handleMemberPayments);
 
 // Registration — Admin
 app.get('/api/reg/admin/bookings', handleAdminBookings);

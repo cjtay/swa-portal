@@ -1,6 +1,6 @@
 # SWA Admin Portal (`swa-portal`) — Implementation Plan
 
-> **Status**: Phase 1 mostly complete. Auth, scaffold, office booking (with admin view), member directory, and namecard base UI done. Pagination, sync-website route, and domain setup still needed.
+> **Status**: Phase 1 mostly complete. Phase 2 (Membership Lifecycle) code complete 14-07-2026 — migration written, approve flow rewritten, members UI + payment API shipped. Awaiting D1 migration apply + prod deploy. Auth, scaffold, office booking, member directory, and namecard base UI done. Pagination, sync-website route, and domain setup still needed.
 > **Date planned**: 2026-05-11
 > **Last updated**: 2026-07-06
 > **Repo**: `swa-portal` (separate from `swa2024` and `gtw2026`)
@@ -162,7 +162,7 @@ Ported from GTW and adapted, with additional security hardening:
 |---|---|---|
 | `IT Admin` | Email in `IT_ADMIN_EMAILS` | Everything admin can do + infrastructure features (website sync, etc.) |
 | `admin` | D1 `members.category = 'admin'` with `can_login = 1` | Full CRUD on members, namecards, can cancel any booking |
-| `committee` | D1 `members.category = 'committee'` with `can_login = 1` | Read members/namecards, create/cancel own bookings |
+| `committee` | D1 `members.category = 'exco'` (or `'advisor'`) with `can_login = 1` | Read members/namecards, create/cancel own bookings |
 | `member` | (Phase 2) Self-registration via OTP | View own membership status, pay fees |
 
 See `docs/SWAPortal-Functional-Specs.md` for the full access matrix.
@@ -230,31 +230,34 @@ See `docs/SWAPortal-Functional-Specs.md` for the full access matrix.
 
 ---
 
-## Phase 2: Membership Fees
+## Phase 2: Membership Lifecycle
 
-### 2A. Membership Types
+> **Redesigned 2026-07-14.** The original Phase 2 (membership types CRUD, old fee tracking) has been replaced by the per-member lifecycle model. See `docs/membership-lifecycle-plan.md` for the full spec.
 
-- [ ] Create admin UI for CRUD on membership types
-- [ ] Seed default types (Ordinary, Life, etc.)
+### 2A. Data Model + Manual Tracking ✅ (code complete 14-07-2026)
 
-### 2B. Fee Tracking Dashboard
+- [x] Migration `005_membership_lifecycle.sql` written (per-member fields + `membership_payments` table)
+- [x] `committee → exco` category rename (code changes shipped)
+- [x] Members page UI — membership status / fee_due_date / fee_waived columns + edit
+- [x] Record-payment API (`POST/GET /api/members/:id/payments`)
+- [x] Approve flow rewritten (atomic batch, tier-resolved fees, next-31-Jan, stop writing old tables)
+- [x] Public form hardening (idempotent retry, waitUntil, request_body in error_log)
+- [ ] Apply migration to prod D1 (pending backup + approval)
+- [ ] Run one-time `committee → exco` data rename on prod
+- [ ] Seed existing members' status/fee_due_date/fee_waived via UI
 
-- [ ] Create dashboard overview (total collected, outstanding, overdue)
-- [ ] Create per-member payment view
-- [ ] Create admin payment confirmation flow
-- [ ] Create payment proof upload (R2)
+### 2B. Payment Reminders (Phase 2 of lifecycle plan)
 
-### 2C. Payment Reminders
-
-- [ ] Create Resend email templates (first, follow-up, final)
-- [ ] Create cron handler in worker
+- [ ] Create Resend email templates (reminder #1, #2, #3, overdue, inactive notice)
+- [ ] Add `scheduled()` cron handler to worker
 - [ ] Add `triggers.cron` to wrangler.jsonc
-- [ ] Create reminder logic (query overdue memberships, send emails, update reminder_count)
+- [ ] Create daily reminder job (query non-waived members, match offsets, send emails)
+- [ ] Auto-inactivate overdue members (zero grace — `inactiveAfterDays: 0`)
+- [ ] Admin reminders dashboard (`/admin/membership/reminders`)
 
-### 2D. Member Self-Service
+### 2C. Member Self-Service (future)
 
 - [ ] Create member-facing dashboard
-- [ ] Create payment proof upload page
 - [ ] Create profile edit page (limited fields)
 
 ---
@@ -451,27 +454,28 @@ Use this section to track implementation progress across sessions. Update checkb
   - [ ] Update CSP headers in swa2024 `public/_headers`
   - [ ] Test all subdomains with HTTPS
 
-### Phase 2: Membership Fees
+### Phase 2: Membership Lifecycle (redesigned — see docs/membership-lifecycle-plan.md)
 
-- [ ] **2A. Membership types**
-  - [ ] Create admin UI for CRUD on membership types
-  - [ ] Seed default types (Ordinary, Life, etc.)
+- [x] **2A. Data model + manual tracking** (code complete 14-07-2026)
+  - [x] Migration 005 written (per-member fields + `membership_payments` table)
+  - [x] `committee → exco` code changes (verify-otp, members.ts, members.astro, docs)
+  - [x] Approve flow rewritten (atomic batch, tier-resolved fees, next-31-Jan, isMembershipApprover gate)
+  - [x] Members page UI — status / fee_due / waived columns + edit modal + record-payment
+  - [x] Record-payment API (`POST/GET /api/members/:id/payments`)
+  - [x] Public form server-side hardening (idempotent retry, waitUntil, request_body in error_log)
+  - [ ] Apply migration to prod D1 (pending backup + approval)
+  - [ ] Run one-time `committee → exco` data rename on prod
+  - [ ] Seed existing members' lifecycle fields via UI
 
-- [ ] **2B. Fee tracking dashboard**
-  - [ ] Create dashboard overview (total collected, outstanding, overdue)
-  - [ ] Create per-member payment view
-  - [ ] Create admin payment confirmation flow
-  - [ ] Create payment proof upload (R2)
+- [ ] **2B. Payment reminders** (lifecycle plan Phase 2)
+  - [ ] Create Resend email templates (reminder #1, #2, #3, overdue, inactive notice)
+  - [ ] Add `scheduled()` cron handler to worker + `triggers.cron` to wrangler.jsonc
+  - [ ] Create daily reminder job (query non-waived members, match offsets, send emails)
+  - [ ] Auto-inactivate overdue members (zero grace — `inactiveAfterDays: 0`)
+  - [ ] Admin reminders dashboard
 
-- [ ] **2C. Payment reminders**
-  - [ ] Create Resend email templates (first, follow-up, final)
-  - [ ] Create cron handler in worker
-  - [ ] Add `triggers.cron` to wrangler.jsonc
-  - [ ] Create reminder logic (query overdue memberships, send emails, update reminder_count)
-
-- [ ] **2D. Member self-service**
+- [ ] **2C. Member self-service** (future)
   - [ ] Create member-facing dashboard
-  - [ ] Create payment proof upload page
   - [ ] Create profile edit page (limited fields)
 
 ### Phase 3: CMS + Form Migration

@@ -51,7 +51,7 @@ export async function handleMembers(c: Context<{ Bindings: Env }>) {
       String(body.mobile || '').trim() || null,
       String(body.job_title || '').trim() || null,
       String(body.description || '').trim() || null,
-      String(body.category || 'committee').trim(),
+      String(body.category || 'exco').trim(),
       Number(body.can_login ?? 0),
       Number(body.show_on_website ?? 1),
       Number(body.has_namecard ?? 0),
@@ -92,7 +92,7 @@ export async function handleMemberById(c: AppContext) {
       return c.json({ success: false, message: 'Invalid request body.' }, 400);
     }
 
-    const allowedFields = ['name', 'slug', 'role', 'email', 'mobile', 'job_title', 'description', 'category', 'can_login', 'show_on_website', 'has_namecard', 'address_line1', 'address_line2', 'address_postal_code', 'address_country', 'facebook', 'linkedin', 'instagram', 'tiktok', 'youtube', 'sort_order', 'photo_url', 'photo_alt', 'reg_role'];
+    const allowedFields = ['name', 'slug', 'role', 'email', 'mobile', 'job_title', 'description', 'category', 'can_login', 'show_on_website', 'has_namecard', 'address_line1', 'address_line2', 'address_postal_code', 'address_country', 'facebook', 'linkedin', 'instagram', 'tiktok', 'youtube', 'sort_order', 'photo_url', 'photo_alt', 'reg_role', 'membership_status', 'fee_due_date', 'fee_waived'];
     const updates: string[] = [];
     const values: unknown[] = [];
 
@@ -159,18 +159,100 @@ export async function handleMemberDependencies(c: AppContext) {
 
   const id = c.req.param('id');
 
-  const [memberships, bookings, applications] = await Promise.all([
-    c.env.DB.prepare('SELECT COUNT(*) as n FROM memberships WHERE member_id = ?').bind(id).first<{ n: number }>(),
+  const [payments, bookings, applications] = await Promise.all([
+    c.env.DB.prepare('SELECT COUNT(*) as n FROM membership_payments WHERE member_id = ?').bind(id).first<{ n: number }>(),
     c.env.DB.prepare('SELECT COUNT(*) as n FROM office_bookings WHERE member_id = ?').bind(id).first<{ n: number }>(),
     c.env.DB.prepare('SELECT COUNT(*) as n FROM membership_applications WHERE member_id = ?').bind(id).first<{ n: number }>(),
   ]);
 
   return c.json({
     success: true,
-    memberships: memberships?.n ?? 0,
+    payments: payments?.n ?? 0,
     bookings: bookings?.n ?? 0,
     applications: applications?.n ?? 0,
   });
+}
+
+/**
+ * Compute the next 31 January (ISO date) from the given date.
+ * Per plan §3: all members' fee_due_date anchored to 31 January each year.
+ */
+function nextFeeDueDate(from: Date = new Date()): string {
+  const year = from.getFullYear();
+  const thisYearJan31 = new Date(year, 0, 31);
+  if (from <= thisYearJan31) {
+    return `${year}-01-31`;
+  }
+  return `${year + 1}-01-31`;
+}
+
+/* ----------------------------------------------------
+   GET  /api/members/:id/payments  (admin/committee)
+   POST /api/members/:id/payments  (admin only)
+   ---------------------------------------------------- */
+export async function handleMemberPayments(c: AppContext) {
+  const id = c.req.param('id');
+  const sessionRole = c.get('sessionRole') as string;
+
+  if (c.req.method === 'GET') {
+    try {
+      const res = await c.env.DB.prepare(
+        'SELECT * FROM membership_payments WHERE member_id = ? ORDER BY paid_date DESC, id DESC',
+      ).bind(id).all();
+      return c.json({ success: true, payments: res.results });
+    } catch {
+      return c.json({ success: false, message: 'Could not load payments.' }, 500);
+    }
+  }
+
+  if (c.req.method === 'POST') {
+    if (sessionRole !== 'admin') {
+      return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Admin access required to record payments.' }, 403);
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ success: false, message: 'Invalid request body.' }, 400);
+    }
+
+    const amount = Number(body.amount);
+    const method = String(body.method || 'paynow').trim();
+    const reference = String(body.reference || '').trim() || null;
+    const paidDate = String(body.paid_date || '').trim() || new Date().toISOString().slice(0, 10);
+    const recordedBy = (c.get('sessionEmail') as string) || 'unknown';
+
+    if (!amount || amount <= 0 || isNaN(amount)) {
+      return c.json({ success: false, message: 'A valid amount is required.' }, 400);
+    }
+    if (!['paynow', 'cash', 'cheque', 'other'].includes(method)) {
+      return c.json({ success: false, message: 'Invalid payment method.' }, 400);
+    }
+
+    const feeDueDate = nextFeeDueDate();
+
+    try {
+      // Atomic batch: INSERT payment + UPDATE member fee_due_date/status.
+      // Recording any payment reactivates an inactive member (plan §3).
+      await c.env.DB.batch([
+        c.env.DB.prepare(
+          `INSERT INTO membership_payments (member_id, paid_date, amount, method, reference, recorded_by)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        ).bind(Number(id), paidDate, amount, method, reference, recordedBy),
+        c.env.DB.prepare(
+          `UPDATE members SET fee_due_date = ?, membership_status = 'active', updated_at = datetime('now')
+           WHERE id = ?`,
+        ).bind(feeDueDate, Number(id)),
+      ]);
+    } catch {
+      return c.json({ success: false, message: 'Could not record payment.' }, 500);
+    }
+
+    return c.json({ success: true, fee_due_date: feeDueDate });
+  }
+
+  return c.json({ success: false, message: 'Method not allowed' }, 405);
 }
 
 export async function handleMemberPhoto(c: Context<{ Bindings: Env }>) {
