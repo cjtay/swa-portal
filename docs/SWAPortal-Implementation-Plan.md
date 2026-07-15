@@ -162,7 +162,7 @@ Ported from GTW and adapted, with additional security hardening:
 |---|---|---|
 | `IT Admin` | Email in `IT_ADMIN_EMAILS` | Everything admin can do + infrastructure features (website sync, etc.) |
 | `admin` | D1 `members.category = 'admin'` with `can_login = 1` | Full CRUD on members, namecards, can cancel any booking |
-| `committee` | D1 `members.category = 'exco'` (or `'advisor'`) with `can_login = 1` | Read members/namecards, create/cancel own bookings |
+| `committee` | D1 `members.category = 'committee'` (or `'advisor'`) with `can_login = 1` | Read members/namecards, create/cancel own bookings |
 | `member` | (Phase 2) Self-registration via OTP | View own membership status, pay fees |
 
 See `docs/SWAPortal-Functional-Specs.md` for the full access matrix.
@@ -237,13 +237,13 @@ See `docs/SWAPortal-Functional-Specs.md` for the full access matrix.
 ### 2A. Data Model + Manual Tracking ✅ (code complete 14-07-2026)
 
 - [x] Migration `005_membership_lifecycle.sql` written (per-member fields + `membership_payments` table)
-- [x] `committee → exco` category rename (code changes shipped)
+- [x] `committee` category retained (the `committee → exco` rename was **dropped 15-07-2026** — code reverted to use `committee`)
 - [x] Members page UI — membership status / fee_due_date / fee_waived columns + edit
 - [x] Record-payment API (`POST/GET /api/members/:id/payments`)
 - [x] Approve flow rewritten (atomic batch, tier-resolved fees, next-31-Jan, stop writing old tables)
 - [x] Public form hardening (idempotent retry, waitUntil, request_body in error_log)
 - [ ] Apply migration to prod D1 (pending backup + approval)
-- [ ] Run one-time `committee → exco` data rename on prod
+- [ ] ~~Run one-time `committee → exco` data rename on prod~~ *(Not required — rename dropped 15-07-2026)*
 - [ ] Seed existing members' status/fee_due_date/fee_waived via UI
 
 ### 2B. Payment Reminders (Phase 2 of lifecycle plan)
@@ -458,13 +458,13 @@ Use this section to track implementation progress across sessions. Update checkb
 
 - [x] **2A. Data model + manual tracking** (code complete 14-07-2026)
   - [x] Migration 005 written (per-member fields + `membership_payments` table)
-  - [x] `committee → exco` code changes (verify-otp, members.ts, members.astro, docs)
+  - [x] `committee` retained (exco rename dropped 15-07-2026; verify-otp, members.ts, members.astro reverted to `committee`)
   - [x] Approve flow rewritten (atomic batch, tier-resolved fees, next-31-Jan, isMembershipApprover gate)
   - [x] Members page UI — status / fee_due / waived columns + edit modal + record-payment
   - [x] Record-payment API (`POST/GET /api/members/:id/payments`)
   - [x] Public form server-side hardening (idempotent retry, waitUntil, request_body in error_log)
   - [ ] Apply migration to prod D1 (pending backup + approval)
-  - [ ] Run one-time `committee → exco` data rename on prod
+  - [ ] ~~Run one-time `committee → exco` data rename on prod~~ *(Not required — rename dropped 15-07-2026)*
   - [ ] Seed existing members' lifecycle fields via UI
 
 - [ ] **2B. Payment reminders** (lifecycle plan Phase 2)

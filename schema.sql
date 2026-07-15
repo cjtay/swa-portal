@@ -1,6 +1,6 @@
 -- Members (core data, replaces markdown frontmatter for admin-managed data)
--- category values: 'admin', 'exco', 'advisor', 'member', 'volunteer'.
--- (Legacy 'committee' value renamed to 'exco' — see migration 005 + plan §1B.)
+-- category values: 'admin', 'committee', 'advisor', 'member', 'volunteer'.
+-- 'committee' is retained (the committee→exco rename was dropped on 15-07-2026).
 CREATE TABLE IF NOT EXISTS members (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS members (
   photo_url TEXT,
   photo_alt TEXT,
   description TEXT,
-  category TEXT DEFAULT 'exco',
+  category TEXT DEFAULT 'committee',
   can_login INTEGER DEFAULT 0,
   show_on_website INTEGER DEFAULT 1,
   has_namecard INTEGER DEFAULT 0,

@@ -51,7 +51,7 @@ export async function handleMembers(c: Context<{ Bindings: Env }>) {
       String(body.mobile || '').trim() || null,
       String(body.job_title || '').trim() || null,
       String(body.description || '').trim() || null,
-      String(body.category || 'exco').trim(),
+      String(body.category || 'committee').trim(),
       Number(body.can_login ?? 0),
       Number(body.show_on_website ?? 1),
       Number(body.has_namecard ?? 0),

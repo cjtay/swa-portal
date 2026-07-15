@@ -12,7 +12,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
         <input type="search" id="search-input" class="form-input" placeholder="Search members..." style="width:240px;" />
         <select id="category-filter" class="form-input" style="width:auto;">
           <option value="">All categories</option>
-          <option value="exco">Exco</option>
+          <option value="committee">Committee</option>
           <option value="member">Member</option>
           <option value="advisor">Advisor</option>
           <option value="admin">Admin</option>
@@ -60,7 +60,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
           <div class="form-group">
             <label class="form-label">Category</label>
               <select id="m-category" class="form-input">
-                <option value="exco">Exco</option>
+                <option value="committee">Committee</option>
                 <option value="member">Member</option>
                 <option value="advisor">Advisor</option>
                 <option value="admin">Admin</option>
@@ -231,7 +231,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
     (document.getElementById('member-id') as HTMLInputElement).value = String(m.id);
     (document.getElementById('m-name') as HTMLInputElement).value = m.name || '';
     (document.getElementById('m-role') as HTMLInputElement).value = m.role || '';
-    (document.getElementById('m-category') as HTMLSelectElement).value = m.category || 'exco';
+    (document.getElementById('m-category') as HTMLSelectElement).value = m.category || 'committee';
     (document.getElementById('m-email') as HTMLInputElement).value = m.email || '';
     (document.getElementById('m-mobile') as HTMLInputElement).value = m.mobile || '';
     (document.getElementById('m-job-title') as HTMLInputElement).value = m.job_title || '';

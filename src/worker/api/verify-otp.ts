@@ -109,11 +109,11 @@ export async function handleVerifyOtp(c: Context<{ Bindings: Env }>) {
     role = 'admin';
   } else if (member && member.category === 'volunteer') {
     // Check-in volunteers — scoped to /reg/volunteer/* only. Distinct from
-    // exco members (who may also hold reg_role='reg_volunteer') so the
+    // committee members (who may also hold reg_role='reg_volunteer') so the
     // admin chrome can be hidden for this group alone.
     role = 'volunteer';
   } else {
-    // 'exco', 'advisor', and 'member' all map to the 'committee' session
+    // 'committee', 'advisor', and 'member' all map to the 'committee' session
     // tier. Per 14-07-2026: advisor is functionally identical to committee
     // (the only difference is fee_waived=1 on the member row). 'member'
     // rows default to can_login=0 so they don't reach this branch unless

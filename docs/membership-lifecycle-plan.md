@@ -1,6 +1,6 @@
 # Membership Lifecycle — Implementation Plan
 
-> **Status**: Phase 1 **code complete** (14-07-2026) — build passes, typecheck clean. Migration written but **not yet applied to D1** (local or prod). One-time `committee→exco` data rename pending. Awaiting migration apply + prod deploy. Phased, additive rollout — no destructive changes to production data.
+> **Status**: Phase 1 **code complete** (14-07-2026) — build passes, typecheck clean. Migration written but **not yet applied to D1** (local or prod). The planned `committee→exco` rename was **dropped on 15-07-2026** — `committee` is retained. Awaiting migration apply + prod deploy. Phased, additive rollout — no destructive changes to production data.
 > **Date planned**: 06-07-2026
 > **Last updated**: 14-07-2026 (Phase 1 build executed: migration 005 written, approve-flow rewritten with gtw2026 patterns, members UI + payment API shipped, all docs swept)
 > **Replaces**: The half-built membership feature (commits `5684268`, `2f49cd0`) — 3 confusing tables, only first-year intake wired up, no renewals, no reminders.
@@ -18,16 +18,16 @@ This plan replaces that tangle with **3 clear fields on each member's own record
 
 ### Per-member fields
 
-The member's **role** uses the existing `category` column (no new field needed). The old `committee` value is replaced with `exco`. A member's role is editable at any time (member ↔ exco ↔ advisor).
+The member's **role** uses the existing `category` column (no new field needed). The `committee` value is retained as-is. A member's role is editable at any time (member ↔ committee ↔ advisor).
 
 | Field | Meaning | Values | Editable? |
 |---|---|---|---|
-| `category` (existing, repurposed) | Their role — who pays, who can log in | `member`, `exco`, `advisor`, `admin`, `volunteer` | **Yes** — admin can change anytime |
+| `category` (existing, repurposed) | Their role — who pays, who can log in | `member`, `committee`, `advisor`, `admin`, `volunteer` | **Yes** — admin can change anytime |
 | `membership_status` (new) | Are they currently a member? | `active`, `inactive` | Yes (manual + auto) |
 | `fee_due_date` (new) | The single date they next need to pay by | e.g. `31-01-2027` | **Yes** — admin can change anytime |
 | `fee_waived` (new) | Skip fees entirely (advisors) | `0`, `1` | Yes |
 
-**Role changes a member can go through**: `member` → `exco` → `advisor`, or any direction. When a role changes, fee logic adjusts automatically (advisor = waived; member/exco = pays).
+**Role changes a member can go through**: `member` → `committee` → `advisor`, or any direction. When a role changes, fee logic adjusts automatically (advisor = waived; member/committee = pays).
 
 ### New table: `membership_payments`
 
@@ -49,7 +49,7 @@ A simple append-only log of every payment. One row per payment.
 ### Why this is simpler
 
 - **One source of truth per member**: their `fee_due_date`. All logic reads this.
-- **Role and fee are linked but not tangled**: `category` holds the role (member/exco/advisor). Advisors are auto-waived; everyone else pays. No second "class" field.
+- **Role and fee are linked but not tangled**: `category` holds the role (member/committee/advisor). Advisors are auto-waived; everyone else pays. No second "class" field.
 - **Advisors handled cleanly**: `category='advisor'` → `fee_waived=1` automatically. No special-case logic scattered around.
 - **Payment history** is a plain list you can read top-to-bottom, not a relational maze.
 
@@ -82,11 +82,11 @@ Based on a full audit of the codebase (06-07-2026):
 | Reminder channels | **Email only first** (Resend, already wired, free). WhatsApp deferred to Phase 3. | Avoids a new paid vendor until the core is proven. |
 | Fee cycle (all members) | **Aligned to 31 January each year for everyone** — existing board AND new joins. New-join `fee_due_date` = next 31 January after approval (not approval + 12 months). | Per 13-07-2026 review: "All members fee due by end Jan every year." Replaces the earlier approval-anniversary model. |
 | Fee due date | **Editable by admin at any time.** | Per requirement: "Due date can be edited." |
-| Member role | **Editable by admin at any time** — member ↔ exco ↔ advisor. | Per requirement: "Role of each member can be updated/edited." |
-| Role taxonomy | **Replace `committee` with `exco`** in `category`. Values: `member`, `exco`, `advisor`, `admin`, `volunteer`. | Per requirement: "They fall into category of member or exco (replace committee with exco)." |
+| Member role | **Editable by admin at any time** — member ↔ committee ↔ advisor. | Per requirement: "Role of each member can be updated/edited." |
+| Role taxonomy | **Retain `committee`** in `category`. Values: `member`, `committee`, `advisor`, `admin`, `volunteer`. (A `committee→exco` rename was planned and later **dropped on 15-07-2026** — see decisions log.) | Per requirement, later revised: keep `committee` as the category value. |
 | Registration form | **Simplify to essentials.** | Reduces friction; data not currently used. |
 | Build approach | **Phased, safe rollout.** | Protects production data. |
-| Who pays | `member` and `exco` pay. `advisor` is waived. `admin`/`volunteer` waived. | Per business rule. |
+| Who pays | `member` and `committee` pay. `advisor` is waived. `admin`/`volunteer` waived. | Per business rule. |
 | First-year fee tier | **$20 if form submitted Jan–Jun; $10 if form submitted Jul–Dec.** Tier resolved from `membership_applications.created_at` (submission date), NOT from approval date or activation date. | Per 13-07-2026 review: "based on date of membership form submission date, not based on date of membership status become active." |
 | Renewal fee | **$20 per year, every year.** | Per 13-07-2026 review. |
 | Application default status | **`pending`** on every form submission (already the DB default on `membership_applications.status`). Stays pending until an approver acts. | Per 13-07-2026 review: "Upon submission of form, default status is Pending." |
@@ -122,7 +122,7 @@ The 4 offsets (−1 month / −half month / 0 / +half month) and the inactivatio
 | `memberships` table | **Retire (dormant).** Leave the table in place — harmless. Live state moves onto `members`. |
 | `membership_types` table | **Retire (dormant).** Fees hardcoded in `portal.ts` constants — no KV, no D1 lookup. |
 | `membership_applications` table | **Keep.** Working intake record. Approve flow simplified. |
-| `category='committee'` (17 board rows) | **Rename to `exco`.** One-time data update + login logic update. |
+| `category='committee'` (17 board rows) | **Keep `committee`.** No data change. (A rename to `exco` was planned and dropped on 15-07-2026.) |
 | Public registration form (~20 fields) | **Simplify** to essentials (see §7). |
 | Approve → members row + memberships row | Approve → members row + set `fee_due_date` (next 31 January) + log payment (tier-resolved by submission month) |
 | Renewals / reminders / overdue / auto-inactivate | **New** in Phase 2. |
@@ -131,7 +131,7 @@ The 4 offsets (−1 month / −half month / 0 / +half month) and the inactivatio
 
 ## 5. Data model changes
 
-All additive. Nothing dropped, no data transformed destructively (the `committee` → `exco` rename is a controlled, reviewed update — see §8).
+All additive. Nothing dropped, no data transformed destructively. (The planned `committee` → `exco` rename was the only non-additive step; it has been dropped — see §8.)
 
 ### Migration `005_membership_lifecycle.sql` (Phase 1)
 
@@ -156,16 +156,13 @@ CREATE INDEX IF NOT EXISTS idx_mempay_member ON membership_payments(member_id);
 CREATE INDEX IF NOT EXISTS idx_mempay_date ON membership_payments(paid_date);
 ```
 
-### One-time data update: `committee` → `exco`
+### One-time data update: `committee` → `exco` — **DROPPED (15-07-2026)**
 
-```sql
--- Renames the 17 board members' category. Reviewed and approved before running (see §8).
-UPDATE members SET category = 'exco' WHERE category = 'committee';
-```
+The planned `committee → exco` rename is no longer happening. `committee` is retained as the category value. **No data UPDATE is required** — production and seed data already use `committee`.
 
-### Login logic update (`src/worker/api/verify-otp.ts`)
+### Login logic (`src/worker/api/verify-otp.ts`)
 
-The role derivation currently maps `category='committee'` → login role `committee`. Update so `category='exco'` maps to the same login tier. Advisors (`category='advisor'`) get login only if `can_login=1` (configurable per person).
+The role derivation maps `category='committee'` → login role `committee` (the catch-all `else` branch, lines 115-122). Advisors (`category='advisor'`) get the same session tier, with login only if `can_login=1`. No code change was needed to retain `committee` — the login logic was never dependent on the rename.
 
 ### Config in `SWA_CONFIG` KV (key `swa:membership:config`)
 
@@ -205,7 +202,7 @@ export function isMembershipApprover(email: string): boolean {
 
 The approve/reject handlers in `src/worker/api/membership-reg.ts` swap their `session.role === 'admin'` check for `isMembershipApprover(sessionEmail)`. Per 14-07-2026: IT admins are in the union, so they can also approve/reject.
 
-> **Roxanne's portal access**: to log in at all she also needs a `members` row with `category='exco'` (after the §1B rename), `can_login=1`, and `deleted_at IS NULL`. Adding her email to `MEMBERSHIP_APPROVER_EMAILS` alone is not sufficient — the D1-based auth in `verify-otp.ts` requires the members row to exist. Onboarding specific individuals is an operational task outside this plan's scope.
+> **Roxanne's portal access**: to log in at all she also needs a `members` row with `category='committee'`, `can_login=1`, and `deleted_at IS NULL`. Adding her email to `MEMBERSHIP_APPROVER_EMAILS` alone is not sufficient — the D1-based auth in `verify-otp.ts` requires the members row to exist. Onboarding specific individuals is an operational task outside this plan's scope.
 
 ---
 
@@ -221,21 +218,21 @@ The approve/reject handlers in `src/worker/api/membership-reg.ts` swap their `se
   - [ ] Back up production D1 (`wrangler d1 export swa-portal --remote --output=backup.sql`)
   - [ ] Show migration to user for explicit approval
   - [ ] Apply to production D1
-- [x] **1B. Rename `committee` → `exco`** — *code changes deployed 14-07-2026; data rename still pending*
-  - [x] Update `verify-otp.ts` login mapping (`exco` → committee login tier)
-  - [x] Update members page dropdown/filter (committee → exco)
-  - [ ] Run the one-time `UPDATE members SET category='exco' WHERE category='committee'` on prod (after backup + approval)
-  - [ ] Verify all 17 board members still log in correctly
+- [x] **1B. Retain `committee` (rename dropped)** — *15-07-2026*
+  - [x] Revert dropdown/defaults/comments from `exco` back to `committee` (members.astro, members.ts, verify-otp.ts, schema.sql)
+  - [x] No data UPDATE needed — production and seed data already use `committee`
+  - [x] Login logic unchanged: `category='committee'` → committee session tier (catch-all in verify-otp.ts)
+  - [x] *(Originally this item was a `committee→exco` rename; superseded — see decisions log 15-07-2026)*
 - [ ] **1C. Seed `SWA_CONFIG` KV** with reminder **offsets + anchor date only** (Phase 2 prerequisite). **Fees are hardcoded in `portal.ts` — no KV.**
 - [ ] **1D. Seed existing members' status/fee_due_date/fee_waived**
-  - [ ] Board members (`exco`) → `fee_due_date='2027-01-31'` (stored ISO), `membership_status='active'`
+  - [ ] Board members (`committee`) → `fee_due_date='2027-01-31'` (stored ISO), `membership_status='active'`
   - [ ] Advisors → `fee_waived=1`
   - [ ] Admin/IT accounts → `fee_waived=1`
   - [ ] Existing `category='member'` rows → `fee_due_date` set to the next 31 January (aligned with the all-members anchor)
   - [ ] **User reviews and adjusts in the UI** (not a blind bulk update) — *UI is now available (1E shipped)*
 - [x] **1E. Members page UI — membership fields** — *shipped 14-07-2026*
   - [x] Show `category` (role), `membership_status`, `fee_due_date` (DD-MM-YYYY), `fee_waived` per member
-  - [x] **Role editable**: dropdown (member / exco / advisor) — changing to advisor auto-sets `fee_waived=1`
+  - [x] **Role editable**: dropdown (member / committee / advisor) — changing to advisor auto-sets `fee_waived=1`
   - [x] **Fee due date editable**: date picker (DD-MM-YYYY display, ISO storage)
   - [x] `fee_waived` toggle
   - [x] "Record payment" button → opens small form (amount, method, reference)
@@ -358,13 +355,10 @@ Form validation: submission is blocked unless this checkbox is ticked. The exist
 
 ## 8. Production data safety (the main constraint)
 
-This plan never deletes anything. The only non-additive change is the `committee` → `exco` rename, which is a controlled, reviewed value update.
+This plan never deletes anything. With the `committee → exco` rename dropped (15-07-2026), **every change is now strictly additive** — no non-additive data writes remain.
 
 - **All schema changes are additive** — `ADD COLUMN`, `CREATE TABLE`. Nothing dropped.
-- **The `committee` → `exco` rename** is a single `UPDATE` on ~17 rows, run only after:
-  1. A production D1 backup.
-  2. The login-logic update is deployed (so `exco` maps to the committee login tier).
-  3. Explicit approval.
+- **No data `UPDATE` on existing rows.** The `committee` category value is retained as-is in production and seed data. (The planned rename was the only non-additive step; it has been removed.)
 - **Old tables (`memberships`, `membership_types`) stay in the database**, dormant. Nothing lost.
 - **No `DROP TABLE`, no `DELETE FROM`** anywhere in this plan.
 - **Before applying any migration to production**:
@@ -384,8 +378,8 @@ This plan never deletes anything. The only non-additive change is the `committee
 | 06-07-2026 | New members' fee due date = approval date + 12 months | Per requirement: based on date of approval |
 | 06-07-2026 | Existing board default fee due date = 31-01-2027 | Per requirement |
 | 06-07-2026 | Fee due date editable by admin anytime | Per requirement |
-| 06-07-2026 | Member role editable anytime (member ↔ exco ↔ advisor) | Per requirement |
-| 06-07-2026 | Replace `committee` with `exco` in `category` | Per requirement; merges role into existing field, no separate class field |
+| 06-07-2026 | Member role editable anytime (member ↔ committee ↔ advisor) | Per requirement |
+| 06-07-2026 | Replace `committee` with `exco` in `category` | Per requirement; merges role into existing field, no separate class field. **SUPERSEDED 15-07-2026** — see below. |
 | 06-07-2026 | All dates displayed Singapore format (DD-MM-YYYY) | Per requirement; stored ISO in DB for query correctness |
 | 06-07-2026 | Simplify registration form to essentials | ~10 fields instead of ~20; removed fields not currently used |
 | 06-07-2026 | Phased rollout, each phase reviewed before next | User caution about production data; safe by default |
@@ -401,9 +395,10 @@ This plan never deletes anything. The only non-additive change is the `committee
 | 13-07-2026 | Approve/reject authority restricted to **`MEMBERSHIP_APPROVER_EMAILS`** (Angela Wong, Roxanne Zhang), hardcoded in `portal.ts` | Per SWA review. Other admins retain member/booking CRUD. **Supersedes** the implicit "any admin can approve" behaviour in current code. **Updated 14-07-2026**: union expanded to include `IT_ADMIN_EMAILS` — see below. |
 | 14-07-2026 | **IT admins can also approve/reject membership applications** — approver set = `isMembershipApprover(email)` = `MEMBERSHIP_APPROVER_EMAILS ∪ IT_ADMIN_EMAILS` | Per SWA review: "IT admin to be able to approve or reject membership." `isMembershipApprover()` helper added to `portal.ts`. |
 | 14-07-2026 | **Fees hardcoded in `portal.ts` constants — no KV storage** | Per SWA review: "controlled by the registration form." Drops plan item 1C's fee-seeding portion. The legacy `membership_types` D1 table is dormant and no longer read. Reminder offsets (Phase 2) still go in KV. |
-| 14-07-2026 | **Advisor session role = `'committee'`** (same as exco). The only difference: `fee_waived=1` permanently. | Per SWA review: "Advisor role is the same as committee role — the only difference is advisor does not need to pay." No new session tier needed. |
+| 14-07-2026 | **Advisor session role = `'committee'`** (same as committee). The only difference: `fee_waived=1` permanently. | Per SWA review: "Advisor role is the same as committee role — the only difference is advisor does not need to pay." No new session tier needed. |
 | 14-07-2026 | **Auto-inactivation: zero grace** — `inactiveAfterDays: 0`. Members flip to `inactive` on 01-February (day after 31-January deadline). | Per SWA review: "Option B - zero grace." |
 | 14-07-2026 | **Phase 1 code build executed**: migration 005 written; `committee→exco` code changes (verify-otp, members.ts, members.astro, 9 docs); approve flow rewritten with gtw2026 patterns (atomic batch, isMembershipApprover gate, tier-resolve by submission month, next-31-Jan fee_due_date, stop writing memberships); members UI shipped (status/fee_due/waived columns, record-payment modal, edit fields); payment API endpoints; server hardening (idempotent retry, waitUntil, request_body in error_log). Build ✅ typecheck ✅. **Not yet applied to D1 or deployed.** | gtw2026 production-tested patterns adopted throughout. 19 files changed. |
+| **15-07-2026** | **Keep `committee`; drop the `committee→exco` rename.** Reverted the 14-07-2026 code/doc changes that renamed the category value to `exco`. Code defaults, dropdowns, schema default, and comments now use `committee` again. **No data UPDATE needed** — prod and seed data already use `committee`. This removes the only non-additive/risky step from Phase 1 (the data `UPDATE` and its lockout hazard). | Per user decision: simpler and safer. The rename added risk (17 board members could lose login if ordered wrong) for no functional benefit. `advisor` category and `fee_waived` logic are unchanged. 18 files edited (5 code/schema + 13 docs). |
 | 13-07-2026 | IT admin may delete members at any time (already implemented) | Per SWA review: "IT admin can delete members anytime" |
 | 13-07-2026 | Recording any payment flips `inactive` → `active` and advances `fee_due_date` to next 31 Jan | Per SWA review: "If it is paid anytime later, will change back from inactive to active" |
 | 13-07-2026 | Reminder cron targets **all non-waived members regardless of active/inactive status** | Per SWA review: "Inactive members will still be sent the same reminders as active members" |
@@ -420,8 +415,8 @@ This plan never deletes anything. The only non-additive change is the `committee
 1. **`npx wrangler` is broken in the user's shell** — a zsh function intercepts it and calls a non-existent `_destructive_wrangler_check`. Work around with `./node_modules/.bin/wrangler` until the function is removed from `~/.zshrc`. (Found during Astro upgrade debugging.)
 2. **Local D1 does not auto-apply migrations.** Every new migration must be applied to the local sqlite file at `.wrangler/state/v3/d1/miniflare-D1DatabaseObject/…` manually. This caused three 500s in one session.
 3. **Production D1 also drifted** — migration 003 (`deleted_at`) was never applied to prod despite shipping in commit `2f49cd0`. Treat "commit landed" ≠ "migration applied" — always verify against the target DB.
-4. **The `committee` → `exco` rename must update login logic FIRST.** If the data is renamed before `verify-otp.ts` is updated, all 17 board members lose portal access. Deploy order: code first, then data.
-5. **`category` now drives BOTH login and fees.** Map: `admin`/`exco` → can log in; `member` → no login by default (can_login=0); `advisor` → login only if can_login=1; `volunteer` → limited login. Fee: `member`/`exco` pay; `advisor`/`admin`/`volunteer` waived.
+4. **~~The `committee` → `exco` rename must update login logic FIRST.~~** *(Gotcha retired 15-07-2026 — the rename was dropped. `committee` is retained, so there is no ordering hazard.)*
+5. **`category` drives BOTH login and fees.** Map: `admin`/`committee` → can log in; `member` → no login by default (can_login=0); `advisor` → login only if can_login=1; `volunteer` → limited login. Fee: `member`/`committee` pay; `advisor`/`admin`/`volunteer` waived.
 6. **Cloudflare Workers cron runs UTC.** `"0 8 * * *"` = 08:00 UTC = 16:00 SGT. To run at 08:00 SGT, use `"0 0 * * *"` (00:00 UTC = 08:00 SGT). Verify the cron expression fires at the intended Singapore time before relying on it.
 7. **The worker has no `scheduled` handler yet.** Phase 2 changes `export default app` → `export default { fetch: app.fetch, scheduled }`. Standard Hono pattern but must be tested carefully — the cron runs in prod.
 
@@ -434,7 +429,7 @@ This plan never deletes anything. The only non-additive change is the `committee
 - [x] **Approver authority** — Angela Wong + Roxanne Zhang via `MEMBERSHIP_APPROVER_EMAILS`, **plus IT admins via `IT_ADMIN_EMAILS`** (confirmed 14-07-2026). `isMembershipApprover()` helper checks the union.
 - [x] **Renewal fee** — $20/year (confirmed 13-07-2026).
 - [x] **Form fields** — address, NRIC, citizenship, place of birth, home/office telephone removed; referrer placeholder → "SWA Board Member"; PDPA checkbox replaces Declaration (confirmed 13-07-2026).
-- [ ] **Which current board members are genuinely advisors** (should be `category='advisor'`, `fee_waived=1`)? The seed data has one member with "Advisor" in their `role` text — confirm who is an advisor vs. a paying exco member before the one-time rename.
+- [ ] **Which current board members are genuinely advisors** (should be `category='advisor'`, `fee_waived=1`)? The seed data has one member with "Advisor" in their `role` text — confirm who is an advisor vs. a paying committee member.
 - [x] **Roxanne Zhang's email** — confirmed `roxanne.zhang@singaporewomenassociation.org` (14-07-2026). Onboarding specific individuals (creating their `members` row) is an operational task outside this plan's scope.
 - [x] **Auto-inactivation grace period** — **zero grace** (`inactiveAfterDays: 0`). Members flip to inactive on 01-February (confirmed 14-07-2026).
 - [x] **Advisor session role** — same as committee (`role='committee'`); the only difference is `fee_waived=1` permanently (confirmed 14-07-2026).
@@ -448,10 +443,10 @@ This plan never deletes anything. The only non-additive change is the `committee
 |---|---|---|
 | `migrations/005_membership_lifecycle.sql` | 1A | Additive columns + payments table |
 | `src/constants/portal.ts` | 1G | `MEMBERSHIP_APPROVER_EMAILS` constant + `isMembershipApprover()` helper (Angela Wong, Roxanne Zhang + IT_ADMIN_EMAILS union) |
-| `src/worker/api/verify-otp.ts` | 1B | Map `category='exco'` → committee login tier |
+| `src/worker/api/verify-otp.ts` | 1B | Catch-all maps `category='committee'` (and `advisor`, `member`) → committee login tier. *(No rename — committee retained.)* |
 | `src/worker/api/members.ts` | 1E, 1F | Membership fields + payment endpoints + role editing |
 | `src/worker/api/membership-reg.ts` | 1G | Approve flow: tier-resolved fee by submission month; `fee_due_date` = next 31 Jan; gate approve/reject by `MEMBERSHIP_APPROVER_EMAILS`; update `/api/membership/config` to return `firstYearFeeBeforeJuly` + `firstYearFeeFromJuly` |
-| `src/pages/members.astro` | 1B, 1E | Rename committee→exco in dropdown; membership UI + role/date editing |
+| `src/pages/members.astro` | 1B, 1E | Membership UI + role/date editing. Dropdown uses `committee` (retained). |
 | `src/pages/reg/membership/register.astro` | 1H | Simplify form: remove address/NRIC/citizenship/etc.; add eligibility callout + PDPA checkbox; referrer placeholder → "SWA Board Member"; render fee tier by current month |
 | `src/pages/admin/forms/membership.astro` | 1G | Approve flow tweaks |
 | `src/pages/admin/membership/reminders.astro` | 2E | New reminders dashboard |

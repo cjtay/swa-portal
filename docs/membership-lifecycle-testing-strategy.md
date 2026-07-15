@@ -89,14 +89,14 @@ Coverage matrix (~12 rows) designed so that a single cron run with a chosen `fak
 |---|---|---|---|---|---|
 | 1 | member | active | 0 | fakeToday + 30d | Reminder #1 (1 month before) |
 | 2 | member | active | 0 | fakeToday + 15d | Reminder #2 (half month before) |
-| 3 | exco | active | 0 | fakeToday (00:00) | Reminder #3 "Due today" |
+| 3 | committee | active | 0 | fakeToday (00:00) | Reminder #3 "Due today" |
 | 4 | member | active | 0 | fakeToday − 15d | Overdue email (half month after) |
 | 5 | member | active | 0 | fakeToday − 30d | Auto-inactivate boundary |
 | 6 | member | inactive | 0 | fakeToday − 60d | Inactive member still receives reminders (per decision 13-07-2026) |
 | 7 | advisor | active | 1 | null | Skipped entirely (waived) |
 | 8 | admin | active | 1 | null | Skipped (waived) |
 | 9 | volunteer | active | 1 | null | Skipped (waived) |
-| 10 | exco | active | 0 | fakeToday + 100d | Not in any window — no email |
+| 10 | committee | active | 0 | fakeToday + 100d | Not in any window — no email |
 | 11 | member | active | 0 | fakeToday + 1d | Between Reminder #2 and #3 — no email |
 | 12 | member | inactive | 0 | fakeToday + 30d | Inactive member in Reminder #1 window — still gets it |
 
@@ -171,14 +171,14 @@ Verify each step via:
 
 | Step | Action | Risk to prod |
 |---|---|---|
-| **S0** | Create staging D1 + KV namespaces + R2 bucket. Apply `schema.sql` + migration `005_membership_lifecycle.sql` to staging D1. Run the `committee → exco` rename on staging. | None |
+| **S0** | Create staging D1 + KV namespaces + R2 bucket. Apply `schema.sql` + migration `005_membership_lifecycle.sql` to staging D1. | None |
 | **S1** | Seed staging D1 with `seed-members.sql` + new `seed-membership-staging.sql`. Confirm `isMembershipApprover()` covers Angela, Roxanne, and the developer (via `MEMBERSHIP_APPROVER_EMAILS ∪ IT_ADMIN_EMAILS`). | None |
 | **S2** | Build Phase 1 features (members page UI, payment endpoints, simplified approve flow). Deploy to staging. Angela/Roxanne do UAT on the members page. **No cron yet.** | None |
 | **S3** | Add `scheduled()` handler + `runReminders(env, today)` pure function. Unit-test the date math with Vitest (no Cloudflare needed). | None |
 | **S4** | Add `env.staging` block with hourly cron. Deploy `--env staging`. Set `fakeToday`, `reminderRecipientOverride`, `membershipRemindersEnabled=true` in staging `SWA_CONFIG`. | None |
 | **S5** | Walk `fakeToday` through all 5 stages (§6). Verify each email in the shared inbox. Verify auto-inactivation. Verify inactive members still receive reminders. Fix bugs. | None |
 | **S6** | Angela/Roxanne sign off on the staging reminders dashboard (`/admin/membership/reminders`). | None |
-| **S7 — pre-prod** | Backup prod D1: `wrangler d1 export swa-portal --remote --output=backup-DD-MM-YYYY.sql`. Apply migration `005` to a fresh local D1 first to verify, then to prod. Run `committee → exco` rename on prod. Deploy code to prod with `membershipRemindersEnabled: false` in prod `SWA_CONFIG`. Add `triggers.cron: ["0 0 * * *"]` (08:00 SGT) to top-level `wrangler.jsonc`. Cron now fires daily but does nothing. | Migration only (additive + 1 reviewed rename) |
+| **S7 — pre-prod** | Backup prod D1: `wrangler d1 export swa-portal --remote --output=backup-DD-MM-YYYY.sql`. Apply migration `005` to a fresh local D1 first to verify, then to prod. Deploy code to prod with `membershipRemindersEnabled: false` in prod `SWA_CONFIG`. Add `triggers.cron: ["0 0 * * *"]` (08:00 SGT) to top-level `wrangler.jsonc`. Cron now fires daily but does nothing. | Migration only (additive — no data rename; `committee` retained) |
 | **S8 — dry-run on prod** | Hit `POST /api/admin/membership/reminders/dry-run` on prod. Review the would-send list with Angela. | None — endpoint returns but does not send |
 | **S9 — go-live** | Set `membershipRemindersEnabled: true` in prod `SWA_CONFIG`. Watch first cron via `wrangler tail`. | Live — emails go to real members |
 
@@ -188,7 +188,7 @@ Verify each step via:
 2. **Shared inbox address** — `swa-test@singaporewomenassociation.org` requires that mailbox to exist (or a catch-all on the SWA domain). Confirm the SWA domain's mail provider supports catch-all, and that the mailbox is created.
 3. **Resend verified sending domain** — confirm the `from` address intended for reminder emails is already verified in Resend. If not, that verification is a prerequisite for S4.
 4. **Local D1 emulator test of the migration** — Phase 1A of the implementation plan calls for testing the migration locally first. Do this even before S0, since the staging D1 also needs the migration applied and any errors will surface identically in both places.
-5. **Roxanne's onboarding** (open question from implementation plan §11) — she still needs a `members` row with `category='exco'`, `can_login=1`, `deleted_at IS NULL` to log in to staging at all. Adding her email to `MEMBERSHIP_APPROVER_EMAILS` alone is not sufficient because the D1-based auth in `verify-otp.ts` requires the members row to exist. Add her to the seed file alongside the 12 dummy rows.
+5. **Roxanne's onboarding** (open question from implementation plan §11) — she still needs a `members` row with `category='committee'`, `can_login=1`, `deleted_at IS NULL` to log in to staging at all. Adding her email to `MEMBERSHIP_APPROVER_EMAILS` alone is not sufficient because the D1-based auth in `verify-otp.ts` requires the members row to exist. Add her to the seed file alongside the 12 dummy rows.
 6. **Turnstile on staging** — the existing site key is authorised for production hostnames only. Staging on `*.workers.dev` may need its own site key, or the dev-bypass path needs to be widened (currently `isDevBypassHost` already allows `*.workers.dev`, but `DEV_BYPASS_AUTH` is set via `.dev.vars` which is local-only — staging secrets would need to set it explicitly).
 
 ## 11. Files this strategy will create or touch (reference)

@@ -22,7 +22,7 @@ See `docs/SWAPortal-Functional-Specs.md` for role access matrix, API permissions
 - **British English** spelling (organise, programme, colour)
 - **SWA brand colours** — purple palette: `swa-1 #70308c`, `swa-2 #450a5e`, `swa-3 #874ba1`, `swa-4 #f3d2ff`, `swa-5` (see `src/styles/admin.css`)
 - **Auth system** — OTP via email, HMAC-signed sessions in cookies (`swa_session`)
-- **Role tiers** — `admin` (D1 `category='admin'` or `IT_ADMIN_EMAILS`), `committee` session role (D1 `category='exco'` or `category='advisor'` with `can_login=1`). Advisor = same session tier as exco, but `fee_waived=1`.
+- **Role tiers** — `admin` (D1 `category='admin'` or `IT_ADMIN_EMAILS`), `committee` session role (D1 `category='committee'` or `category='advisor'` with `can_login=1`). Advisor = same session tier as committee, but `fee_waived=1`.
 - **No emoji icons** in professional components
 
 ## Safety Standards
@@ -40,7 +40,7 @@ Three tiers. See `docs/SWAPortal-Functional-Specs.md` for the full access matrix
 |------|---------------|------------------|
 | **IT Admin** | Email in `IT_ADMIN_EMAILS` (hardcoded) | Everything admin can do + infrastructure features (website sync, etc.) |
 | **Admin** | D1 `members.category = 'admin'` with `can_login=1` | Full CRUD on members, namecards, can cancel any booking |
-| **Committee** | D1 `members.category = 'exco'` (or `'advisor'`) with `can_login=1` | Read members/namecards, create/cancel own bookings |
+| **Committee** | D1 `members.category = 'committee'` (or `'advisor'`) with `can_login=1` | Read members/namecards, create/cancel own bookings |
 
 **Login eligibility**: `can_login = 1` in D1 members table. Email domain does not matter.
 

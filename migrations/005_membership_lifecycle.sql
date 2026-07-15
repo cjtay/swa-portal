@@ -9,8 +9,10 @@
 -- the gtw2026 project's gtw_error_log table).
 --
 -- All changes are ADDITIVE. Nothing is dropped, no data is transformed.
--- The `committee → exco` rename is a separate one-time UPDATE (see plan §8)
--- run AFTER the verify-otp.ts login-logic update is deployed.
+-- NOTE (15-07-2026): the planned `committee → exco` rename was DROPPED.
+-- The `committee` category value is retained as-is. Production data and
+-- seed data already use `committee`; login logic in verify-otp.ts maps
+-- `committee` → the 'committee' session tier. No data UPDATE is needed.
 --
 -- Idempotency:
 --   ALTER TABLE ADD COLUMN is NOT idempotent in SQLite/D1. Apply

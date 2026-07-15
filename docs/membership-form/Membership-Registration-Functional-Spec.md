@@ -80,7 +80,7 @@ All members' `fee_due_date` is anchored to **31 January** each year:
 | Category | Pays fees? | Can log in? |
 |----------|-----------|-------------|
 | `member` | Yes | No (unless individually enabled) |
-| `exco` | Yes | Yes (if `can_login=1`) |
+| `committee` | Yes | Yes (if `can_login=1`) |
 | `advisor` | No (`fee_waived=1` permanently) | Yes (if `can_login=1`) |
 | `admin` | No (`fee_waived=1`) | Yes |
 | `volunteer` | No (`fee_waived=1`) | Limited |

@@ -133,7 +133,7 @@ ALTER TABLE members ADD COLUMN fee_due_date TEXT;             -- ISO YYYY-MM-DD
 ALTER TABLE members ADD COLUMN fee_waived INTEGER DEFAULT 0;
 ```
 
-The `category` column defaults to `'exco'` (was `'committee'`, renamed per plan §1B). Values: `admin`, `exco`, `advisor`, `member`, `volunteer`.
+The `category` column defaults to `'committee'` (retained — the `committee→exco` rename was dropped 15-07-2026). Values: `admin`, `committee`, `advisor`, `member`, `volunteer`.
 
 ### `membership_payments` (migration 005)
 
@@ -483,10 +483,11 @@ npm run deploy       # Astro build + wrangler deploy
 ### One-time data rename (after deploy)
 
 ```sql
-UPDATE members SET category = 'exco' WHERE category = 'committee';
+-- DROPPED 15-07-2026 — committee is retained. Kept here for historical reference only. Do NOT run.
+-- UPDATE members SET category = 'exco' WHERE category = 'committee';
 ```
 
-Run **after** the code is deployed (so `verify-otp.ts` maps `exco` → committee login tier) and **after** a prod D1 backup. See `docs/membership-lifecycle-plan.md` §8.
+This data rename is **no longer required**. `verify-otp.ts` maps `category='committee'` → the committee login tier (catch-all). See `docs/membership-lifecycle-plan.md` §8.
 
 ### Querying error_log
 
@@ -506,6 +507,7 @@ Or dashboard → Workers & Pages → `swa-portal` → Observability.
 
 | Date | Change | Files touched |
 |------|--------|---------------|
+| 2026-07-15 | **Revert `committee→exco` rename** — dropped the planned category rename; `committee` retained. Reverted dropdowns/defaults/comments (members.astro, members.ts, verify-otp.ts, schema.sql) to `committee`. No data UPDATE required. Updated 13 docs to match. | `src/pages/members.astro`, `src/worker/api/members.ts`, `src/worker/api/verify-otp.ts`, `schema.sql`, `migrations/005_membership_lifecycle.sql`, 13 doc files |
 | 2026-07-14 | Lifecycle rewrite: approve flow rewritten (atomic batch, `isMembershipApprover`, tier-resolve by submission month, next-31-Jan `fee_due_date`, stop writing `memberships`); members page UI (status/fee_due/waived columns, record-payment modal, role editing); payment API (`GET/POST /api/members/:id/payments`); server hardening (idempotent retry on UNIQUE, `waitUntil` for emails, `request_body` in error_log); `committee → exco` code changes + doc sweep; migration 005 written; `wrangler.jsonc` body-size limit; `isMembershipApprover()` helper | `src/worker/api/membership-reg.ts`, `src/worker/api/members.ts`, `src/worker/index.ts`, `src/pages/members.astro`, `src/constants/portal.ts`, `src/worker/api/verify-otp.ts`, `src/worker/lib/log-error.ts`, `schema.sql`, `migrations/005_membership_lifecycle.sql`, `wrangler.jsonc`, 9 doc files |
 | 2026-07-13 | Form simplification: removed NRIC/address/DOB/citizenship/occupation/hobbies/skills/associations/intent/telephone from the public form; replaced Declaration with PDPA consent (migration `005_pdpa_consent.sql`); referrer placeholder → "SWA Board Member"; eligibility + tiered-fee callout; tiered fees hardcoded in `portal.ts`; `MEMBERSHIP_APPROVER_EMAILS` constant added; `payment_amount` tier-resolved at submission; client-side image resize; PayNow QR canvas renderer with SWA logo overlay; `qrcode@1.4.4` dep + copy scripts | `src/pages/reg/membership/register.astro`, `src/worker/api/membership-reg.ts`, `src/constants/portal.ts`, `package.json`, `migrations/005_pdpa_consent.sql` |
 | 2026-05-11 | Initial membership application form (schema, API, page, CSS, email notification) | `schema.sql`, `src/worker/api/membership-reg.ts`, `src/pages/reg/membership/register.astro`, `src/styles/membership-form.css`, `src/worker/lib/email-membership-notification.ts` |

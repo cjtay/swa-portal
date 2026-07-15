@@ -187,7 +187,7 @@ Only members with `can_login = 1` in the database can receive a code. IT Adminis
 |------|-----|-----------------|
 | **IT Administrator** | 3 named individuals | Everything below, plus: system settings, table configuration, role assignment, registration management |
 | **Admin** | Members with category = 'admin' | Full member directory management, all office bookings, gala dinner administration |
-| **Committee** | Members with category = 'exco' | View member directory, create/cancel own office bookings, guest check-in at gala dinner |
+| **Committee** | Members with category = 'committee' | View member directory, create/cancel own office bookings, guest check-in at gala dinner |
 
 **Registration Sub-Roles (Gala Dinner):**
 
