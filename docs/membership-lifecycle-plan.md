@@ -214,7 +214,7 @@ The approve/reject handlers in `src/worker/api/membership-reg.ts` swap their `se
 
 - [ ] **1A. Migration `005_membership_lifecycle.sql`**
   - [x] Write migration (additive columns + payments table — see §5)
-  - [ ] Test on local D1
+  - [x] Test on local D1 *(applied 15-07-2026 — 7 statements OK; verified columns, payments table, GET/POST/PATCH endpoints all return HTTP 200)*
   - [ ] Back up production D1 (`wrangler d1 export swa-portal --remote --output=backup.sql`)
   - [ ] Show migration to user for explicit approval
   - [ ] Apply to production D1
@@ -261,6 +261,8 @@ The approve/reject handlers in `src/worker/api/membership-reg.ts` swap their `se
 - [ ] **1J. Verify** — build ✅, typecheck ✅, test locally, smoke-test prod after deploy
 
 **Phase 1 deliverable**: A clean members list where each person has a clear role (editable), status, and editable fee due date. You can record payments manually. The public form is simpler. The old confusing tables are dormant. **Nothing automatic has run.**
+
+> **15-07-2026 progress**: Migration `005` applied to **local D1** and verified (columns present, payments table created, GET/POST/PATCH endpoints return HTTP 200 — no 500s). The `committee→exco` rename was **dropped** (item 1B rewritten); `committee` retained. Items 1B, 1E, 1F, 1G, 1H, 1I remain **code-complete**. Remaining: **1A** (back up prod → apply migration to prod), **1C** (Phase 2 KV seed), **1D** (seed members via UI), **1J** (smoke-test). No data UPDATE on prod is needed anymore (rename dropped).
 
 > **14-07-2026 progress**: All Phase 1 code is written and builds clean. Items 1B (code), 1E, 1F, 1G, 1H (incl. server hardening), and 1I are **complete**. Remaining: **1A** (apply migration to D1), **1B** (run data rename on prod), **1C** (Phase 2 KV seed), **1D** (seed members via UI), **1J** (smoke-test). The gtw2026 patterns (atomic DB.batch, idempotent retry, waitUntil for emails, request_body in error_log) were adopted throughout.
 
