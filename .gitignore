@@ -17,10 +17,15 @@ node_modules/
 
 # production D1 exports (may contain member PII — never commit)
 prod-dump.sql
+backup*.sql
+backups/
 
 # editor
 .vscode/
 .idea/
+
+# AI tool session state
+.zcode/
 
 # OS
 .DS_Store
