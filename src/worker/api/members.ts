@@ -40,31 +40,38 @@ export async function handleMembers(c: Context<{ Bindings: Env }>) {
       return c.json({ success: false, message: 'Invalid request body.' }, 400);
     }
 
+    const category = String(body.category || 'committee').trim();
+    // Fee waiver auto-derivation: advisors/admins/volunteers don't pay.
+    // Body value still wins so the admin can override per-row if needed.
+    const bodyWaived = body.fee_waived === undefined ? null : Number(body.fee_waived);
+    const derivedWaived =
+      bodyWaived !== null
+        ? bodyWaived
+        : category === 'advisor' || category === 'admin' || category === 'volunteer'
+          ? 1
+          : 0;
+
     const result = await c.env.DB.prepare(
-`INSERT INTO members (name, slug, role, email, mobile, job_title, description, category, can_login, show_on_website, has_namecard, address_line1, address_line2, address_postal_code, address_country, facebook, linkedin, instagram, tiktok, youtube, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+`INSERT INTO members (name, role, email, mobile, job_title, category, can_login,
+                      address_line1, address_line2, address_postal_code, address_country,
+                      sort_order, membership_status, fee_due_date, fee_waived)
+ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       String(body.name || '').trim() || null,
-      String(body.slug || '').trim() || null,
       String(body.role || '').trim() || null,
       String(body.email || '').trim().toLowerCase() || null,
       String(body.mobile || '').trim() || null,
       String(body.job_title || '').trim() || null,
-      String(body.description || '').trim() || null,
-      String(body.category || 'committee').trim(),
+      category,
       Number(body.can_login ?? 0),
-      Number(body.show_on_website ?? 1),
-      Number(body.has_namecard ?? 0),
       String(body.address_line1 || '').trim() || null,
       String(body.address_line2 || '').trim() || null,
       String(body.address_postal_code || '').trim() || null,
       String(body.address_country || 'Singapore').trim(),
-      String(body.facebook || '').trim() || null,
-      String(body.linkedin || '').trim() || null,
-      String(body.instagram || '').trim() || null,
-      String(body.tiktok || '').trim() || null,
-      String(body.youtube || '').trim() || null,
       Number(body.sort_order || 0),
+      String(body.membership_status || 'active').trim(),
+      String(body.fee_due_date || '').trim() || null,
+      derivedWaived,
     ).run();
 
     return c.json({ success: true, id: result.meta.last_row_id }, 201);
@@ -92,7 +99,7 @@ export async function handleMemberById(c: AppContext) {
       return c.json({ success: false, message: 'Invalid request body.' }, 400);
     }
 
-    const allowedFields = ['name', 'slug', 'role', 'email', 'mobile', 'job_title', 'description', 'category', 'can_login', 'show_on_website', 'has_namecard', 'address_line1', 'address_line2', 'address_postal_code', 'address_country', 'facebook', 'linkedin', 'instagram', 'tiktok', 'youtube', 'sort_order', 'photo_url', 'photo_alt', 'reg_role', 'membership_status', 'fee_due_date', 'fee_waived'];
+    const allowedFields = ['name', 'role', 'email', 'mobile', 'job_title', 'category', 'can_login', 'address_line1', 'address_line2', 'address_postal_code', 'address_country', 'sort_order', 'reg_role', 'membership_status', 'fee_due_date', 'fee_waived'];
     const updates: string[] = [];
     const values: unknown[] = [];
 
@@ -135,7 +142,7 @@ export async function handleMemberById(c: AppContext) {
     }
 
     await c.env.DB.prepare(
-      `UPDATE members SET deleted_at = datetime('now'), can_login = 0, show_on_website = 0, updated_at = datetime('now') WHERE id = ?`,
+      `UPDATE members SET deleted_at = datetime('now'), can_login = 0, updated_at = datetime('now') WHERE id = ?`,
     ).bind(id).run();
 
     // Kill any in-flight OTP so it cannot be exchanged for a new session.
@@ -253,22 +260,4 @@ export async function handleMemberPayments(c: AppContext) {
   }
 
   return c.json({ success: false, message: 'Method not allowed' }, 405);
-}
-
-export async function handleMemberPhoto(c: Context<{ Bindings: Env }>) {
-  const id = c.req.param('id');
-  const formData = await c.req.parseBody();
-  const file = formData['file'];
-
-  if (!file || !(file instanceof File)) {
-    return c.json({ success: false, message: 'No file uploaded.' }, 400);
-  }
-
-  const key = `members/${id}/${file.name}`;
-  await c.env.R2_BUCKET.put(key, file.stream(), { httpMetadata: { contentType: file.type } });
-
-  const photo_url = `/${key}`;
-  await c.env.DB.prepare('UPDATE members SET photo_url = ?, updated_at = datetime(\'now\') WHERE id = ?').bind(photo_url, id).run();
-
-  return c.json({ success: true, photo_url });
 }

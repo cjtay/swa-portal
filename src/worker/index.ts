@@ -4,8 +4,9 @@ import { authMiddleware } from './middleware';
 import { handleSession, handleLogout, isDevBypassActive } from './api/session';
 import { handleSendOtp } from './api/send-otp';
 import { handleVerifyOtp } from './api/verify-otp';
+import { handleDevMembers, handleDevLogin } from './api/dev-login';
 import { handleBookings, handleBookingById, handleBookingCancel } from './api/bookings';
-import { handleMembers, handleMemberById, handleMemberPhoto, handleMemberDependencies, handleMemberPayments } from './api/members';
+import { handleMembers, handleMemberById, handleMemberDependencies, handleMemberPayments } from './api/members';
 import { handleAdminBookings, handleAdminBookingById } from './api/reg/admin-bookings';
 import { handleAdminGuests, handleAdminGuestById } from './api/reg/admin-guests';
 import { handleAdminExport } from './api/reg/admin-export';
@@ -57,6 +58,10 @@ app.delete('/api/session', handleLogout);
 app.post('/api/send-otp', handleSendOtp);
 app.post('/api/verify-otp', handleVerifyOtp);
 
+// Dev-only role-picker login (local + *.workers.dev only — handlers 404 in prod)
+app.get('/api/dev/members', handleDevMembers);
+app.post('/api/dev/login', handleDevLogin);
+
 // Office Bookings
 app.get('/api/bookings', handleBookings);
 app.post('/api/bookings', handleBookings);
@@ -69,7 +74,6 @@ app.post('/api/members', handleMembers);
 app.get('/api/members/:id', handleMemberById);
 app.patch('/api/members/:id', handleMemberById);
 app.delete('/api/members/:id', handleMemberById);
-app.post('/api/members/:id/photo', handleMemberPhoto);
 app.get('/api/members/:id/dependencies', handleMemberDependencies);
 app.get('/api/members/:id/payments', handleMemberPayments);
 app.post('/api/members/:id/payments', handleMemberPayments);

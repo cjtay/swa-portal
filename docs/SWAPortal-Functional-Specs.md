@@ -267,6 +267,8 @@ Buyer-facing endpoints (`/api/reg/buyer/*`) bypass session auth entirely. They u
 
 ### 5.4 Namecards (`/namecards`)
 
+> **REMOVED 19-07-2026** — Public-website integration dropped. swa-portal is now isolated from swa2024. The `/namecards` page, `/api/sync-website` plumbing, and `members.slug`/`photo_url`/`description`/`show_on_website`/`has_namecard`/social-link columns were removed (see migration `006_remove_website_columns.sql`). The historical spec below is preserved for audit only.
+
 **Visibility**: All authenticated users
 
 **Committee view**:

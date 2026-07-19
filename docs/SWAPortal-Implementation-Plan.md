@@ -1,8 +1,8 @@
 # SWA Admin Portal (`swa-portal`) — Implementation Plan
 
-> **Status**: Phase 1 mostly complete. Phase 2 (Membership Lifecycle) code complete 14-07-2026 — migration written, approve flow rewritten, members UI + payment API shipped. Awaiting D1 migration apply + prod deploy. Auth, scaffold, office booking, member directory, and namecard base UI done. Pagination, sync-website route, and domain setup still needed.
+> **Status**: Phase 1 deployed to production 19-07-2026. Migration 005 (lifecycle columns + payments table) + migration 006 (public-website column drops) applied to prod D1. Add Member INSERT bug fixed (lifecycle fields now persist). Public-website integration removed — swa-portal is now isolated from swa2024.
 > **Date planned**: 2026-05-11
-> **Last updated**: 2026-07-06
+> **Last updated**: 2026-07-19
 > **Repo**: `swa-portal` (separate from `swa2024` and `gtw2026`)
 > **Domain**: `admin.singaporewomenassociation.org` (pending domain transfer, 5-7 days)
 > **Dev URL**: `swa-portal.cjtay-4e0.workers.dev` (live, tested)
@@ -203,6 +203,8 @@ See `docs/SWAPortal-Functional-Specs.md` for the full access matrix.
 
 ### 1G. Namecard Admin — Partial
 
+> **REMOVED 19-07-2026** — Public-website integration dropped. swa-portal is now isolated from swa2024. The namecards page, photo upload endpoint, `/api/sync-website` plumbing, and 11 public-site columns on `members` were removed (see migration `006_remove_website_columns.sql`). Historical progress notes preserved below for audit only.
+
 - [x] `members.ts` API routes (CRUD, includes `slug` and `can_login` fields) ✅
 - [x] Photo upload endpoint (`POST /api/members/:id/photo` → R2) ✅
 - [x] `namecards.astro` — basic namecard table with has_namecard/show_on_website badges, Sync button ✅
@@ -213,11 +215,10 @@ See `docs/SWAPortal-Functional-Specs.md` for the full access matrix.
 ### 1H. Member Directory — Mostly Complete
 
 - [x] `members.astro` — searchable/filterable table with search input + category filter ✅
-- [x] Quick edit modal for contact details (name, role, category, email, mobile, job_title, show_on_website, has_namecard) ✅
-- [x] Add Member button with POST API ✅
+- [x] Quick edit modal for contact details (name, role, category, email, mobile, job_title, can_login) ✅
+- [x] Add Member button with POST API ✅ (INSERT bug fixed 19-07-2026 — lifecycle fields now persist)
 - [x] Delete member (DELETE /api/members/:id) ✅
 - [ ] Pagination (currently loads all members — will break at scale)
-- [ ] Photo upload UI in edit modal (API exists at POST /api/members/:id/photo → R2, no form element)
 
 ### 1I. Domain + DNS — Blocked
 

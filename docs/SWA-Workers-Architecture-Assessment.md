@@ -144,6 +144,8 @@ However, with only ~5 small shared files that rarely change, even this is option
 
 ## Cross-Worker Data Access: Namecards on swa-site
 
+> **REMOVED 19-07-2026** — Public-website integration dropped. swa-portal is now isolated from swa2024; cross-worker namecard data access is no longer required. Historical analysis preserved below for audit only.
+
 The public website needs to display member namecards that are managed in the admin portal. This is the one place where cross-worker data access is genuinely needed.
 
 ### Recommended Approach: D1 Binding

@@ -46,13 +46,9 @@ export function getEndpointKey(path: string, method: string): string | null {
       if (m === 'POST') return 'bookings:post';
       return null;
     case '/api/members':
-      if (path.includes('/photo')) return 'members:photo';
       if (m === 'POST') return 'members:post';
       if (m === 'PATCH') return 'members:patch';
       if (m === 'DELETE') return 'members:delete';
-      return null;
-    case '/api/sync-website':
-      if (m === 'POST') return 'sync-website:post';
       return null;
     default:
       return null;

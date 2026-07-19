@@ -1,8 +1,8 @@
 # Membership Lifecycle — Implementation Plan
 
-> **Status**: Phase 1 **code complete** (14-07-2026) — build passes, typecheck clean. Migration written but **not yet applied to D1** (local or prod). The planned `committee→exco` rename was **dropped on 15-07-2026** — `committee` is retained. Awaiting migration apply + prod deploy. Phased, additive rollout — no destructive changes to production data.
+> **Status**: Phase 1 **deployed to production** (19-07-2026) — migrations 005 + 006 applied to prod D1, worker deployed, Add Member INSERT bug fixed (lifecycle fields now persist), public-website integration removed (swa-portal isolated from swa2024). The planned `committee→exco` rename was **dropped on 15-07-2026** — `committee` is retained. Phased, additive rollout — no destructive changes to production data.
 > **Date planned**: 06-07-2026
-> **Last updated**: 19-07-2026 (local end-to-end UAT passed; PayNow screenshot made mandatory; signature-upload compression; admin surfaces aligned to simplified form + PDPA field; approve 409 on duplicate email; dev-bypass rate-limiter skip; `db:clear:membership` local reset script)
+> **Last updated**: 19-07-2026 (prod deploy: migration 005 + 006 applied; Add Member INSERT bug fixed — `membership_status`, `fee_due_date`, `fee_waived` now persist on POST; public-website integration removed — namecards page, `/api/sync-website` plumbing, photo upload endpoint, and 11 members columns dropped; AGENTS.md and 6 docs updated)
 > **Replaces**: The half-built membership feature (commits `5684268`, `2f49cd0`) — 3 confusing tables, only first-year intake wired up, no renewals, no reminders.
 > **Repo**: `swa-portal`
 
@@ -212,12 +212,12 @@ The approve/reject handlers in `src/worker/api/membership-reg.ts` swap their `se
 
 **Goal**: a correct, simple foundation you can see and touch. Nothing automatic runs.
 
-- [ ] **1A. Migration `005_membership_lifecycle.sql`**
+- [x] **1A. Migration `005_membership_lifecycle.sql`**
   - [x] Write migration (additive columns + payments table — see §5)
   - [x] Test on local D1 *(applied 15-07-2026 — 7 statements OK; verified columns, payments table, GET/POST/PATCH endpoints all return HTTP 200)*
-  - [ ] Back up production D1 (`wrangler d1 export swa-portal --remote --output=backup.sql`)
-  - [ ] Show migration to user for explicit approval
-  - [ ] Apply to production D1
+  - [x] Back up production D1 (`wrangler d1 export swa-portal --remote --output=backup.sql`)
+  - [x] Show migration to user for explicit approval
+  - [x] Apply to production D1 *(applied 19-07-2026 alongside migration 006)*
 - [x] **1B. Retain `committee` (rename dropped)** — *15-07-2026*
   - [x] Revert dropdown/defaults/comments from `exco` back to `committee` (members.astro, members.ts, verify-otp.ts, schema.sql)
   - [x] No data UPDATE needed — production and seed data already use `committee`
@@ -258,9 +258,11 @@ The approve/reject handlers in `src/worker/api/membership-reg.ts` swap their `se
   - [x] Non-blocking notification email via `c.executionCtx.waitUntil()` (gtw2026 pattern)
   - [x] `request_body` captured in `error_log` for post-incident forensics
 - [x] **1I. Retire old table writes** — confirmed no code writes `memberships` / `membership_types` (tables left dormant in DB). Verified via grep 14-07-2026.
-- [ ] **1J. Verify** — build ✅, typecheck ✅, test locally, smoke-test prod after deploy
+- [x] **1J. Verify** — build ✅, typecheck ✅, local UAT ✅, **prod deploy ✅ (19-07-2026)**
 
 **Phase 1 deliverable**: A clean members list where each person has a clear role (editable), status, and editable fee due date. You can record payments manually. The public form is simpler. The old confusing tables are dormant. **Nothing automatic has run.**
+
+> **19-07-2026 progress (prod deploy)**: Migrations 005 (lifecycle) + 006 (public-website column drops) applied to prod D1, worker deployed. Add Member INSERT bug fixed — `membership_status`, `fee_due_date`, `fee_waived` now persist on POST (previously silently dropped). Public-website integration fully removed: `/namecards` page deleted, `/api/sync-website` plumbing dropped from middleware + rate-limiter, `POST /api/members/:id/photo` endpoint deleted, 11 public-site columns dropped from `members` (`slug`, `photo_url`, `photo_alt`, `description`, `show_on_website`, `has_namecard`, `facebook`, `linkedin`, `instagram`, `tiktok`, `youtube`). swa-portal is now isolated from the `swa2024` public website for risk segregation. Remaining unchanged: **1C** (Phase 2 KV seed), **1D** (seed members via UI).
 
 > **19-07-2026 progress**: Local end-to-end test of the full intake flow (form → review → approve → member created → payment logged) **passed**. Hardening shipped the same day: PayNow screenshot now **mandatory** (form + server); uploaded signatures now go through the same client-side compression as PayNow (>1 MB → 1600px JPEG@70%); `/admin/forms/membership` drawer, list table, CSV export, and the notification email all aligned to the simplified form fields (+ PDPA consent shown as "Agreed"); approve flow now returns a friendly **409** when the applicant's email already exists on a member (including soft-deleted members — the UNIQUE index still applies). Local-dev ergonomics: dev-bypass mode no longer runs the API rate limiter (was blocking bulk deletes during testing), and a new `npm run db:clear:membership` script resets the local intake pipeline between test rounds (local-only, refuses `--remote`). Remaining unchanged: **1A** (apply migration to prod), **1C** (Phase 2 KV seed), **1D** (seed members via UI), **1J** (smoke-test prod).
 

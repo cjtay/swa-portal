@@ -353,6 +353,8 @@ The member directory (`/members`) is a searchable, filterable table of all SWA m
 
 ## 8. Namecard Management
 
+> **REMOVED 19-07-2026** — Public-website integration dropped. swa-portal is now isolated from swa2024. The `/namecards` page, the `/api/sync-website` plumbing, and the `members.slug`/`photo_url`/`description`/`show_on_website`/`has_namecard`/social-link columns were removed (see migration `006_remove_website_columns.sql`). Historical spec preserved below for audit only.
+
 ### What It Is
 
 The Namecards page (`/namecards`) shows which SWA members have namecard profiles that appear on the public website. A namecard on the public website includes the member's photo, role, description, and social media links.

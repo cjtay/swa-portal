@@ -4,27 +4,16 @@
 CREATE TABLE IF NOT EXISTS members (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
-  slug TEXT UNIQUE,
   role TEXT NOT NULL,
   email TEXT UNIQUE,
   mobile TEXT,
   job_title TEXT,
-  photo_url TEXT,
-  photo_alt TEXT,
-  description TEXT,
   category TEXT DEFAULT 'committee',
   can_login INTEGER DEFAULT 0,
-  show_on_website INTEGER DEFAULT 1,
-  has_namecard INTEGER DEFAULT 0,
   address_line1 TEXT,
   address_line2 TEXT,
   address_postal_code TEXT,
   address_country TEXT DEFAULT 'Singapore',
-  facebook TEXT,
-  linkedin TEXT,
-  instagram TEXT,
-  tiktok TEXT,
-  youtube TEXT,
   sort_order INTEGER DEFAULT 0,
   -- Membership lifecycle fields (migration 005)
   membership_status TEXT DEFAULT 'active',
@@ -107,8 +96,7 @@ CREATE TABLE IF NOT EXISTS membership_payments (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_members_slug ON members(slug);
-CREATE INDEX IF NOT EXISTS idx_members_email ON members(email);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_members_email ON members(email);
 CREATE INDEX IF NOT EXISTS idx_members_can_login ON members(can_login);
 CREATE INDEX IF NOT EXISTS idx_mempay_member ON membership_payments(member_id);
 CREATE INDEX IF NOT EXISTS idx_mempay_date ON membership_payments(paid_date);

@@ -629,10 +629,10 @@ export async function handleMembershipApprove(c: AppContext) {
   //    All-or-nothing — gtw2026 pattern from submit-tickets.ts.
   try {
     const memberStmt = c.env.DB.prepare(
-      `INSERT INTO members (name, nric, email, mobile, role, category, can_login, show_on_website,
+      `INSERT INTO members (name, nric, email, mobile, role, category, can_login,
                             address_line1, address_line2, address_postal_code,
                             membership_status, fee_due_date, fee_waived)
-       VALUES (?, ?, ?, ?, ?, 'member', 0, 0, ?, ?, ?, 'active', ?, 0)`,
+       VALUES (?, ?, ?, ?, ?, 'member', 0, ?, ?, ?, 'active', ?, 0)`,
     ).bind(
       fullName || null,
       nric || null,

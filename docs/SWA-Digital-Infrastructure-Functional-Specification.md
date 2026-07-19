@@ -233,6 +233,8 @@ The single source of truth for all SWA member information.
 
 #### 5.2.4 Namecard Management
 
+> **REMOVED 19-07-2026** — Public-website integration dropped. swa-portal is now isolated from swa2024; namecard management has been removed from this portal. Historical spec preserved below for audit only.
+
 Controls which members appear as digital namecards on the public website.
 
 - Lists members flagged for website display or namecard publication

@@ -10,10 +10,14 @@ const PUBLIC_PATHS = new Set([
   '/api/send-otp',
   '/api/verify-otp',
   '/api/turnstile-config',
+  // Dev-only role-picker login. Reachable when logged out (so the user can
+  // pick an identity from /login). Both handlers self-guard via
+  // isDevBypassActive and 404 in production.
+  '/api/dev/login',
+  '/api/dev/members',
 ]);
 
 const IT_ADMIN_ONLY_API = new Set([
-  '/api/sync-website',
   '/api/admin/settings',
 ]);
 
@@ -87,42 +91,44 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     return next();
   }
 
-  // 3c. Dev-only auth bypass. When DEV_BYPASS_AUTH==='true' (set in .dev.vars
-  // for `npm run dev:worker` only), inject a fake IT-admin session onto the
-  // context and skip the real HMAC cookie check. Production never sets the
-  // flag, so this entire block is unreachable there.
-  const dev = getDevBypassSession(c);
-  if (dev?.kind === 'abort') {
-    return c.json(
-      { success: false, error_code: 'DEV_BYPASS_MISCONFIG', message: 'DEV_BYPASS_AUTH set on non-localhost host.' },
-      500,
-    );
-  }
-  if (dev?.kind === 'session') {
-    c.set('sessionEmail', dev.data.email);
-    c.set('sessionName', dev.data.name);
-    c.set('sessionRole', dev.data.role);
-    c.set('sessionRegRole', dev.data.regRole);
-    // Rate limiter intentionally skipped in dev-bypass mode: local testing
-    // often needs bulk writes (e.g. deleting many members), and the bypass is
+  // 4. Require authentication for all remaining API routes.
+  // Real cookie wins over the dev-bypass injection — this lets
+  // /api/dev/login switch identities even while the bypass flag is on.
+  const session = await getSession(c);
+
+  if (session) {
+    c.set('sessionEmail', session.email);
+    c.set('sessionName', session.name);
+    c.set('sessionRole', session.role);
+    c.set('sessionRegRole', session.regRole ?? null);
+  } else {
+    // 4a. Dev-only auth bypass fallback. When DEV_BYPASS_AUTH==='true' (set in
+    // .dev.vars for `npm run dev:worker` only) and no real session cookie is
+    // present and no explicit dev-logout marker is set, inject a fake
+    // IT-admin session. Production never sets the flag, so this block is
+    // unreachable there. Rate limiter intentionally skipped in dev-bypass
+    // mode: local testing often needs bulk writes, and the bypass is
     // unreachable in prod (flag is .dev.vars-only, host must be localhost,
     // SESSION_SECRET must start with "local-dev-").
-    return next();
-  }
+    const dev = getDevBypassSession(c);
+    if (dev?.kind === 'abort') {
+      return c.json(
+        { success: false, error_code: 'DEV_BYPASS_MISCONFIG', message: 'DEV_BYPASS_AUTH set on non-localhost host.' },
+        500,
+      );
+    }
+    if (dev?.kind === 'session') {
+      c.set('sessionEmail', dev.data.email);
+      c.set('sessionName', dev.data.name);
+      c.set('sessionRole', dev.data.role);
+      c.set('sessionRegRole', dev.data.regRole);
+      return next();
+    }
 
-  // 4. Require authentication for all remaining API routes
-  const session = await getSession(c);
-  if (!session) {
     return c.json({ success: false, error_code: 'UNAUTHORIZED', message: 'Login required.' }, 401);
   }
 
-  // Attach session vars to context for downstream handlers
-  c.set('sessionEmail', session.email);
-  c.set('sessionName', session.name);
-  c.set('sessionRole', session.role);
-  c.set('sessionRegRole', session.regRole ?? null);
-
-  // 4. IT Admin only — all methods
+  // 5. IT Admin only — all methods
   if (IT_ADMIN_ONLY_API.has(path) || IT_ADMIN_ONLY_API.has(basePath)) {
     if (!(IT_ADMIN_EMAILS as readonly string[]).includes(session.email)) {
       return c.json({ success: false, error_code: 'FORBIDDEN', message: 'IT Admin access required.' }, 403);

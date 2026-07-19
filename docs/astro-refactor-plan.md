@@ -83,7 +83,6 @@ Same per-page treatment: extract inline `<script>` → `src/scripts/pages/<name>
 | Edit | Create (script) |
 |---|---|
 | `src/pages/members.astro` | `src/scripts/pages/members.ts` |
-| `src/pages/namecards.astro` | `src/scripts/pages/namecards.ts` |
 | `src/pages/office-booking.astro` | `src/scripts/pages/office-booking.ts` |
 | `src/pages/admin/forms/index.astro` | `src/scripts/pages/admin-forms-index.ts` |
 | `src/pages/admin/forms/volunteer.astro` | `src/scripts/pages/admin-forms-volunteer.ts` |

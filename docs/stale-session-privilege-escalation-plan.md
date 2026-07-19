@@ -27,7 +27,7 @@ The middleware (`middleware.ts`) only checks `session.role` on every request —
 
 ## Impact
 
-A former admin or committee member whose access has been revoked in the database can continue performing admin actions (member CRUD, sync-website, etc.) until their session cookie expires or they explicitly log out.
+A former admin or committee member whose access has been revoked in the database can continue performing admin actions (member CRUD, etc.) until their session cookie expires or they explicitly log out.
 
 ## Fix Summary
 

@@ -13,7 +13,9 @@ npm run db:clear:membership  # Clear local membership applications + approved te
 
 ## Project Status
 
-**Phase 1 partial complete.** Auth system, project scaffold, and base pages are done. Office booking UI, namecard management, and member directory UI still needed.
+**Phase 1 partial complete.** Auth system, project scaffold, member directory, and base pages are done. Office booking UI still needed.
+
+The public-website integration (namecards, `show_on_website`, `has_namecard`, `slug`, photo uploads, `/api/sync-website`) was **removed on 19-07-2026** — swa-portal is now isolated from the public `swa2024` website for risk segregation. Member profile/bio/socials are no longer managed here.
 
 See `docs/SWAPortal-Implementation-Plan.md` for full progress tracker.
 
@@ -24,6 +26,7 @@ See `docs/SWAPortal-Functional-Specs.md` for role access matrix, API permissions
 - **SWA brand colours** — purple palette: `swa-1 #70308c`, `swa-2 #450a5e`, `swa-3 #874ba1`, `swa-4 #f3d2ff`, `swa-5` (see `src/styles/admin.css`)
 - **Auth system** — OTP via email, HMAC-signed sessions in cookies (`swa_session`)
 - **Role tiers** — `admin` (D1 `category='admin'` or `IT_ADMIN_EMAILS`), `committee` session role (D1 `category='committee'` or `category='advisor'` with `can_login=1`). Advisor = same session tier as committee, but `fee_waived=1`.
+- **Local dev login** — With `DEV_BYPASS_AUTH=true` (`.dev.vars`), `/login` shows a "Dev quick login" picker listing every `can_login=1` member. `POST /api/dev/login { email }` signs a real `swa_session` cookie without OTP. Logout sets a `swa_dev_logout` marker so the bypass stays inert until you pick another identity. Real cookie always wins over the bypass injection. All dev-login paths 404 in prod.
 - **No emoji icons** in professional components
 
 ## Safety Standards
@@ -40,9 +43,9 @@ Three tiers. See `docs/SWAPortal-Functional-Specs.md` for the full access matrix
 
 | Role | How determined | What they can do |
 |------|---------------|------------------|
-| **IT Admin** | Email in `IT_ADMIN_EMAILS` (hardcoded) | Everything admin can do + infrastructure features (website sync, etc.) |
-| **Admin** | D1 `members.category = 'admin'` with `can_login=1` | Full CRUD on members, namecards, can cancel any booking |
-| **Committee** | D1 `members.category = 'committee'` (or `'advisor'`) with `can_login=1` | Read members/namecards, create/cancel own bookings |
+| **IT Admin** | Email in `IT_ADMIN_EMAILS` (hardcoded) | Everything admin can do + infrastructure features |
+| **Admin** | D1 `members.category = 'admin'` with `can_login=1` | Full CRUD on members, can cancel any booking |
+| **Committee** | D1 `members.category = 'committee'` (or `'advisor'`) with `can_login=1` | Read members, create/cancel own bookings |
 
 **Login eligibility**: `can_login = 1` in D1 members table. Email domain does not matter.
 
@@ -80,14 +83,16 @@ Secrets: `OTP_SECRET`, `SESSION_SECRET`, `RESEND_API_KEY` (set interactively via
 | `src/worker/api/send-otp.ts` | Generate + email OTP (D1 can_login check) |
 | `src/worker/api/verify-otp.ts` | Verify OTP + create session cookie (D1 name lookup) |
 | `src/worker/api/session.ts` | Read current session from `swa_session` cookie |
-| `src/worker/api/members.ts` | Member CRUD API (includes `slug`, `can_login` fields) |
+| `src/worker/api/members.ts` | Member CRUD API (includes `can_login`, membership lifecycle fields) |
 | `src/worker/api/bookings.ts` | Office booking CRUD API |
 | `src/worker/lib/rate-limit.ts` | General-purpose authenticated endpoint rate limiting |
-| `src/constants/portal.ts` | `IT_ADMIN_EMAILS`, session config, OTP TTL, rate limit constants |
-| `src/pages/login.astro` | Standalone login (NO AdminLayout — avoids redirect loop) |
+| `src/worker/lib/session-role.ts` | Shared `resolveSessionRole` — single source of truth for the IT-admin/admin/volunteer/committee mapping (used by verify-otp + dev-login) |
+| `src/constants/portal.ts` | `IT_ADMIN_EMAILS`, session config, OTP TTL, rate limit constants, `DEV_LOGOUT_COOKIE_NAME` |
+| `src/pages/login.astro` | Standalone login (NO AdminLayout — avoids redirect loop). Renders the dev role-picker when `/api/dev/members` succeeds |
+| `src/worker/api/dev-login.ts` | Dev-only role picker: `GET /api/dev/members` + `POST /api/dev/login`. Both 404 in prod (guarded by `isDevBypassActive`) |
 | `src/layouts/AdminLayout.astro` | Topbar nav with auth gate |
-| `schema.sql` | D1 schema with `can_login`, `slug`, `error_log` |
-| `seed-members.sql` | 19 member seed data (17 board + 2 IT admin) |
+| `schema.sql` | D1 schema with `can_login`, `membership_status`, `fee_due_date`, `fee_waived`, `error_log` |
+| `seed-members.sql` | 14 dummy members (12 board + 2 admin) for local dev only |
 
 ## Deployment
 - **Platform**: Cloudflare Workers + Hono
@@ -112,7 +117,6 @@ Secrets: `OTP_SECRET`, `SESSION_SECRET`, `RESEND_API_KEY` (set interactively via
 
 ## Next Steps
 - Office booking calendar UI (Phase 1D)
-- Namecard management UI + photo upload (Phase 1E)
 - Member directory with search/filter/pagination (Phase 1F)
 - Domain transfer: configure `admin.singaporewomenassociation.org` custom domain
 - Phase 2: Membership fees, payment reminders, member self-service
