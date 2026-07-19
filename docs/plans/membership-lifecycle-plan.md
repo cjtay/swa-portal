@@ -469,4 +469,29 @@ This plan never deletes anything. With the `committee → exco` rename dropped (
 
 ---
 
+## 13. Risk Assessment
+
+> Added 19-07-2026. Review before each phase execution.
+
+| # | Risk | Severity | Phase | Mitigation in plan | Gap / concern |
+|---|------|----------|-------|-------------------|---------------|
+| R1 | Cron fires in UTC, not SGT — wrong time of day for reminder emails | Medium | 2A | Gotcha #6 documents `"0 0 * * *"` = 08:00 SGT | Easy to misconfigure; must verify actual fire time via `wrangler tail` after deploy |
+| R2 | `export default` refactor (2A) breaks all existing API routes | **High** | 2A | Standard Hono pattern (`{ fetch: app.fetch, scheduled }`) | Must test ALL existing endpoints (auth, members, bookings, payments, membership-reg) after the change — one typo 404s the entire worker in prod |
+| R3 | Bulk email blast on first prod cron run | **High** | 2B | Feature flag (`membershipRemindersEnabled: false`) + dry-run endpoint (S8) | If flag is flipped to `true` without reviewing dry-run output, every non-waived member receives an email simultaneously |
+| R4 | No explicit deduplication guard — duplicate reminder emails | Medium | 2B | `membership_reminders` log table mentioned for recording sends | Plan does not explicitly state "skip if already sent for this offset + date". Cloudflare cron can double-fire on deploy; the job must be idempotent (check log before sending) |
+| R5 | `fakeToday` accidentally set in prod KV config | Medium | 2D | Prod config should never contain this key | No code safeguard — if set accidentally, all date logic uses the wrong "today" silently. Recommend: cron logs a warning and ignores `fakeToday` unless a separate `allowFakeToday: true` flag is also present |
+| R6 | Staging secrets drift from prod | Low | Testing | Same `RESEND_API_KEY` set for both environments | If the key rotates in prod but not staging, staging emails fail silently with no alert |
+| R7 | Phase 1D incomplete when Phase 2 ships — members have `NULL` fee_due_date | **High** | 2B | 1D listed as Phase 1 prerequisite | Members with `NULL` fee_due_date will be skipped or cause errors in the cron query. Pre-go-live check must assert zero non-waived members with NULL due date |
+| R8 | Roxanne's `members` row not created before staging UAT | Low | Testing | Documented as operational task in §11 open questions | She cannot log in to staging despite being in `MEMBERSHIP_APPROVER_EMAILS` — D1 auth requires the row to exist |
+| R9 | Turnstile blocks staging `*.workers.dev` hostname | Low | Testing | Open item #6 in testing strategy | Prod-only site key rejects staging requests; dev-bypass needs explicit staging secret or a separate Turnstile key |
+| R10 | Inactive members receive reminders indefinitely (no cap) | Low (by design) | 2B | Explicit SWA decision (13-07-2026): "Inactive members will still be sent the same reminders" | No upper bound — a member who never pays gets emailed every year forever. Potential spam complaints or deliverability damage over time |
+
+### Highest-priority mitigations to implement
+
+1. **R2**: After the `export default` change, run a full endpoint smoke test (all routes return non-500) before deploying to staging.
+2. **R7**: Add a pre-go-live assertion in the dry-run endpoint: `SELECT COUNT(*) FROM members WHERE fee_waived = 0 AND fee_due_date IS NULL AND deleted_at IS NULL` — block enablement if > 0.
+3. **R3 + R4**: The dry-run endpoint (S8) must show the full would-send list AND the cron must check `membership_reminders` for an existing row (same member + same offset + same date) before sending.
+
+---
+
 *This plan is the single source of truth for the membership redesign. Update the checkboxes as work progresses.*

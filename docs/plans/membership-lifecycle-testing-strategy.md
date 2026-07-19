@@ -1,7 +1,7 @@
 # Membership Lifecycle — Testing Strategy
 
 > **Status**: Strategy confirmed 13-07-2026. Ready to execute.
-> **Companion to**: `docs/membership-lifecycle-plan.md` (the implementation plan this strategy validates).
+> **Companion to**: `docs/plans/membership-lifecycle-plan.md` (the implementation plan this strategy validates).
 > **Goal**: Test the membership lifecycle — especially the Phase 2 cron-driven email reminders — without risking production data, and in a way that lets SWA team members (Angela Wong, Roxanne Zhang) participate in UAT without access to the developer's laptop.
 
 ---
@@ -207,4 +207,30 @@ Verify each step via:
 
 ---
 
-*This document is the testing companion to `docs/membership-lifecycle-plan.md`. Update the step checkboxes as work progresses.*
+## 12. Risk Register (testing-specific)
+
+> Added 19-07-2026. Cross-references `membership-lifecycle-plan.md` §13.
+
+| Ref | Risk | Testing-layer mitigation | Action required |
+|-----|------|--------------------------|-----------------|
+| R2 | `export default` refactor breaks all routes | Layer 2 (local `wrangler dev`) | After S3, curl every existing route (login, session, members CRUD, bookings, payments, membership-reg) and assert non-500 before deploying to staging |
+| R3 | Bulk email blast on first prod run | Layer 4 (pre-prod dry-run, S8) | Dry-run output must be reviewed and signed off by Angela/Roxanne before S9. No flag flip without explicit approval |
+| R4 | Duplicate reminder emails (cron double-fire) | Layer 1 (unit tests) + Layer 3 (staging) | Add test case: fire `runReminders(env, fakeToday)` twice with the same `fakeToday`; assert zero duplicate rows in `membership_reminders`. Staging hourly cron will naturally exercise this |
+| R5 | `fakeToday` accidentally set in prod KV | Layer 4 (pre-prod) + code guard | Cron must log a warning and ignore `fakeToday` unless `allowFakeToday: true` is also present in config. Add a unit test for this guard |
+| R7 | Members with NULL `fee_due_date` when Phase 2 goes live | Layer 4 (pre-prod dry-run, S7) | Dry-run endpoint must assert: `SELECT COUNT(*) FROM members WHERE fee_waived = 0 AND fee_due_date IS NULL AND deleted_at IS NULL` — if > 0, return an error listing the members and block enablement |
+| R9 | Turnstile blocks staging hostname | S0 setup | Before S4, confirm whether the existing Turnstile site key covers `*.workers.dev`. If not, create a staging key or set `DEV_BYPASS_AUTH=true` as a staging secret |
+| R10 | Inactive members emailed indefinitely | Layer 3 (staging walk-through) | During S5, verify row #6 (inactive, 60 days overdue) still receives reminders — confirm this is intended behaviour and document the expectation in the reminders dashboard UI |
+
+### Test cases to add (from risks)
+
+| ID | Scenario | Expected | Layer |
+|----|----------|----------|-------|
+| TC-R4 | Run `runReminders(env, "2027-01-01")` twice | Second run inserts 0 new rows | Unit |
+| TC-R5 | Config has `fakeToday` but no `allowFakeToday` | Cron uses real today, logs warning | Unit |
+| TC-R7 | 2 members have `fee_waived=0, fee_due_date=NULL` | Dry-run returns 400 with member list | Integration |
+| TC-R2 | After `export default` change, hit `/api/session` | Returns 200 with valid session JSON | Local dev |
+| TC-R3 | Dry-run shows 15 would-send emails | Angela confirms list is correct before S9 | Manual (S8) |
+
+---
+
+*This document is the testing companion to `docs/plans/membership-lifecycle-plan.md`. Update the step checkboxes as work progresses.*
