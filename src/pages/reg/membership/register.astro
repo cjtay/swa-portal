@@ -414,9 +414,9 @@ import '../../../styles/membership-form.css';
           </section>
 
           <section class="mf-section">
-            <span class="mf-section-title">PayNow Completion Screenshot</span>
+            <span class="mf-section-title">PayNow Completion Screenshot <span class="mf-req">*</span></span>
             <p style="font-size:0.85rem;color:#4b5563;margin:0 0 0.7rem;">
-              After making payment, photograph or screenshot the successful transfer and upload it here.
+              After making payment, photograph or screenshot the successful transfer and upload it here. This is required.
             </p>
             <label class="mf-upload-area" for="paynowScreenshot">
               <div class="mf-upload-label">Tap to upload screenshot</div>
@@ -542,9 +542,11 @@ import '../../../styles/membership-form.css';
       tabDraw.addEventListener('click', () => switchSigTab('draw'));
       tabUpload.addEventListener('click', () => switchSigTab('upload'));
 
-      // Signature upload
+      // Signature upload — resized like the PayNow screenshot (>1 MB →
+      // 1600 px JPEG @ 70%), since a phone photo of an ink signature is
+      // typically several MB.
       const sigUpload = document.getElementById('signatureUpload') as HTMLInputElement;
-      sigUpload.addEventListener('change', () => {
+      sigUpload.addEventListener('change', async () => {
         const file = sigUpload.files && sigUpload.files[0];
         if (!file) return;
         if (file.size > 10 * 1024 * 1024) {
@@ -552,8 +554,12 @@ import '../../../styles/membership-form.css';
           sigUpload.value = '';
           return;
         }
-        signatureUploadFile = file;
-        showPreview('signature-preview', 'signature-preview-img', file);
+        try {
+          signatureUploadFile = await resizeImage(file);
+        } catch {
+          signatureUploadFile = file;
+        }
+        showPreview('signature-preview', 'signature-preview-img', signatureUploadFile);
         (sigUpload.closest('.mf-upload-area') as HTMLElement).classList.add('is-hidden');
         setError('signature', '');
       });
@@ -700,6 +706,8 @@ import '../../../styles/membership-form.css';
 
       const recommendedBy = (document.getElementById('recommendedBy') as HTMLInputElement).value.trim();
       if (!recommendedBy) errors.recommendedBy = 'Please state who recommended you.';
+
+      if (!paynowFile) errors.paynow = 'Please upload your PayNow completion screenshot.';
 
       const sigBlob = getSignatureBlob();
       if (!sigBlob) errors.signature = 'Please draw or upload your signature.';

@@ -8,6 +8,7 @@ npm run dev:worker       # Wrangler dev (static + API) at localhost:8787
 npm run build            # Production build
 npm run deploy           # Build + deploy to Cloudflare Workers
 npm run cf-typegen       # Regenerate worker-configuration.d.ts
+npm run db:clear:membership  # Clear local membership applications + approved test members (LOCAL only)
 ```
 
 ## Project Status
@@ -31,6 +32,7 @@ See `docs/SWAPortal-Functional-Specs.md` for role access matrix, API permissions
 - **Package safety** — Before running `npm install <package>` or downloading any external library/asset, explain what the package does, why it is needed, and any transitive dependencies it introduces. Ask for confirmation before installing. This prevents supply chain attacks and unnecessary bloat.
 - **Verify changes** — Run the project's typecheck/lint/build command before committing to catch errors.
 - **Pre-commit review** — A `.githooks/pre-commit` script lists all staged files (new, deleted, modified) and prompts for confirmation before every `git commit`. Enable on fresh clone: `git config core.hooksPath .githooks`
+- **Destructive local scripts are user-invoked only** — Never run `npm run db:clear:membership`, `npm run db:setup`, or `npm run db:seed` autonomously, even for test cleanup. Only run them when the user explicitly asks in the current message.
 
 ## Role Access
 

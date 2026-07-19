@@ -14,7 +14,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:0.75rem;flex-wrap:wrap;">
       <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
-        <input type="search" id="search-input" class="form-input" placeholder="Search by name, email, reference, or NRIC..." style="width:300px;max-width:100%;" />
+        <input type="search" id="search-input" class="form-input" placeholder="Search by name, email, or reference..." style="width:300px;max-width:100%;" />
         <button class="btn btn-secondary" id="export-btn">Export CSV</button>
       </div>
       <span id="count-label" style="color:var(--text-muted);font-size:0.85rem;"></span>
@@ -26,10 +26,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
             <th class="sortable" data-sort="id">Ref</th>
             <th class="sortable" data-sort="full_name">Full Name</th>
             <th class="sortable" data-sort="email">Email</th>
-            <th>NRIC/FIN</th>
             <th>Mobile No.</th>
-            <th>Postal Code</th>
-            <th>Intent</th>
             <th>Amount</th>
             <th>Status</th>
             <th>Signature</th>
@@ -221,12 +218,6 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   let sortColumn: string | null = null;
   let sortDirection: 'asc' | 'desc' = 'asc';
 
-  const INTENT_LABELS: Record<string, string> = {
-    administration: 'Administration',
-    services: 'Services',
-    supportive: 'Supportive',
-  };
-
   function sortSubmissions() {
     if (!sortColumn) return;
     const dir = sortDirection === 'asc' ? 1 : -1;
@@ -260,12 +251,12 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         allSubmissions = data.submissions;
         renderSubmissions();
       } else if (data.error_code === 'FORBIDDEN') {
-        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--danger);">You do not have permission to view submissions.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--danger);">You do not have permission to view submissions.</td></tr>';
       } else {
-        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-muted);">Could not load submissions.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);">Could not load submissions.</td></tr>';
       }
     } catch {
-      tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-muted);">Network error.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);">Network error.</td></tr>';
     }
   }
 
@@ -317,15 +308,14 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       ? allSubmissions.filter((s: any) =>
           (s.full_name || '').toLowerCase().includes(search) ||
           (s.email || '').toLowerCase().includes(search) ||
-          (s.payment_reference || '').toLowerCase().includes(search) ||
-          (s.nric || '').toLowerCase().includes(search))
+          (s.payment_reference || '').toLowerCase().includes(search))
       : allSubmissions;
 
     const tbody = document.getElementById('submissions-list')!;
     const countLabel = document.getElementById('count-label')!;
 
     if (filtered.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-muted);">No submissions found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);">No submissions found.</td></tr>';
       countLabel.textContent = allSubmissions.length === 0 ? '' : `${filtered.length} of ${allSubmissions.length}`;
       return;
     }
@@ -343,10 +333,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         <td style="font-family:'Courier New',monospace;font-size:0.78rem;color:var(--swa-2);white-space:nowrap;">${escapeHtml(s.payment_reference || '')}</td>
         <td>${escapeHtml(s.full_name || '')}</td>
         <td>${escapeHtml(s.email || '')}</td>
-        <td>${escapeHtml(s.nric || '')}</td>
         <td>${dash(s.handphone || '')}</td>
-        <td>${dash(s.address_postal_code || '')}</td>
-        <td>${escapeHtml(INTENT_LABELS[s.membership_intent] || s.membership_intent || '')}</td>
         <td>$${Number(s.payment_amount || 0).toFixed(2)}</td>
         <td>${statusCell}</td>
         <td>${sigCell}</td>
@@ -367,9 +354,6 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     const s = allSubmissions.find((x) => Number(x.id) === id);
     if (!s) return;
     const body = document.getElementById('drawer-body')!;
-    const fullAddress = [s.address_line1, s.address_line2, s.address_postal_code]
-      .filter((x: string) => x && String(x).length > 0)
-      .join(', ');
 
     const sigBlock = s.signature_r2_key
       ? `<div class="detail-image-block"><h3>Signature (${escapeHtml(s.signature_method === 'draw' ? 'Drawn' : 'Uploaded')})</h3><img src="/api/admin/forms/membership/image/${s.id}/signature" alt="Signature" /></div>`
@@ -382,21 +366,10 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       <div class="detail-grid">
         <dt>Reference</dt><dd style="font-family:'Courier New',monospace;color:var(--swa-2);">${escapeHtml(s.payment_reference || '')}</dd>
         <dt>Full Name</dt><dd>${escapeHtml(s.full_name || '')}</dd>
-        <dt>NRIC/FIN</dt><dd>${escapeHtml(s.nric || '')}</dd>
         <dt>Email</dt><dd>${escapeHtml(s.email || '')}</dd>
         <dt>Mobile No.</dt><dd>${dash(s.handphone || '')}</dd>
-        <dt>Telephone (Home)</dt><dd>${dash(s.phone_home || '')}</dd>
-        <dt>Telephone (Office)</dt><dd>${dash(s.phone_office || '')}</dd>
-        <dt>Address</dt><dd>${dash(fullAddress)}</dd>
-        <dt>Date of Birth</dt><dd>${dash(s.date_of_birth || '')}</dd>
-        <dt>Place of Birth</dt><dd>${dash(s.place_of_birth || '')}</dd>
-        <dt>Citizenship</dt><dd>${dash(s.citizenship || '')}</dd>
-        <dt>Occupation</dt><dd>${dash(s.occupation || '')}</dd>
-        <dt>Membership Intent</dt><dd>${escapeHtml(INTENT_LABELS[s.membership_intent] || s.membership_intent || '')}</dd>
         <dt>Recommended By</dt><dd>${dash(s.recommended_by || '')}</dd>
-        <dt>Hobbies / Interests</dt><dd>${dash(s.hobbies || '')}</dd>
-        <dt>Skills / Experiences</dt><dd>${dash(s.skills_experiences || '')}</dd>
-        <dt>Other Associations</dt><dd>${dash(s.other_associations || '')}</dd>
+        <dt>PDPA Consent</dt><dd>${Number(s.pdpa_consent) === 1 ? 'Agreed' : '<span style="color:var(--text-muted);">&mdash;</span>'}</dd>
         <dt>Payment Amount</dt><dd>$${Number(s.payment_amount || 0).toFixed(2)}</dd>
         <dt>Status</dt><dd>${statusBadge(s.status || 'pending')}</dd>
         ${s.member_id ? `<dt>Member ID</dt><dd><a href="/admin/settings/tables" style="color:var(--swa-1);">#${escapeHtml(String(s.member_id))}</a></dd>` : ''}

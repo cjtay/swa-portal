@@ -17,7 +17,8 @@
     "astro": "astro",
     "cf-typegen": "wrangler types src/worker/worker-configuration.d.ts",
     "db:setup": "node scripts/db-setup.mjs",
-    "db:seed": "node scripts/db-setup.mjs --seed-only"
+    "db:seed": "node scripts/db-setup.mjs --seed-only",
+    "db:clear:membership": "node scripts/db-clear-membership.mjs"
   },
   "dependencies": {
     "astro": "^7",

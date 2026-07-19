@@ -103,17 +103,10 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     c.set('sessionName', dev.data.name);
     c.set('sessionRole', dev.data.role);
     c.set('sessionRegRole', dev.data.regRole);
-    // Still run the per-user rate limiter below (uses session.email), then next().
-    const endpointKeyDev = getEndpointKey(path, method);
-    if (endpointKeyDev) {
-      const rlResult = await checkApiRateLimit(c.env.SWA_SESSION, endpointKeyDev, dev.data.email);
-      if (!rlResult.allowed) {
-        return c.json(
-          { success: false, error_code: 'RATE_LIMITED', message: 'Too many requests. Please try again later.' },
-          429,
-        );
-      }
-    }
+    // Rate limiter intentionally skipped in dev-bypass mode: local testing
+    // often needs bulk writes (e.g. deleting many members), and the bypass is
+    // unreachable in prod (flag is .dev.vars-only, host must be localhost,
+    // SESSION_SECRET must start with "local-dev-").
     return next();
   }
 

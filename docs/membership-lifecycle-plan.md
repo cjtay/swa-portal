@@ -2,7 +2,7 @@
 
 > **Status**: Phase 1 **code complete** (14-07-2026) — build passes, typecheck clean. Migration written but **not yet applied to D1** (local or prod). The planned `committee→exco` rename was **dropped on 15-07-2026** — `committee` is retained. Awaiting migration apply + prod deploy. Phased, additive rollout — no destructive changes to production data.
 > **Date planned**: 06-07-2026
-> **Last updated**: 14-07-2026 (Phase 1 build executed: migration 005 written, approve-flow rewritten with gtw2026 patterns, members UI + payment API shipped, all docs swept)
+> **Last updated**: 19-07-2026 (local end-to-end UAT passed; PayNow screenshot made mandatory; signature-upload compression; admin surfaces aligned to simplified form + PDPA field; approve 409 on duplicate email; dev-bypass rate-limiter skip; `db:clear:membership` local reset script)
 > **Replaces**: The half-built membership feature (commits `5684268`, `2f49cd0`) — 3 confusing tables, only first-year intake wired up, no renewals, no reminders.
 > **Repo**: `swa-portal`
 
@@ -262,6 +262,8 @@ The approve/reject handlers in `src/worker/api/membership-reg.ts` swap their `se
 
 **Phase 1 deliverable**: A clean members list where each person has a clear role (editable), status, and editable fee due date. You can record payments manually. The public form is simpler. The old confusing tables are dormant. **Nothing automatic has run.**
 
+> **19-07-2026 progress**: Local end-to-end test of the full intake flow (form → review → approve → member created → payment logged) **passed**. Hardening shipped the same day: PayNow screenshot now **mandatory** (form + server); uploaded signatures now go through the same client-side compression as PayNow (>1 MB → 1600px JPEG@70%); `/admin/forms/membership` drawer, list table, CSV export, and the notification email all aligned to the simplified form fields (+ PDPA consent shown as "Agreed"); approve flow now returns a friendly **409** when the applicant's email already exists on a member (including soft-deleted members — the UNIQUE index still applies). Local-dev ergonomics: dev-bypass mode no longer runs the API rate limiter (was blocking bulk deletes during testing), and a new `npm run db:clear:membership` script resets the local intake pipeline between test rounds (local-only, refuses `--remote`). Remaining unchanged: **1A** (apply migration to prod), **1C** (Phase 2 KV seed), **1D** (seed members via UI), **1J** (smoke-test prod).
+
 > **15-07-2026 progress**: Migration `005` applied to **local D1** and verified (columns present, payments table created, GET/POST/PATCH endpoints return HTTP 200 — no 500s). The `committee→exco` rename was **dropped** (item 1B rewritten); `committee` retained. Items 1B, 1E, 1F, 1G, 1H, 1I remain **code-complete**. Remaining: **1A** (back up prod → apply migration to prod), **1C** (Phase 2 KV seed), **1D** (seed members via UI), **1J** (smoke-test). No data UPDATE on prod is needed anymore (rename dropped).
 
 > **14-07-2026 progress**: All Phase 1 code is written and builds clean. Items 1B (code), 1E, 1F, 1G, 1H (incl. server hardening), and 1I are **complete**. Remaining: **1A** (apply migration to D1), **1B** (run data rename on prod), **1C** (Phase 2 KV seed), **1D** (seed members via UI), **1J** (smoke-test). The gtw2026 patterns (atomic DB.batch, idempotent retry, waitUntil for emails, request_body in error_log) were adopted throughout.
@@ -315,7 +317,7 @@ Not built until explicitly requested.
 | Email | **Keep** | Required |
 | Mobile (handphone) | **Keep** | Required |
 | Recommended By | **Keep** | Required. **Placeholder changed from "Name of an existing SWA member" to "SWA Board Member".** |
-| PayNow screenshot | **Keep** | Optional image upload |
+| PayNow screenshot | **Keep** | **Required** image upload (changed from optional, 19-07-2026) |
 | Signature (draw/upload) | **Keep** | Required |
 | PDPA consent checkbox | **New** | Required. Replaces the old "Declaration" checkbox. See text below. |
 | Turnstile security check | **Keep** | Required |
@@ -409,6 +411,12 @@ This plan never deletes anything. With the `committee → exco` rename dropped (
 | 13-07-2026 | Registration form: replace "Declaration" checkbox with a **PDPA consent** checkbox | Per SWA review: standard data-use disclaimer for processing/administering membership |
 | 13-07-2026 | Registration form: add top-of-form instruction block — Singaporean/PR eligibility + fee-tier explanation | Per SWA review: "so they can decide when to apply" |
 | 13-07-2026 | **Form cleanup batch (Q1–Q6) executed**: removed NRIC/address/DOB/citizenship/occupation/hobbies/skills/associations/intent/telephone from the public registration form; replaced Constitution Declaration with PDPA consent (stored in new `pdpa_consent` column via migration 005); referrer placeholder → "SWA Board Member"; added eligibility + tiered-fee callout; added `MEMBERSHIP_APPROVER_EMAILS` constant (not yet wired); extended `/api/membership/config` to return tiered fees; `payment_amount` now tier-resolved at submission by month. Tiered fees hardcoded in `portal.ts`. | Pre-Phase-1 form hygiene per §7. No destructive schema change; removed fields stay as columns (harmless, reversible). Approver-email wiring and `exco` rename deferred (D1, D2). Tier re-check at approval time deferred to 1G. |
+| 19-07-2026 | **PayNow screenshot mandatory** at submission (was "optional but recommended"). Client + server validation; `paynow_r2_key` column stays nullable for historical rows. | Per user decision — proof of payment required before review |
+| 19-07-2026 | **Uploaded signatures compressed** via the same `resizeImage()` path as PayNow (>1 MB → 1600px JPEG@70%). Previously uploads were stored byte-for-byte (10 MB cap only). | Phone photos of ink signatures are multi-MB; closes the one uncompressed upload path |
+| 19-07-2026 | **Admin surfaces aligned to the simplified form**: `/admin/forms/membership` drawer + list table + CSV export + notification email dropped all legacy fields (NRIC, address, DOB, citizenship, occupation, intent, hobbies, skills, associations, telephones); PDPA consent displayed as "Agreed". Legacy DB columns kept (dormant). | Fields no longer collected were rendering as permanent dashes |
+| 19-07-2026 | **Approve flow returns 409 on duplicate member email**, naming the existing member — including **soft-deleted** members (the `members.email` UNIQUE index applies regardless of `deleted_at`). Previously a raw 500. | Found during local UAT: soft-deleted seed dummies blocked approvals invisibly |
+| 19-07-2026 | **Dev-bypass mode skips the API rate limiter** (`middleware.ts`). Prod sessions unaffected — limiter still applies to all authenticated writes. | 10-per-15-min cap on `members:delete` blocked local bulk cleanup; bypass is already triple-guarded (`.dev.vars` flag, `local-dev-` secret prefix, localhost host) |
+| 19-07-2026 | **`npm run db:clear:membership`** — local-only script clearing the intake pipeline (applications + approved test members + their payments, FK-safe order). Hardcoded `--local`, refuses `--remote`. Docs: `docs/seeding/clear-local-membership-data.md`. Rule added to `AGENTS.md`: destructive local scripts are user-invoked only (agents must not run them autonomously). | Repeatable local test reset without manual UI deletion |
 
 ---
 

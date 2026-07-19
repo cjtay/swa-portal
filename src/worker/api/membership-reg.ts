@@ -165,8 +165,16 @@ export async function handleMembershipRegister(c: AppContext) {
   let signatureR2Key: string | null = null;
   let signatureMethod: 'draw' | 'upload' = 'draw';
 
-  // PayNow screenshot — optional but recommended
-  if (paynowFile instanceof File && paynowFile.size > 0) {
+  // PayNow screenshot — REQUIRED (per 2026-07-19 decision: proof of payment
+  // is mandatory at submission). The paynow_r2_key column stays nullable so
+  // historical rows submitted while it was optional remain valid.
+  if (!(paynowFile instanceof File) || paynowFile.size === 0) {
+    return c.json(
+      { success: false, error_code: 'VALIDATION_ERROR', message: 'PayNow completion screenshot is required.', errors: { paynow: 'Please upload your PayNow completion screenshot.' } },
+      400,
+    );
+  }
+  {
     const ext = imageExtension(paynowFile.type);
     if (!ext || !ALLOWED_MIME.has(paynowFile.type)) {
       return c.json(
@@ -300,23 +308,10 @@ export async function handleMembershipRegister(c: AppContext) {
       sendNotification(env, {
         reference: paymentReference,
         fullName: d.fullName,
-        nric: d.nric,
         email: d.email,
         handphone: d.handphone,
-        phoneHome: d.phoneHome,
-        phoneOffice: d.phoneOffice,
-        addressLine1: d.addressLine1,
-        addressLine2: d.addressLine2,
-        addressPostalCode: d.addressPostalCode,
-        dateOfBirth: d.dateOfBirth,
-        placeOfBirth: d.placeOfBirth,
-        citizenship: d.citizenship,
-        occupation: d.occupation,
-        hobbies: d.hobbies,
-        skillsExperiences: d.skillsExperiences,
-        otherAssociations: d.otherAssociations,
-        membershipIntent: d.membershipIntent,
         recommendedBy: d.recommendedBy,
+        pdpaConsent: d.pdpaConsent,
         paymentReference,
         paymentAmount: firstYearFee,
         signatureMethod,
@@ -392,9 +387,9 @@ export async function handleMembershipSubmissions(c: AppContext) {
   const params: unknown[] = [];
 
   if (search) {
-    query += ' AND (full_name LIKE ? OR email LIKE ? OR payment_reference LIKE ? OR nric LIKE ?)';
+    query += ' AND (full_name LIKE ? OR email LIKE ? OR payment_reference LIKE ?)';
     const term = `%${search}%`;
-    params.push(term, term, term, term);
+    params.push(term, term, term);
   }
   query += ' ORDER BY created_at DESC, id DESC LIMIT 500';
 
@@ -432,23 +427,10 @@ export async function handleMembershipExport(c: AppContext) {
   const headers = [
     'Reference',
     'Full Name',
-    'NRIC/FIN',
     'Email',
     'Mobile No.',
-    'Telephone (Home)',
-    'Telephone (Office)',
-    'Address Line 1',
-    'Address Line 2',
-    'Postal Code',
-    'Date of Birth',
-    'Place of Birth',
-    'Citizenship',
-    'Occupation',
-    'Membership Intent',
     'Recommended By',
-    'Hobbies / Interests',
-    'Skills / Experiences',
-    'Other Associations',
+    'PDPA Consent',
     'PayNow Reference',
     'Payment Amount',
     'Signature Method',
@@ -462,35 +444,16 @@ export async function handleMembershipExport(c: AppContext) {
     'User Agent',
   ];
 
-  const intentLabels: Record<string, string> = {
-    administration: 'Administration',
-    services: 'Services',
-    supportive: 'Supportive',
-  };
-
   const lines: string[] = [headers.map(csvEscape).join(',')];
 
   for (const row of results) {
     const values = [
       String(row.payment_reference || ''),
       String(row.full_name || ''),
-      String(row.nric || ''),
       String(row.email || ''),
       String(row.handphone || ''),
-      String(row.phone_home || ''),
-      String(row.phone_office || ''),
-      String(row.address_line1 || ''),
-      String(row.address_line2 || ''),
-      String(row.address_postal_code || ''),
-      String(row.date_of_birth || ''),
-      String(row.place_of_birth || ''),
-      String(row.citizenship || ''),
-      String(row.occupation || ''),
-      intentLabels[String(row.membership_intent || '')] || String(row.membership_intent || ''),
       String(row.recommended_by || ''),
-      String(row.hobbies || ''),
-      String(row.skills_experiences || ''),
-      String(row.other_associations || ''),
+      Number(row.pdpa_consent) === 1 ? 'Agreed' : '',
       String(row.payment_reference || ''),
       String(row.payment_amount || ''),
       row.signature_method === 'draw' ? 'Drawn' : 'Uploaded',
@@ -637,6 +600,31 @@ export async function handleMembershipApprove(c: AppContext) {
 
   let memberId: number | undefined;
 
+  // Friendly conflict: members.email is UNIQUE — including for soft-deleted
+  // members (the unique index does not exclude deleted_at rows). If a member
+  // with this email already exists (e.g. a duplicate application, a deleted
+  // member, or local seed data reusing a test address), the INSERT below
+  // would fail with a raw constraint error. Surface a 409 naming the
+  // existing member so the reviewer can resolve the duplicate first.
+  if (email) {
+    const existing = await c.env.DB.prepare(
+      'SELECT id, name, deleted_at FROM members WHERE email = ?',
+    ).bind(email).first();
+    if (existing) {
+      const isDeleted = existing.deleted_at != null;
+      return c.json(
+        {
+          success: false,
+          error_code: 'CONFLICT',
+          message: isDeleted
+            ? `A deleted member with this email already exists (Member #${existing.id} — ${existing.name}). Restore or permanently remove that record in the Members list before approving.`
+            : `A member with this email already exists (Member #${existing.id} — ${existing.name}). Resolve the duplicate in the Members list before approving.`,
+        },
+        409,
+      );
+    }
+  }
+
   // 4. Atomic batch: INSERT member + INSERT payment + UPDATE application.
   //    All-or-nothing — gtw2026 pattern from submit-tickets.ts.
   try {
@@ -686,6 +674,18 @@ export async function handleMembershipApprove(c: AppContext) {
     ]);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    // Race variant of the pre-check above (two approves in flight, or a
+    // member created between check and insert).
+    if (msg.includes('UNIQUE constraint failed') && msg.includes('members.email')) {
+      return c.json(
+        {
+          success: false,
+          error_code: 'CONFLICT',
+          message: 'A member with this email already exists. Resolve the duplicate in the Members list before approving.',
+        },
+        409,
+      );
+    }
     if (isRetryableD1Error(msg)) {
       return c.json(
         { success: false, error_code: 'D1_WRITE_FAILED', message: 'Transient database error. Please retry.' },
@@ -981,23 +981,10 @@ function validateSubmission(b: Record<string, unknown>): { data: Validated; erro
 interface NotificationPayload {
   reference: string;
   fullName: string;
-  nric: string;
   email: string;
   handphone: string;
-  phoneHome: string;
-  phoneOffice: string;
-  addressLine1: string;
-  addressLine2: string;
-  addressPostalCode: string;
-  dateOfBirth: string;
-  placeOfBirth: string;
-  citizenship: string;
-  occupation: string;
-  hobbies: string;
-  skillsExperiences: string;
-  otherAssociations: string;
-  membershipIntent: string;
   recommendedBy: string;
+  pdpaConsent: boolean;
   paymentReference: string;
   paymentAmount: number;
   signatureMethod: string;
