@@ -5,6 +5,13 @@
 # Dev-only auth bypass. When 'true', the auth middleware short-circuits with a
 # fake IT-admin session so you can use the portal without OTP login.
 # NEVER set this in wrangler.jsonc `vars` or via `wrangler secret put`.
+#
+# With the bypass on, /login also shows a "Dev quick login" panel listing
+# every member with can_login=1 — click any one to switch identity instantly
+# (POST /api/dev/login sets a real signed swa_session cookie). Logging out
+# drops a swa_dev_logout marker cookie so the bypass stays inert and you
+# remain logged out until you pick another identity. Both behaviours are
+# inert in production (the dev endpoints 404 there).
 DEV_BYPASS_AUTH=true
 
 # Local secrets — any non-empty string works for HMAC while developing.

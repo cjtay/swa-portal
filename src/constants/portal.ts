@@ -5,6 +5,12 @@ export const IT_ADMIN_EMAILS = [
 ] as const;
 
 export const SESSION_COOKIE_NAME = 'swa_session';
+// Marker cookie set by `DELETE /api/session` when the dev bypass is active.
+// While present, `getDevBypassSession` returns null so the portal behaves as
+// logged-out — letting you reach `/login` and pick a different dev identity
+// via the dev role-picker. Cleared by `POST /api/dev/login`. Production never
+// sets it: `handleLogout` only emits it when `isDevBypassActive` is true.
+export const DEV_LOGOUT_COOKIE_NAME = 'swa_dev_logout';
 export const SESSION_DEFAULT_EXPIRY_MS = 12 * 60 * 60 * 1000;
 export const SESSION_EXTENDED_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
 export const OTP_TTL_SECONDS = 300;

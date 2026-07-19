@@ -1,7 +1,8 @@
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { signHmac, timingSafeEqual, base64urlEncode } from '../lib/crypto';
-import { IT_ADMIN_EMAILS, SESSION_COOKIE_NAME, SESSION_DEFAULT_EXPIRY_MS, SESSION_EXTENDED_EXPIRY_MS, OTP_TTL_SECONDS, VERIFY_RATE_LIMIT_WINDOW_SECONDS, VERIFY_RATE_LIMIT_MAX_ATTEMPTS_IP, VERIFY_RATE_LIMIT_MAX_ATTEMPTS_EMAIL, VERIFY_MAX_FAILURES_PER_OTP } from '../../constants/portal';
+import { resolveSessionRole } from '../lib/session-role';
+import { SESSION_COOKIE_NAME, SESSION_DEFAULT_EXPIRY_MS, SESSION_EXTENDED_EXPIRY_MS, OTP_TTL_SECONDS, VERIFY_RATE_LIMIT_WINDOW_SECONDS, VERIFY_RATE_LIMIT_MAX_ATTEMPTS_IP, VERIFY_RATE_LIMIT_MAX_ATTEMPTS_EMAIL, VERIFY_MAX_FAILURES_PER_OTP } from '../../constants/portal';
 
 async function checkVerifyRateLimit(kv: KVNamespace, ip: string, email: string): Promise<{ allowed: boolean; message?: string }> {
   const ipKey = `swa:rl:verify:ip:${ip}`;
@@ -94,34 +95,11 @@ export async function handleVerifyOtp(c: Context<{ Bindings: Env }>) {
   await env.SWA_SESSION.delete(`swa:rl:verify:email:${email}`);
   await env.SWA_SESSION.delete(`swa:rl:verify:fail:${email}`);
 
-  const isItAdmin = (IT_ADMIN_EMAILS as readonly string[]).includes(email);
-
   const member = await env.DB.prepare(
     'SELECT name, category, reg_role FROM members WHERE email = ? AND can_login = 1 AND deleted_at IS NULL'
   ).bind(email).first();
 
-  const name = (member && member.name) ? member.name as string : email.split('@')[0].replace(/[._-]/g, ' ');
-
-  let role: string;
-  if (isItAdmin) {
-    role = 'admin';
-  } else if (member && member.category === 'admin') {
-    role = 'admin';
-  } else if (member && member.category === 'volunteer') {
-    // Check-in volunteers — scoped to /reg/volunteer/* only. Distinct from
-    // committee members (who may also hold reg_role='reg_volunteer') so the
-    // admin chrome can be hidden for this group alone.
-    role = 'volunteer';
-  } else {
-    // 'committee', 'advisor', and 'member' all map to the 'committee' session
-    // tier. Per 14-07-2026: advisor is functionally identical to committee
-    // (the only difference is fee_waived=1 on the member row). 'member'
-    // rows default to can_login=0 so they don't reach this branch unless
-    // individually enabled.
-    role = 'committee';
-  }
-
-  const regRole = (member && member.reg_role) ? member.reg_role as string : null;
+  const { name, role, regRole } = resolveSessionRole(email, member);
 
   const exp = remember
     ? Date.now() + SESSION_EXTENDED_EXPIRY_MS

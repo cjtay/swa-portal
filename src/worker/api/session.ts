@@ -1,6 +1,6 @@
 import type { Context } from 'hono';
 import type { Env } from '../types';
-import { IT_ADMIN_EMAILS, SESSION_COOKIE_NAME } from '../../constants/portal';
+import { IT_ADMIN_EMAILS, SESSION_COOKIE_NAME, DEV_LOGOUT_COOKIE_NAME } from '../../constants/portal';
 import { verifyHmac, base64urlDecode } from '../lib/crypto';
 
 interface SessionData {
@@ -86,6 +86,16 @@ export function getDevBypassSession(c: Context<{ Bindings: Env }>): DevBypassRes
     return { kind: 'abort' };
   }
 
+  // Third trust anchor: an explicit "stay logged out" marker. Set by
+  // handleLogout when the bypass is active so the user can actually reach
+  // /login and pick a different dev identity. POST /api/dev/login clears it.
+  // Without this, logout would be a no-op — getDevBypassSession would just
+  // re-inject Dev Admin on the next request.
+  const cookieHeader = c.req.header('Cookie') || '';
+  if (cookieHeader.split(';').some((c) => c.trim() === `${DEV_LOGOUT_COOKIE_NAME}=1`)) {
+    return null;
+  }
+
   return {
     kind: 'session',
     data: {
@@ -136,6 +146,23 @@ export async function getSession(c: Context<{ Bindings: Env }>): Promise<Session
 }
 
 export async function handleSession(c: Context<{ Bindings: Env }>) {
+  // Real cookie takes precedence over the dev-bypass injection. This lets
+  // /api/dev/login switch to a chosen member identity even while the bypass
+  // flag is on: the picked session cookie is honoured, and the bypass only
+  // fires as a fallback when no cookie is present and no logout marker is set.
+  const realSession = await getSession(c);
+  if (realSession) {
+    return c.json({
+      authenticated: true,
+      email: realSession.email,
+      name: realSession.name,
+      role: realSession.role,
+      regRole: realSession.regRole,
+      is_admin: realSession.role === 'admin',
+      is_it_admin: (IT_ADMIN_EMAILS as readonly string[]).includes(realSession.email),
+    });
+  }
+
   // Dev-only bypass: short-circuit before touching the real cookie/HMAC path.
   const dev = getDevBypassSession(c);
   if (dev?.kind === 'abort') {
@@ -157,25 +184,29 @@ export async function handleSession(c: Context<{ Bindings: Env }>) {
     });
   }
 
-  const session = await getSession(c);
-
-  if (!session) {
-    return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false });
-  }
-
-  return c.json({
-    authenticated: true,
-    email: session.email,
-    name: session.name,
-    role: session.role,
-    regRole: session.regRole,
-    is_admin: session.role === 'admin',
-    is_it_admin: (IT_ADMIN_EMAILS as readonly string[]).includes(session.email),
-  });
+  return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false });
 }
 
 export async function handleLogout(c: Context<{ Bindings: Env }>) {
-  return c.json({ success: true }, 200, {
-    'Set-Cookie': `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`,
-  });
+  // Always clear the real session cookie.
+  c.header(
+    'Set-Cookie',
+    `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`,
+    { append: true },
+  );
+
+  // In dev-bypass mode, clearing the session cookie alone has no effect —
+  // getDevBypassSession would re-inject Dev Admin on the next request and
+  // bounce the user straight back off /login. Drop a long-lived marker so
+  // the bypass stays inert until /api/dev/login clears it. Production never
+  // sets this marker (isDevBypassActive is false there).
+  if (isDevBypassActive(c.env, c.req.url)) {
+    c.header(
+      'Set-Cookie',
+      `${DEV_LOGOUT_COOKIE_NAME}=1; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`,
+      { append: true },
+    );
+  }
+
+  return c.json({ success: true });
 }

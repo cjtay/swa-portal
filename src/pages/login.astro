@@ -2,6 +2,109 @@
 import '../styles/admin.css';
 ---
 
+<style is:global>
+  /* Dev-only role-picker card. Only rendered when /api/dev/members returns
+     200 (i.e. DEV_BYPASS_AUTH is active) — so this markup never ships to a
+     production browser in a visible state. */
+  .dev-card {
+    background: var(--swa-card-bg, #fff);
+    border: 1px solid var(--swa-4, #f3d2ff);
+    border-radius: 12px;
+    padding: 1.25rem 1.25rem 0.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 20px rgba(69, 10, 94, 0.06);
+  }
+  .dev-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.4rem;
+  }
+  .dev-card-header > span:first-child {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--swa-2, #450a5e);
+  }
+  .dev-badge {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: var(--swa-4, #f3d2ff);
+    color: var(--swa-2, #450a5e);
+  }
+  .dev-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted, #6b7280);
+    margin: 0 0 0.85rem;
+    line-height: 1.4;
+  }
+  .dev-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .dev-btn {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "name role"
+      "email role";
+    column-gap: 0.75rem;
+    align-items: baseline;
+    width: 100%;
+    padding: 0.6rem 0.85rem;
+    border: 1px solid var(--swa-4, #f3d2ff);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--swa-2, #450a5e);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .dev-btn:hover:not(:disabled) {
+    border-color: var(--swa-3, #874ba1);
+    background: #faf5ff;
+  }
+  .dev-btn:disabled { cursor: default; opacity: 0.6; }
+  .dev-btn-name { grid-area: name; font-weight: 600; font-size: 0.88rem; }
+  .dev-btn-email { grid-area: email; font-size: 0.72rem; color: var(--text-muted, #6b7280); }
+  .dev-btn-role {
+    grid-area: role;
+    align-self: center;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: var(--swa-1, #70308c);
+    color: #fff;
+    white-space: nowrap;
+  }
+  .dev-btn-role[data-role="admin"],
+  .dev-btn-role[data-role="it-admin"] { background: var(--swa-2, #450a5e); }
+  .dev-btn-role[data-role="volunteer"] { background: #6b7280; }
+  .dev-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 1rem 0 0.25rem;
+    font-size: 0.68rem;
+    color: var(--text-muted, #6b7280);
+  }
+  .dev-divider::before,
+  .dev-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--swa-4, #f3d2ff);
+  }
+</style>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -17,6 +120,15 @@ import '../styles/admin.css';
 </head>
 <body>
   <div class="login-wrapper">
+    <div id="dev-login" class="dev-card" hidden>
+      <div class="dev-card-header">
+        <span>Dev quick login</span>
+        <span class="dev-badge">LOCAL</span>
+      </div>
+      <p class="dev-hint">One-click login as any login-capable member. Skips OTP — for local role testing only.</p>
+      <div id="dev-list" class="dev-list"></div>
+      <div class="dev-divider"><span>or use email login below</span></div>
+    </div>
     <div class="login-card">
       <div class="login-header">
         <h1><img src="/swalogo.svg" alt="SWA" style="height:28px;width:28px;vertical-align:middle;margin-right:0.4rem;border-radius:3px;" /><span>SWA</span> Admin Portal</h1>
@@ -58,6 +170,94 @@ import '../styles/admin.css';
 <script>
   import { redirectIfAuthenticated } from '../scripts/auth-gate';
   redirectIfAuthenticated();
+
+  // --- Dev-only role picker ------------------------------------------------
+  // Populates the #dev-login card with one-click buttons for every
+  // login-capable member. /api/dev/members 404s in production, so the panel
+  // stays hidden there. Only renders when DEV_BYPASS_AUTH is active.
+  async function initDevLogin() {
+    let res;
+    try {
+      res = await fetch('/api/dev/members');
+    } catch {
+      return;
+    }
+    if (!res.ok) return;
+    const data = await res.json().catch(() => null);
+    if (!data || !data.success || !Array.isArray(data.members) || data.members.length === 0) return;
+
+    const panel = document.getElementById('dev-login');
+    const list = document.getElementById('dev-list');
+    if (!panel || !list) return;
+
+    const roleLabel = (m: any): string => {
+      if (m.is_it_admin) return 'IT Admin';
+      if (m.role === 'admin') return 'Admin';
+      if (m.role === 'volunteer') return 'Volunteer';
+      if (m.role === 'committee') return 'Committee';
+      return m.role || m.category || 'Member';
+    };
+    const roleKey = (m: any): string => {
+      if (m.is_it_admin) return 'it-admin';
+      if (m.role === 'admin') return 'admin';
+      if (m.role === 'volunteer') return 'volunteer';
+      return 'committee';
+    };
+
+    for (const m of data.members) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'dev-btn';
+
+      const nameEl = document.createElement('span');
+      nameEl.className = 'dev-btn-name';
+      nameEl.textContent = m.name || m.email;
+
+      const emailEl = document.createElement('span');
+      emailEl.className = 'dev-btn-email';
+      emailEl.textContent = m.email;
+
+      const roleEl = document.createElement('span');
+      roleEl.className = 'dev-btn-role';
+      roleEl.dataset.role = roleKey(m);
+      roleEl.textContent = roleLabel(m);
+
+      btn.append(nameEl, emailEl, roleEl);
+      btn.addEventListener('click', () => devLoginAs(m.email, btn));
+      list.appendChild(btn);
+    }
+
+    panel.hidden = false;
+  }
+
+  async function devLoginAs(email: string, btn: HTMLButtonElement) {
+    if (btn.disabled) return;
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="dev-btn-name">Logging in…</span>';
+    try {
+      const res = await fetch('/api/dev/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const json = await res.json().catch(() => null);
+      if (json && json.success) {
+        const fallback = json.role === 'volunteer' ? '/reg/volunteer/search' : '/';
+        const target = new URLSearchParams(window.location.search).get('redirect') || fallback;
+        window.location.href = target;
+        return;
+      }
+      alert((json && json.message) || 'Login failed.');
+    } catch {
+      alert('Network error.');
+    }
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+
+  initDevLogin();
+  // -------------------------------------------------------------------------
 
   const emailInput = document.getElementById('email-input') as HTMLInputElement;
   const otpInput = document.getElementById('otp-input') as HTMLInputElement;
