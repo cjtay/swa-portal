@@ -67,7 +67,7 @@ All form content is driven by a single configuration object sourced from KV (`sw
 |-------|------|--------|
 | `eventTitle` | string | Heading shown on page + stored as `event_key` in D1 |
 | `introHtml` | string (HTML) | Intro section rendered before the form |
-| `dates[]` | `[{label, date, venue}]` | Availability checkboxes; `date` is `YYYY-MM-DD` |
+| `dates[]` | `[{label, date, venue, full?}]` | Availability checkboxes; `date` is `YYYY-MM-DD`. Optional `full: true` disables the checkbox and shows a "Full" badge (frontend-only guard — not enforced server-side; a tampered POST could still submit the date). |
 | `timeText` | string | Optional time line under each date checkbox |
 | `roles[]` | string[] | Roles of interest checkboxes |
 | `enquiry` | `{name, email, phone}` | "For enquiries" block on closed / success screens |

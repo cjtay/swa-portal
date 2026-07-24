@@ -155,17 +155,19 @@ import '../../../styles/volunteer-form.css';
 
     function renderForm() {
       const intro = config.introHtml || '';
-      const dates: { label: string; date: string; venue: string }[] = config.dates || [];
+      const dates: { label: string; date: string; venue: string; full?: boolean }[] = config.dates || [];
       const roles: string[] = config.roles || [];
 
-      const datesHtml = dates.map((d, i) =>
-        '<label class="vf-choice">' +
-        '<input type="checkbox" name="availability" value="' + escapeHtml(d.label) + '" data-i="' + i + '" />' +
-        '<span class="vf-choice-main"><strong>' + escapeHtml(d.label) + '</strong>' +
-        (config.timeText ? '<small>Time: ' + escapeHtml(config.timeText) + '</small>' : '') +
-        (d.venue ? '<small>' + escapeHtml(d.venue) + '</small>' : '') + '</span>' +
-        '</label>'
-      ).join('');
+      const datesHtml = dates.map((d, i) => {
+        const full = !!d.full;
+        return '<label class="vf-choice' + (full ? ' is-disabled' : '') + '">' +
+          '<input type="checkbox" name="availability" value="' + escapeHtml(d.label) + '" data-i="' + i + '"' + (full ? ' disabled' : '') + ' />' +
+          '<span class="vf-choice-main"><strong>' + escapeHtml(d.label) + '</strong>' +
+          (config.timeText ? '<small>Time: ' + escapeHtml(config.timeText) + '</small>' : '') +
+          (d.venue ? '<small>' + escapeHtml(d.venue) + '</small>' : '') + '</span>' +
+          (full ? '<span class="vf-badge vf-badge--full">Full</span>' : '') +
+          '</label>';
+      }).join('');
 
       const rolesHtml = roles.map((r) =>
         '<label class="vf-choice">' +

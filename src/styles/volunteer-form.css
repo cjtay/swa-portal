@@ -284,6 +284,37 @@ body {
 .vf-choice .vf-choice-main { display: flex; flex-direction: column; width: 100%; }
 .vf-choice .vf-choice-main small { color: #6b7280; font-size: 0.78rem; }
 
+/* Disabled (fully-booked) date choice */
+.vf-choice.is-disabled {
+  border-color: #e0dcec;
+  background: #fafafa;
+  cursor: default;
+  opacity: 0.75;
+}
+.vf-choice.is-disabled:hover {
+  border-color: #e0dcec;
+  background: #fafafa;
+}
+.vf-choice.is-disabled input { cursor: default; accent-color: #c4b8d4; }
+
+/* Status badge (e.g. "Full") — sits at the right edge of the choice row */
+.vf-badge {
+  margin-left: auto;
+  align-self: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.vf-badge--full {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+
 /* Choice row: stack on mobile, wrap on larger screens */
 .vf-choice-row {
   display: flex;
