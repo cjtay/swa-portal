@@ -32,7 +32,7 @@
   // why we use the WebP rather than /swalogo.svg here).
   var SWA_LOGO_SRC = '/swa-logo.webp';
 
-  var QR_DARK = '#70308c'; // SWA purple
+  var QR_DARK = '#000000'; // match PayNow QR (register.astro) — scans reliably
   var QR_LIGHT = '#ffffff';
 
   function ready(fn) {
@@ -92,8 +92,8 @@
         canvas,
         payload,
         {
-          width: canvas.width,
-          margin: 2,
+          width: 540,
+          margin: 1,
           errorCorrectionLevel: 'H', // mandatory with the centre logo
           color: { dark: QR_DARK, light: QR_LIGHT },
         },
@@ -102,6 +102,12 @@
             reject(err);
             return;
           }
+          // The qrcode library writes inline width/height matching its
+          // backing store (540px), which overrides the .nc-qr-canvas CSS
+          // rule and overflows the 440px card. Force the display size back
+          // to 240px — exactly what the PayNow QR does (register.astro:170).
+          canvas.style.width = '240px';
+          canvas.style.height = '240px';
           try {
             await drawCenterLogo(canvas, canvas.getContext('2d'));
             resolve();

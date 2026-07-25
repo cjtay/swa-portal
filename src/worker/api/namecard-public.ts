@@ -410,12 +410,11 @@ function renderCardHtml(card: PublicNamecardRow, baseUrl: string): string {
     }
 
     <section class="nc-qr" aria-label="QR code">
-      <!-- Backing store is 3× the CSS display size (220px) so the QRCode
-           library draws at high resolution and the canvas→PNG download is
-           crisp. The integer 3× ratio means CSS-downscaled module boundaries
-           land on whole pixels (no muddy anti-aliasing) so phone cameras can
-           still scan the on-page preview. -->
-      <canvas class="nc-qr-canvas" width="660" height="660" role="img" aria-label="QR code linking to this contact"></canvas>
+      <!-- Mirrors the proven PayNow QR pattern in
+           src/pages/reg/membership/register.astro:165-188: 540×540 backing
+           store, 240px CSS display, dark modules #000000. Same logo/ECC
+           shape, retargeted to the vCard URL. -->
+      <canvas class="nc-qr-canvas" width="540" height="540" role="img" aria-label="QR code linking to this contact"></canvas>
       <div class="nc-qr-actions">
         <button class="nc-btn" type="button" data-action="save-qr" data-url="${safe(vcfUrl)}">Save QR image</button>
         <button class="nc-btn" type="button" data-action="save-card" data-url="${safe(cardImgUrl)}">Save card image</button>
