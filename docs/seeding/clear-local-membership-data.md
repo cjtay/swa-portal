@@ -78,4 +78,4 @@ re-seeds.
 |---|---|
 | `scripts/db-clear-membership.mjs` | The script itself |
 | `scripts/db-setup.mjs` | Full local DB rebuild (`npm run db:setup` / `db:seed`) |
-| `docs/membership-lifecycle-plan.md` | The design this pipeline implements |
+| `docs/plans/membership-lifecycle-plan.md` | The design this pipeline implements |

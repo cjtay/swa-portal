@@ -1,0 +1,696 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Namecards — SWA Admin Portal" currentPath="/namecards">
+  <h1>Namecards</h1>
+  <p style="color:var(--text-muted);margin-bottom:1.5rem;">
+    Manage digital namecards for the SWA team. Each card has a public link at
+    <code>/c/&lt;slug&gt;</code> that you can share or print as a QR code.
+  </p>
+
+  <!-- Self-service panel: the logged-in user's own card. Visible to every
+       authenticated role (admin/committee/advisor/volunteer). -->
+  <div class="card" id="nc-self-service" style="margin-bottom:1.5rem;display:none;">
+    <!-- qrcode lib used by the self-service QR preview. Vendored into
+         /js/qrcode.min.js by the copy:qrcode prebuild hook.
+         namecard-qr.js loads /swa-logo.webp directly (same-origin, no taint),
+         so no separate data-URI script is needed here. -->
+    <script src="/js/qrcode.min.js" defer></script>
+    <h2 style="font-size:1.1rem;margin-top:0;">Your namecard</h2>
+    <div id="nc-self-empty" style="color:var(--text-muted);display:none;">
+      You do not have a namecard yet. Ask an admin to create one for you.
+    </div>
+    <div id="nc-self-content" style="display:none;flex-direction:column;gap:1rem;">
+      <div style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap;">
+        <canvas id="nc-self-qr" width="512" height="512" style="width:160px;height:160px;display:block;" role="img" aria-label="Your QR code"></canvas>
+        <div style="flex:1;min-width:220px;">
+          <p style="margin:0 0 0.25rem;">Public link:</p>
+          <p style="margin:0 0 0.75rem;"><a id="nc-self-link" href="#" target="_blank" rel="noopener noreferrer"></a></p>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <button class="btn btn-secondary" id="nc-self-save-qr">Save QR image</button>
+            <a class="btn btn-secondary" id="nc-self-save-card" href="#" download>Save card image</a>
+            <a class="btn btn-primary" id="nc-self-save-vcf" href="#" download>Save contact (.vcf)</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.75rem;">
+      <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+        <input type="search" id="nc-search" class="form-input" placeholder="Search by name or slug..." style="width:260px;" />
+        <select id="nc-visibility-filter" class="form-input" style="width:auto;">
+          <option value="">All cards</option>
+          <option value="visible">Visible only</option>
+          <option value="hidden">Hidden only</option>
+        </select>
+      </div>
+      <div id="nc-admin-actions" style="display:none;gap:0.5rem;">
+        <button class="btn btn-secondary" id="nc-bulk-btn">Create for all members</button>
+        <button class="btn btn-primary" id="nc-add-btn">Add namecard</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Member</th>
+            <th>Slug</th>
+            <th>Photo</th>
+            <th>Visibility</th>
+            <th>Updated</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="nc-list"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Add (member picker) Modal -->
+  <div id="nc-add-modal" style="display:none;position:fixed;inset:0;background:rgba(69,10,94,0.4);z-index:50;align-items:center;justify-content:center;">
+    <div class="card" style="width:440px;max-height:80vh;overflow-y:auto;">
+      <h2>Add namecard</h2>
+      <p style="color:var(--text-muted);margin-bottom:1rem;font-size:0.9rem;">
+        Pick a member who does not yet have a card. A slug is auto-derived from their name; you can edit it afterwards.
+      </p>
+      <div class="form-group">
+        <label class="form-label">Member</label>
+        <select id="nc-add-member" class="form-input" style="width:100%;"></select>
+      </div>
+      <div style="display:flex;gap:0.5rem;margin-top:1.5rem;">
+        <button class="btn btn-primary" id="nc-add-confirm">Create</button>
+        <button class="btn btn-secondary" id="nc-add-cancel">Cancel</button>
+      </div>
+      <p id="nc-add-error" class="form-error" style="display:none;"></p>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="nc-edit-modal" style="display:none;position:fixed;inset:0;background:rgba(69,10,94,0.4);z-index:50;align-items:center;justify-content:center;">
+    <div class="card" style="width:560px;max-height:88vh;overflow-y:auto;">
+      <h2 id="nc-edit-title">Edit namecard</h2>
+      <form id="nc-edit-form" style="margin-top:1rem;">
+        <input type="hidden" id="nc-edit-id" />
+
+        <div class="form-group">
+          <label class="form-label">Slug (public URL segment)</label>
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            <input type="text" id="nc-edit-slug" class="form-input" style="flex:1;" />
+            <button type="button" class="btn btn-secondary" id="nc-edit-slug-save" style="white-space:nowrap;">Update slug</button>
+          </div>
+          <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.35rem;">
+            Public link: <a id="nc-edit-public-link" href="#" target="_blank" rel="noopener noreferrer"></a>
+          </p>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+          <div class="form-group">
+            <label class="form-label">Name override — given</label>
+            <input type="text" id="nc-edit-name-given" class="form-input" placeholder="(uses member name)" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Name override — family</label>
+            <input type="text" id="nc-edit-name-family" class="form-input" placeholder="(uses member name)" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Bio</label>
+          <textarea id="nc-edit-bio" class="form-input" rows="3" placeholder="Short biography shown on the public card."></textarea>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+          <div class="form-group">
+            <label class="form-label">WhatsApp (international form)</label>
+            <input type="text" id="nc-edit-whatsapp" class="form-input" placeholder="+65 9123 4567" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Website</label>
+            <input type="url" id="nc-edit-website" class="form-input" placeholder="https://" />
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+          <div class="form-group">
+            <label class="form-label">Facebook</label>
+            <input type="url" id="nc-edit-facebook" class="form-input" placeholder="https://" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">LinkedIn</label>
+            <input type="url" id="nc-edit-linkedin" class="form-input" placeholder="https://" />
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+          <div class="form-group">
+            <label class="form-label">Instagram</label>
+            <input type="url" id="nc-edit-instagram" class="form-input" placeholder="https://" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">TikTok</label>
+            <input type="url" id="nc-edit-tiktok" class="form-input" placeholder="https://" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">YouTube</label>
+          <input type="url" id="nc-edit-youtube" class="form-input" placeholder="https://" />
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+          <div class="form-group">
+            <label class="form-label">Photo alt text</label>
+            <input type="text" id="nc-edit-photo-alt" class="form-input" placeholder="Describe the headshot" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">QR encodes</label>
+            <select id="nc-edit-qr-variant" class="form-input">
+              <option value="vcf">Direct .vcf download (recommended)</option>
+              <option value="page">Interactive card page</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Photo</label>
+          <div style="display:flex;align-items:center;gap:1rem;">
+            <img id="nc-edit-photo-preview" src="" alt="" style="width:64px;height:64px;border-radius:8px;object-fit:cover;background:var(--bg);display:none;" />
+            <div style="display:flex;flex-direction:column;gap:0.4rem;">
+              <input type="file" id="nc-edit-photo-input" accept="image/jpeg,image/png,image/webp" class="form-input" style="padding:0.3rem;font-size:0.85rem;" />
+              <button type="button" class="btn btn-secondary" id="nc-edit-photo-upload" style="padding:0.3rem 0.7rem;font-size:0.8rem;">Upload</button>
+              <button type="button" class="btn btn-danger" id="nc-edit-photo-remove" style="padding:0.3rem 0.7rem;font-size:0.8rem;display:none;">Remove photo</button>
+            </div>
+          </div>
+          <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.35rem;">
+            JPEG / PNG / WebP, max 2&nbsp;MB. Will be cropped to a square on upload.
+          </p>
+        </div>
+
+        <div style="display:flex;gap:0.5rem;margin-top:1.5rem;flex-wrap:wrap;">
+          <button type="submit" class="btn btn-primary">Save changes</button>
+          <button type="button" class="btn btn-secondary" id="nc-edit-cancel">Cancel</button>
+          <button type="button" class="btn btn-danger" id="nc-edit-delete" style="margin-left:auto;">Delete card</button>
+        </div>
+        <p id="nc-edit-error" class="form-error" style="display:none;"></p>
+      </form>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { requireAuth } from '../scripts/auth-gate';
+
+  interface NamecardRow {
+    id: number;
+    member_id: number;
+    slug: string;
+    has_namecard: number;
+    template: string;
+    photo_r2_key: string | null;
+    photo_alt: string | null;
+    bio: string | null;
+    name_family: string | null;
+    name_given: string | null;
+    whatsapp: string | null;
+    website: string | null;
+    facebook: string | null;
+    linkedin: string | null;
+    instagram: string | null;
+    tiktok: string | null;
+    youtube: string | null;
+    qr_variant: string;
+    updated_at: string;
+    member_name: string;
+    email: string | null;
+    mobile: string | null;
+    job_title: string | null;
+    member_deleted_at: string | null;
+  }
+
+  let allNamecards: NamecardRow[] = [];
+  let isAdmin = false;
+  let pendingPhotoFile: File | null = null;
+
+  function escapeHtml(s: string): string {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function formatDate(iso: string | null): string {
+    if (!iso) return '\u2014';
+    return iso.replace('T', ' ').slice(0, 16);
+  }
+
+  async function loadNamecards() {
+    try {
+      const res = await fetch('/api/namecards');
+      const data = await res.json();
+      if (data.success) {
+        allNamecards = data.namecards;
+        renderNamecards();
+      } else if (data.error_code === 'FORBIDDEN' || data.error_code === 'UNAUTHORIZED') {
+        const tbody = document.getElementById('nc-list')!;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger);">You do not have permission to view namecards.</td></tr>`;
+      }
+    } catch (err) {
+      console.error('Failed to load namecards', err);
+    }
+  }
+
+  function renderNamecards() {
+    const search = (document.getElementById('nc-search') as HTMLInputElement).value.toLowerCase();
+    const visibility = (document.getElementById('nc-visibility-filter') as HTMLSelectElement).value;
+
+    const filtered = allNamecards.filter((n) => {
+      if (visibility === 'visible' && !n.has_namecard) return false;
+      if (visibility === 'hidden' && n.has_namecard) return false;
+      if (search) {
+        const hay = `${n.member_name} ${n.slug} ${n.email ?? ''}`.toLowerCase();
+        if (!hay.includes(search)) return false;
+      }
+      return true;
+    });
+
+    const tbody = document.getElementById('nc-list')!;
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No namecards yet.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = filtered
+      .map((n) => {
+        const visibilityBadge = n.has_namecard
+          ? '<span class="badge badge-approved">Visible</span>'
+          : '<span class="badge badge-cancelled">Hidden</span>';
+        const photoCell = n.photo_r2_key
+          ? `<img src="/c/${encodeURIComponent(n.slug)}/photo" alt="" style="width:40px;height:40px;border-radius:6px;object-fit:cover;" onerror="this.style.visibility='hidden'" />`
+          : '<span style="color:var(--text-muted);">\u2014</span>';
+        const toggleBtn = isAdmin
+          ? `<button class="btn btn-secondary" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="toggleNamecard(${n.id}, ${n.has_namecard})">${n.has_namecard ? 'Hide' : 'Show'}</button>`
+          : '';
+        const editBtn = isAdmin
+          ? `<button class="btn btn-secondary" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="editNamecard(${n.id})">Edit</button>`
+          : '';
+        const previewBtn = `<a class="btn btn-secondary" style="padding:0.3rem 0.6rem;font-size:0.75rem;" href="/c/${encodeURIComponent(n.slug)}" target="_blank" rel="noopener noreferrer">Preview</a>`;
+        const copyBtn = `<button class="btn btn-secondary" style="padding:0.3rem 0.6rem;font-size:0.75rem;" onclick="copyLink('${encodeURIComponent(n.slug)}')">Copy link</button>`;
+        return `<tr>
+          <td><strong>${escapeHtml(n.member_name)}</strong>${n.member_deleted_at ? ' <span style="color:var(--danger);font-size:0.75rem;">(deleted)</span>' : ''}<br /><span style="font-size:0.8rem;color:var(--text-muted);">${escapeHtml(n.job_title || '')}</span></td>
+          <td><code>${escapeHtml(n.slug)}</code></td>
+          <td>${photoCell}</td>
+          <td>${visibilityBadge}</td>
+          <td style="font-size:0.8rem;">${formatDate(n.updated_at)}</td>
+          <td><div style="display:flex;gap:0.4rem;flex-wrap:wrap;">${editBtn}${toggleBtn}${previewBtn}${copyBtn}</div></td>
+        </tr>`;
+      })
+      .join('');
+  }
+
+  // ── Add (member picker) ──────────────────────────────────────────────────
+  async function openAddModal() {
+    // Load members WITHOUT namecards so the picker only offers valid choices.
+    let eligible: Array<{ id: number; name: string }> = [];
+    try {
+      const res = await fetch('/api/members');
+      const data = await res.json();
+      if (data.success) {
+        const withCards = new Set(allNamecards.map((n) => n.member_id));
+        eligible = data.members
+          .filter((m: any) => !withCards.has(m.id))
+          .map((m: any) => ({ id: m.id, name: m.name }));
+      }
+    } catch {}
+
+    const select = document.getElementById('nc-add-member') as HTMLSelectElement;
+    if (eligible.length === 0) {
+      select.innerHTML = '<option value="">All members already have a namecard.</option>';
+    } else {
+      select.innerHTML =
+        '<option value="">— Select a member —</option>' +
+        eligible.map((m) => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('');
+    }
+
+    document.getElementById('nc-add-error')!.style.display = 'none';
+    (document.getElementById('nc-add-modal') as HTMLElement).style.display = 'flex';
+  }
+
+  async function submitAdd() {
+    const memberId = Number((document.getElementById('nc-add-member') as HTMLSelectElement).value);
+    if (!memberId) {
+      showFormError('nc-add-error', 'Please pick a member.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/namecards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ member_id: memberId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        (document.getElementById('nc-add-modal') as HTMLElement).style.display = 'none';
+        await loadNamecards();
+        editNamecard(data.id);
+      } else {
+        showFormError('nc-add-error', data.message || 'Could not create the namecard.');
+      }
+    } catch (err) {
+      showFormError('nc-add-error', 'Network error.');
+    }
+  }
+
+  async function bulkCreate() {
+    if (!confirm('Create a namecard for every member who does not yet have one?')) return;
+    try {
+      const res = await fetch('/api/namecards/bulk', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (data.success) {
+        const msg = `Created ${data.created.length}. Skipped ${data.skipped.length}.`;
+        await loadNamecards();
+        alert(msg);
+      } else {
+        alert(data.message || 'Bulk create failed.');
+      }
+    } catch {
+      alert('Network error.');
+    }
+  }
+
+  // ── Edit ─────────────────────────────────────────────────────────────────
+  function editNamecard(id: number) {
+    const n = allNamecards.find((x) => x.id === id);
+    if (!n) return;
+    (document.getElementById('nc-edit-id') as HTMLInputElement).value = String(n.id);
+    (document.getElementById('nc-edit-slug') as HTMLInputElement).value = n.slug;
+    (document.getElementById('nc-edit-name-given') as HTMLInputElement).value = n.name_given ?? '';
+    (document.getElementById('nc-edit-name-family') as HTMLInputElement).value = n.name_family ?? '';
+    (document.getElementById('nc-edit-bio') as HTMLTextAreaElement).value = n.bio ?? '';
+    (document.getElementById('nc-edit-whatsapp') as HTMLInputElement).value = n.whatsapp ?? '';
+    (document.getElementById('nc-edit-website') as HTMLInputElement).value = n.website ?? '';
+    (document.getElementById('nc-edit-facebook') as HTMLInputElement).value = n.facebook ?? '';
+    (document.getElementById('nc-edit-linkedin') as HTMLInputElement).value = n.linkedin ?? '';
+    (document.getElementById('nc-edit-instagram') as HTMLInputElement).value = n.instagram ?? '';
+    (document.getElementById('nc-edit-tiktok') as HTMLInputElement).value = n.tiktok ?? '';
+    (document.getElementById('nc-edit-youtube') as HTMLInputElement).value = n.youtube ?? '';
+    (document.getElementById('nc-edit-photo-alt') as HTMLInputElement).value = n.photo_alt ?? '';
+    (document.getElementById('nc-edit-qr-variant') as HTMLSelectElement).value = n.qr_variant ?? 'vcf';
+
+    const link = document.getElementById('nc-edit-public-link') as HTMLAnchorElement;
+    link.href = `/c/${encodeURIComponent(n.slug)}`;
+    link.textContent = `/c/${n.slug}`;
+
+    const preview = document.getElementById('nc-edit-photo-preview') as HTMLImageElement;
+    const removeBtn = document.getElementById('nc-edit-photo-remove') as HTMLButtonElement;
+    if (n.photo_r2_key) {
+      preview.src = `/c/${encodeURIComponent(n.slug)}/photo`;
+      preview.style.display = 'block';
+      removeBtn.style.display = 'inline-block';
+    } else {
+      preview.style.display = 'none';
+      removeBtn.style.display = 'none';
+    }
+    pendingPhotoFile = null;
+
+    document.getElementById('nc-edit-error')!.style.display = 'none';
+    (document.getElementById('nc-edit-modal') as HTMLElement).style.display = 'flex';
+  }
+
+  async function submitEdit() {
+    const id = Number((document.getElementById('nc-edit-id') as HTMLInputElement).value);
+    const body = {
+      bio: (document.getElementById('nc-edit-bio') as HTMLTextAreaElement).value.trim() || null,
+      whatsapp: (document.getElementById('nc-edit-whatsapp') as HTMLInputElement).value.trim() || null,
+      website: (document.getElementById('nc-edit-website') as HTMLInputElement).value.trim() || null,
+      facebook: (document.getElementById('nc-edit-facebook') as HTMLInputElement).value.trim() || null,
+      linkedin: (document.getElementById('nc-edit-linkedin') as HTMLInputElement).value.trim() || null,
+      instagram: (document.getElementById('nc-edit-instagram') as HTMLInputElement).value.trim() || null,
+      tiktok: (document.getElementById('nc-edit-tiktok') as HTMLInputElement).value.trim() || null,
+      youtube: (document.getElementById('nc-edit-youtube') as HTMLInputElement).value.trim() || null,
+      photo_alt: (document.getElementById('nc-edit-photo-alt') as HTMLInputElement).value.trim() || null,
+      name_given: (document.getElementById('nc-edit-name-given') as HTMLInputElement).value.trim() || null,
+      name_family: (document.getElementById('nc-edit-name-family') as HTMLInputElement).value.trim() || null,
+      qr_variant: (document.getElementById('nc-edit-qr-variant') as HTMLSelectElement).value,
+    };
+    try {
+      const res = await fetch(`/api/namecards/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        showFormError('nc-edit-error', data.message || 'Could not save.');
+        return;
+      }
+      // If a photo was selected, upload it as a separate multipart call.
+      if (pendingPhotoFile) {
+        const fd = new FormData();
+        fd.append('photo', pendingPhotoFile);
+        const photoRes = await fetch(`/api/namecards/${id}/photo`, { method: 'POST', body: fd });
+        const photoData = await photoRes.json();
+        if (!photoData.success) {
+          showFormError('nc-edit-error', photoData.message || 'Saved, but the photo could not be uploaded.');
+          // Don't bail — fields are saved. Just surface the photo error.
+          await loadNamecards();
+          return;
+        }
+      }
+      pendingPhotoFile = null;
+      (document.getElementById('nc-edit-modal') as HTMLElement).style.display = 'none';
+      await loadNamecards();
+    } catch {
+      showFormError('nc-edit-error', 'Network error.');
+    }
+  }
+
+  async function updateSlug() {
+    const id = Number((document.getElementById('nc-edit-id') as HTMLInputElement).value);
+    const slug = (document.getElementById('nc-edit-slug') as HTMLInputElement).value.trim();
+    const res = await fetch(`/api/namecards/${id}/slug`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      (document.getElementById('nc-edit-slug') as HTMLInputElement).value = data.slug;
+      const link = document.getElementById('nc-edit-public-link') as HTMLAnchorElement;
+      link.href = `/c/${encodeURIComponent(data.slug)}`;
+      link.textContent = `/c/${data.slug}`;
+      await loadNamecards();
+    } else if (data.suggestion) {
+      showFormError('nc-edit-error', `Slug taken. Suggested: ${data.suggestion}`);
+      (document.getElementById('nc-edit-slug') as HTMLInputElement).value = data.suggestion;
+    } else {
+      showFormError('nc-edit-error', data.message || 'Could not update slug.');
+    }
+  }
+
+  async function uploadPhoto(file: File): Promise<File> {
+    // Client-side square-crop + downscale to ~800×800 JPEG before upload
+    // (mirrors src/pages/reg/membership/register.astro). The server still
+    // enforces the 2 MB cap regardless of what the client sends.
+    try {
+      const bitmap = await createImageBitmap(file);
+      const size = Math.min(bitmap.width, bitmap.height);
+      const targetDim = 800;
+      const offX = (bitmap.width - size) / 2;
+      const offY = (bitmap.height - size) / 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = targetDim;
+      canvas.height = targetDim;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return file;
+      ctx.drawImage(bitmap, offX, offY, size, size, 0, 0, targetDim, targetDim);
+      const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', 0.85));
+      if (!blob) return file;
+      return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+    } catch {
+      return file;
+    }
+  }
+
+  async function removePhoto() {
+    const id = Number((document.getElementById('nc-edit-id') as HTMLInputElement).value);
+    if (!confirm('Remove the photo from this namecard?')) return;
+    const res = await fetch(`/api/namecards/${id}/photo`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.success) {
+      (document.getElementById('nc-edit-photo-preview') as HTMLImageElement).style.display = 'none';
+      (document.getElementById('nc-edit-photo-remove') as HTMLButtonElement).style.display = 'none';
+      await loadNamecards();
+    } else {
+      showFormError('nc-edit-error', data.message || 'Could not remove photo.');
+    }
+  }
+
+  async function toggleNamecard(id: number, currentlyVisible: number) {
+    const next = currentlyVisible ? 0 : 1;
+    const res = await fetch(`/api/namecards/${id}/toggle`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ has_namecard: next }),
+    });
+    if (res.ok) await loadNamecards();
+  }
+
+  async function deleteNamecard() {
+    const id = Number((document.getElementById('nc-edit-id') as HTMLInputElement).value);
+    if (!confirm('Permanently delete this namecard and its photo? This cannot be undone.')) return;
+    const res = await fetch(`/api/namecards/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      (document.getElementById('nc-edit-modal') as HTMLElement).style.display = 'none';
+      await loadNamecards();
+    } else {
+      showFormError('nc-edit-error', 'Could not delete.');
+    }
+  }
+
+  async function copyLink(slug: string) {
+    const url = `${window.location.origin}/c/${slug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      alert('Copied: ' + url);
+    } catch {
+      prompt('Copy this link:', url);
+    }
+  }
+
+  function showFormError(elId: string, msg: string) {
+    const el = document.getElementById(elId)!;
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  // ── Wire-up ──────────────────────────────────────────────────────────────
+  function wireEvents() {
+    document.getElementById('nc-search')!.addEventListener('input', renderNamecards);
+    document.getElementById('nc-visibility-filter')!.addEventListener('change', renderNamecards);
+
+    document.getElementById('nc-add-btn')!.addEventListener('click', openAddModal);
+    document.getElementById('nc-add-cancel')!.addEventListener('click', () => {
+      (document.getElementById('nc-add-modal') as HTMLElement).style.display = 'none';
+    });
+    document.getElementById('nc-add-confirm')!.addEventListener('click', submitAdd);
+
+    document.getElementById('nc-bulk-btn')!.addEventListener('click', bulkCreate);
+
+    document.getElementById('nc-edit-cancel')!.addEventListener('click', () => {
+      (document.getElementById('nc-edit-modal') as HTMLElement).style.display = 'none';
+    });
+    document.getElementById('nc-edit-form')!.addEventListener('submit', (e) => {
+      e.preventDefault();
+      submitEdit();
+    });
+    document.getElementById('nc-edit-slug-save')!.addEventListener('click', updateSlug);
+    document.getElementById('nc-edit-delete')!.addEventListener('click', deleteNamecard);
+    document.getElementById('nc-edit-photo-remove')!.addEventListener('click', removePhoto);
+    document.getElementById('nc-edit-photo-input')!.addEventListener('change', async (e) => {
+      const input = e.target as HTMLInputElement;
+      const file = input.files?.[0];
+      if (!file) return;
+      // Client-side validation matches the server's hard cap.
+      if (file.size > 2 * 1024 * 1024) {
+        showFormError('nc-edit-error', 'Photo must be 2 MB or smaller.');
+        input.value = '';
+        return;
+      }
+      pendingPhotoFile = await uploadPhoto(file);
+      // Preview the cropped version.
+      const url = URL.createObjectURL(pendingPhotoFile);
+      const preview = document.getElementById('nc-edit-photo-preview') as HTMLImageElement;
+      preview.src = url;
+      preview.style.display = 'block';
+    });
+  }
+
+  // @ts-ignore — referenced by inline onclick= strings in rendered rows.
+  window.editNamecard = editNamecard;
+  // @ts-ignore
+  window.toggleNamecard = toggleNamecard;
+  // @ts-ignore
+  window.copyLink = copyLink;
+
+  // ── Self-service panel: load the caller's own card and render the QR. ─────
+  async function loadSelfService() {
+    try {
+      const res = await fetch('/api/namecards/me');
+      const data = await res.json();
+      if (!data.success) return;
+      document.getElementById('nc-self-service')!.style.display = 'block';
+      if (!data.namecard) {
+        document.getElementById('nc-self-empty')!.style.display = 'block';
+        return;
+      }
+      const slug = data.namecard.slug as string;
+      const cardUrl = `${window.location.origin}/c/${encodeURIComponent(slug)}`;
+      const vcfUrl = `${cardUrl}/contact.vcf`;
+      const cardImgUrl = `${cardUrl}/card.svg`;
+
+      (document.getElementById('nc-self-link') as HTMLAnchorElement).href = cardUrl;
+      document.getElementById('nc-self-link')!.textContent = cardUrl;
+      (document.getElementById('nc-self-save-card') as HTMLAnchorElement).href = cardImgUrl;
+      (document.getElementById('nc-self-save-vcf') as HTMLAnchorElement).href = vcfUrl;
+
+      document.getElementById('nc-self-content')!.style.display = 'flex';
+
+      // Draw the QR using the vendored qrcode lib (loaded as /js/qrcode.min.js).
+      const canvas = document.getElementById('nc-self-qr') as HTMLCanvasElement;
+      renderSelfQr(canvas, vcfUrl);
+
+      document.getElementById('nc-self-save-qr')!.addEventListener('click', () => {
+        try {
+          const url = canvas.toDataURL('image/png');
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${slug}-qr.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        } catch (err) {
+          alert('Could not save the QR image. ' + (err as Error).message);
+        }
+      });
+    } catch {
+      // Self-service is best-effort — don't break the page if /me fails.
+    }
+  }
+
+  function renderSelfQr(canvas: HTMLCanvasElement, payload: string) {
+    const tryDraw = () => {
+      const QRCode = (window as any).QRCode;
+      if (typeof QRCode === 'undefined') {
+        return setTimeout(tryDraw, 60);
+      }
+      QRCode.toCanvas(
+        canvas,
+        payload,
+        { width: 512, margin: 2, errorCorrectionLevel: 'H', color: { dark: '#70308c', light: '#ffffff' } },
+        () => {
+          // Centre mark omitted on this small preview — the downloadable PNG
+          // (from the public page) carries the branded badge overlay.
+        },
+      );
+    };
+    tryDraw();
+  }
+
+  requireAuth({
+    onAuthenticated(data) {
+      isAdmin = !!data.is_admin;
+      if (isAdmin) {
+        document.getElementById('nc-admin-actions')!.style.display = 'flex';
+      }
+      wireEvents();
+      loadNamecards();
+      loadSelfService();
+    },
+  });
+</script>

@@ -7,8 +7,10 @@
   },
   "scripts": {
     "copy:qrcode": "cp node_modules/qrcode/build/qrcode.min.js public/js/qrcode.min.js",
-    "predev": "npm run copy:qrcode",
-    "prebuild": "npm run copy:qrcode",
+    "gen:swalogo": "node scripts/generate-swalogo-ts.mjs",
+    "predev": "npm run copy:qrcode && npm run gen:swalogo",
+    "prebuild": "npm run copy:qrcode && npm run gen:swalogo",
+    "pretest": "npm run copy:qrcode",
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
@@ -18,7 +20,9 @@
     "cf-typegen": "wrangler types src/worker/worker-configuration.d.ts",
     "db:setup": "node scripts/db-setup.mjs",
     "db:seed": "node scripts/db-setup.mjs --seed-only",
-    "db:clear:membership": "node scripts/db-clear-membership.mjs"
+    "db:clear:membership": "node scripts/db-clear-membership.mjs",
+    "test": "vitest",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "astro": "^7",
@@ -26,9 +30,11 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
+    "@cloudflare/vitest-pool-workers": "^0.18.8",
     "@cloudflare/workers-types": "^4.20260409.1",
     "qrcode": "^1.4.4",
     "typescript": "^5.9.3",
+    "vitest": "^4.1.10",
     "wrangler": "^4.107.0"
   }
 }

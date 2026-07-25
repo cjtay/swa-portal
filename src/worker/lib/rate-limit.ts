@@ -50,6 +50,14 @@ export function getEndpointKey(path: string, method: string): string | null {
       if (m === 'PATCH') return 'members:patch';
       if (m === 'DELETE') return 'members:delete';
       return null;
+    case '/api/namecards':
+      // The /api/namecards surface has several write methods. Bucket them by
+      // method so the email-keyed limiter treats bulk-create differently from
+      // a single edit (docs/NAMECARD.md §5.4).
+      if (m === 'POST') return 'namecards:post';
+      if (m === 'PATCH') return 'namecards:patch';
+      if (m === 'DELETE') return 'namecards:delete';
+      return null;
     default:
       return null;
   }

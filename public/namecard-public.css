@@ -1,0 +1,335 @@
+/*
+ * Public namecard page styles.
+ *
+ * Self-contained on purpose: the /c/:slug page is the public surface and is
+ * exported to canvas for the PNG card image. Loading the admin Tailwind
+ * bundle here would bloat the payload and risk leaking admin styling rules
+ * into the canvas export (docs/NAMECARD.md §6.3). Colours are the SWA design
+ * palette (docs/plans/Namecard-Implementation-Plan.md §1.3), hardcoded —
+ * NOT the admin swa-* variables.
+ */
+
+:root {
+  --nc-bg-purple: #7A0381;
+  --nc-text-white: #FFFFFF;
+  --nc-divider: rgba(255, 255, 255, 0.8);
+  --nc-logo-ink: #6B196E;
+  --nc-page-bg: #f9fafb;
+  --nc-text-muted: #6b7280;
+  --nc-border: #e5e7eb;
+  --nc-radius: 12px;
+  --nc-shadow: 0 8px 30px rgba(69, 10, 94, 0.18);
+  --nc-max-width: 440px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body.nc-page {
+  background: var(--nc-page-bg);
+  color: #1f2937;
+  font-family: 'Poppins', 'Segoe UI', Roboto, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.nc-card {
+  width: 100%;
+  max-width: var(--nc-max-width);
+  background: #fff;
+  border-radius: var(--nc-radius);
+  box-shadow: var(--nc-shadow);
+  overflow: hidden;
+}
+
+.nc-header {
+  background: linear-gradient(135deg, #70308c 0%, #450a5e 100%);
+  color: var(--nc-text-white);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 16px;
+}
+
+.nc-avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.nc-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.nc-headings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nc-name {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.nc-title {
+  font-size: 15px;
+  font-weight: 300;
+  margin: 0;
+  opacity: 0.9;
+}
+
+.nc-org {
+  font-size: 13px;
+  font-weight: 400;
+  margin: 4px 0 0;
+  opacity: 0.7;
+  letter-spacing: 0.5px;
+}
+
+.nc-bio {
+  padding: 16px 24px 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #374151;
+}
+
+.nc-bio summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--nc-logo-ink);
+  list-style: none;
+}
+
+.nc-bio summary::-webkit-details-marker {
+  display: none;
+}
+
+.nc-bio summary::after {
+  content: ' ▾';
+  font-size: 0.8em;
+}
+
+.nc-bio[open] summary::after {
+  content: ' ▴';
+}
+
+.nc-bio p {
+  margin: 8px 0 0;
+}
+
+.nc-contact {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nc-row {
+  display: flex;
+  gap: 14px;
+  text-decoration: none;
+  color: #1f2937;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--nc-border);
+  align-items: flex-start;
+}
+
+.nc-row:last-child {
+  border-bottom: none;
+}
+
+.nc-row:hover {
+  color: var(--nc-logo-ink);
+}
+
+.nc-row-label {
+  flex: 0 0 80px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--nc-text-muted);
+  padding-top: 2px;
+}
+
+.nc-row-value {
+  flex: 1;
+  font-size: 15px;
+  word-break: break-word;
+}
+
+.nc-row-address {
+  font-style: normal;
+}
+
+.nc-actions {
+  padding: 0 24px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.nc-btn {
+  flex: 1 1 auto;
+  min-width: 110px;
+  padding: 11px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  text-align: center;
+  text-decoration: none;
+  border: 1.5px solid var(--nc-logo-ink);
+  background: #fff;
+  color: var(--nc-logo-ink);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.nc-btn:hover {
+  background: var(--nc-logo-ink);
+  color: #fff;
+}
+
+.nc-btn-primary {
+  background: var(--nc-logo-ink);
+  color: #fff;
+}
+
+.nc-btn-primary:hover {
+  background: var(--nc-bg-purple);
+  border-color: var(--nc-bg-purple);
+}
+
+.nc-socials {
+  padding: 0 24px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.nc-social {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 16px;
+  background: #f3d2ff;
+  color: var(--nc-logo-ink);
+  text-decoration: none;
+}
+
+.nc-social:hover {
+  background: var(--nc-logo-ink);
+  color: #fff;
+}
+
+.nc-qr {
+  padding: 16px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  border-top: 1px solid var(--nc-border);
+  margin-top: 8px;
+}
+
+.nc-qr-canvas {
+  width: 220px;
+  height: 220px;
+  display: block;
+}
+
+.nc-qr-actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.nc-footer {
+  padding: 18px 24px;
+  text-align: center;
+  background: #fafafa;
+  border-top: 1px solid var(--nc-border);
+  font-size: 13px;
+  color: var(--nc-text-muted);
+}
+
+.nc-footer p {
+  margin: 0 0 4px;
+}
+
+.nc-link {
+  color: var(--nc-logo-ink);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.nc-link:hover {
+  text-decoration: underline;
+}
+
+.nc-page-notfound {
+  align-items: center;
+}
+
+.nc-notfound {
+  max-width: 480px;
+  background: #fff;
+  padding: 40px 28px;
+  border-radius: var(--nc-radius);
+  box-shadow: var(--nc-shadow);
+  text-align: center;
+  margin-top: 10vh;
+}
+
+.nc-notfound h1 {
+  color: var(--nc-bg-purple);
+  font-size: 22px;
+  margin: 0 0 12px;
+}
+
+.nc-notfound p {
+  color: var(--nc-text-muted);
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 480px) {
+  .nc-header {
+    padding: 22px 18px;
+  }
+  .nc-name {
+    font-size: 22px;
+  }
+  .nc-contact,
+  .nc-actions,
+  .nc-socials,
+  .nc-qr,
+  .nc-footer {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}

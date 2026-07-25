@@ -1,6 +1,6 @@
 -- Migration: Membership lifecycle — per-member fields + payment log
 -- Date: 2026-07-14
--- Plan: docs/membership-lifecycle-plan.md §5
+-- Plan: docs/plans/membership-lifecycle-plan.md §5
 --
 -- Adds three columns to `members` that replace the half-built memberships/
 -- membership_types tables as the source of truth for fee tracking, plus

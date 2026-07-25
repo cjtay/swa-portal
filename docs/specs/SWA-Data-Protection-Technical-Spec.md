@@ -4,7 +4,7 @@
 **Date:** 2026-07-15
 **Status:** Implemented and verified
 **Audience:** Technical — developers/maintainers of this machine's tooling setup
-**Companion document:** `docs/SWA-Data-Protection-Functional-Spec.md` (plain-language version)
+**Companion document:** `docs/specs/SWA-Data-Protection-Functional-Spec.md` (plain-language version)
 
 ---
 

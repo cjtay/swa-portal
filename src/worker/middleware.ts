@@ -23,6 +23,10 @@ const IT_ADMIN_ONLY_API = new Set([
 
 const ADMIN_WRITE_API = new Set([
   '/api/members',
+  // Namecard writes (POST/PATCH/DELETE) are admin-only. GET stays open to
+  // every authenticated role so committee/volunteer/advisor can use the
+  // self-service download panel (docs/NAMECARD.md §5.5, §17.5).
+  '/api/namecards',
 ]);
 
 const REG_BUYER_API = new Set([

@@ -141,9 +141,19 @@ export async function handleMemberById(c: AppContext) {
       return c.json({ success: false, error_code: 'FORBIDDEN', message: 'IT Admin accounts cannot be deleted.' }, 403);
     }
 
-    await c.env.DB.prepare(
-      `UPDATE members SET deleted_at = datetime('now'), can_login = 0, updated_at = datetime('now') WHERE id = ?`,
-    ).bind(id).run();
+    // Atomic transaction: soft-delete the member AND dark their namecard in a
+    // single D1 batch so the public /c/:slug surface goes 404 the instant the
+    // member is deleted (docs/NAMECARD.md §9.4). D1 executes a `batch()` as a
+    // single transaction — either both UPDATEs land or neither does. The
+    // namecards UPDATE is a no-op when the member has no card.
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE members SET deleted_at = datetime('now'), can_login = 0, updated_at = datetime('now') WHERE id = ?`,
+      ).bind(id),
+      c.env.DB.prepare(
+        `UPDATE namecards SET has_namecard = 0, updated_at = datetime('now') WHERE member_id = ?`,
+      ).bind(id),
+    ]);
 
     // Kill any in-flight OTP so it cannot be exchanged for a new session.
     if (email) {

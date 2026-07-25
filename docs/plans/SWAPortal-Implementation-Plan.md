@@ -165,7 +165,7 @@ Ported from GTW and adapted, with additional security hardening:
 | `committee` | D1 `members.category = 'committee'` (or `'advisor'`) with `can_login = 1` | Read members/namecards, create/cancel own bookings |
 | `member` | (Phase 2) Self-registration via OTP | View own membership status, pay fees |
 
-See `docs/SWAPortal-Functional-Specs.md` for the full access matrix.
+See `docs/specs/SWAPortal-Functional-Specs.md` for the full access matrix.
 
 **IT Admin emails** (hardcoded in `src/constants/portal.ts`):
 - `cjtay@singaporewomenassociation.org`
@@ -233,7 +233,7 @@ See `docs/SWAPortal-Functional-Specs.md` for the full access matrix.
 
 ## Phase 2: Membership Lifecycle
 
-> **Redesigned 2026-07-14.** The original Phase 2 (membership types CRUD, old fee tracking) has been replaced by the per-member lifecycle model. See `docs/membership-lifecycle-plan.md` for the full spec.
+> **Redesigned 2026-07-14.** The original Phase 2 (membership types CRUD, old fee tracking) has been replaced by the per-member lifecycle model. See `docs/plans/membership-lifecycle-plan.md` for the full spec.
 
 ### 2A. Data Model + Manual Tracking ✅ (code complete 14-07-2026)
 
@@ -455,7 +455,7 @@ Use this section to track implementation progress across sessions. Update checkb
   - [ ] Update CSP headers in swa2024 `public/_headers`
   - [ ] Test all subdomains with HTTPS
 
-### Phase 2: Membership Lifecycle (redesigned — see docs/membership-lifecycle-plan.md)
+### Phase 2: Membership Lifecycle (redesigned — see docs/plans/membership-lifecycle-plan.md)
 
 - [x] **2A. Data model + manual tracking** (code complete 14-07-2026)
   - [x] Migration 005 written (per-member fields + `membership_payments` table)

@@ -17,9 +17,9 @@ npm run db:clear:membership  # Clear local membership applications + approved te
 
 The public-website integration (namecards, `show_on_website`, `has_namecard`, `slug`, photo uploads, `/api/sync-website`) was **removed on 19-07-2026** — swa-portal is now isolated from the public `swa2024` website for risk segregation. Member profile/bio/socials are no longer managed here.
 
-See `docs/SWAPortal-Implementation-Plan.md` for full progress tracker.
+See `docs/plans/SWAPortal-Implementation-Plan.md` for full progress tracker.
 
-See `docs/SWAPortal-Functional-Specs.md` for role access matrix, API permissions, and feature specifications.
+See `docs/specs/SWAPortal-Functional-Specs.md` for role access matrix, API permissions, and feature specifications.
 
 ## Core Rules
 - **British English** spelling (organise, programme, colour)
@@ -39,7 +39,7 @@ See `docs/SWAPortal-Functional-Specs.md` for role access matrix, API permissions
 
 ## Role Access
 
-Three tiers. See `docs/SWAPortal-Functional-Specs.md` for the full access matrix.
+Three tiers. See `docs/specs/SWAPortal-Functional-Specs.md` for the full access matrix.
 
 | Role | How determined | What they can do |
 |------|---------------|------------------|

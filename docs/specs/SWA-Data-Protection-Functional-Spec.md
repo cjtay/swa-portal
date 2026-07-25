@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-15
 **Audience:** Anyone — no technical background needed
-**Technical version:** `docs/SWA-Data-Protection-Technical-Spec.md`
+**Technical version:** `docs/specs/SWA-Data-Protection-Technical-Spec.md`
 
 ---
 
@@ -50,7 +50,7 @@ Three things to do at that point (the technical spec has the full checklist):
 
 ## Setting up a new or replacement computer
 
-The whole setup can be recreated in minutes without copying anything from the old machine: open this project on the new computer and ask any AI tool to follow **section 8 of the technical spec** (`docs/SWA-Data-Protection-Technical-Spec.md`). That document contains every rule file, script, and setting verbatim, plus the tests to confirm it all works.
+The whole setup can be recreated in minutes without copying anything from the old machine: open this project on the new computer and ask any AI tool to follow **section 8 of the technical spec** (`docs/specs/SWA-Data-Protection-Technical-Spec.md`). That document contains every rule file, script, and setting verbatim, plus the tests to confirm it all works.
 
 ## Two-minute health check
 

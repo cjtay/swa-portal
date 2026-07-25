@@ -487,7 +487,7 @@ npm run deploy       # Astro build + wrangler deploy
 -- UPDATE members SET category = 'exco' WHERE category = 'committee';
 ```
 
-This data rename is **no longer required**. `verify-otp.ts` maps `category='committee'` → the committee login tier (catch-all). See `docs/membership-lifecycle-plan.md` §8.
+This data rename is **no longer required**. `verify-otp.ts` maps `category='committee'` → the committee login tier (catch-all). See `docs/plans/membership-lifecycle-plan.md` §8.
 
 ### Querying error_log
 

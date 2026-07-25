@@ -44,7 +44,7 @@ export const MEMBERSHIP_NOTIFY_EMAILS = [
 
 // Restricted set of admins who can approve or reject membership applications.
 // Other admins retain member/booking CRUD but cannot transition
-// membership_applications.status. See docs/membership-lifecycle-plan.md §3.
+// membership_applications.status. See docs/plans/membership-lifecycle-plan.md §3.
 //
 // The approve/reject gate is `isMembershipApprover(email)` (defined below),
 // which checks membership in MEMBERSHIP_APPROVER_EMAILS OR IT_ADMIN_EMAILS.
@@ -77,7 +77,7 @@ export function isMembershipApprover(email: string): boolean {
 // Per 14-07-2026 SWA review: fees are hardcoded here as the single source
 // of truth — no KV storage. The registration form reads these constants
 // via /api/membership/config. The legacy membership_types D1 table is
-// dormant and no longer read. See docs/membership-lifecycle-plan.md §3.
+// dormant and no longer read. See docs/plans/membership-lifecycle-plan.md §3.
 export const MEMBERSHIP_FIRST_YEAR_FEE_BEFORE_JULY = 20;
 export const MEMBERSHIP_FIRST_YEAR_FEE_FROM_JULY = 10;
 export const MEMBERSHIP_RENEWAL_FEE = 20;
@@ -93,4 +93,17 @@ export const MEMBERSHIP_RATE_LIMIT_MAX_REQUESTS = 10;
 
 // Max upload size for PayNow screenshot + signature image (10 MB each).
 export const MEMBERSHIP_MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+// ── Namecard (public /c/* surface) ─────────────────────────────────────────
+//
+// IP-keyed rate limit for the high-cost public namecard endpoints
+// (/c/:slug/contact.vcf, /c/:slug/card.svg, /c/:slug/photo.*). The HTML page
+// is exempt so QR-scan → page-load stays snappy. See docs/NAMECARD.md §5.4.
+export const NAMECARD_PUBLIC_RATE_LIMIT_WINDOW_SECONDS = 60;
+export const NAMECARD_PUBLIC_RATE_LIMIT_MAX_REQUESTS = 60;
+
+// Hard server-side cap on namecard photo uploads. The admin upload form
+// also resizes client-side to ~800×800, but the server enforces this
+// regardless of what the client sends. See docs/NAMECARD.md §4.2.
+export const NAMECARD_PHOTO_MAX_BYTES = 2 * 1024 * 1024;
 

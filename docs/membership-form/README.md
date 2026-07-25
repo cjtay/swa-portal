@@ -21,10 +21,10 @@ This subfolder documents the **public membership registration form** at `/reg/me
 
 ## Related docs elsewhere in `docs/`
 
-- `docs/membership-lifecycle-plan.md` — the forward-looking design plan for the full lifecycle (Phase 2 cron, email reminders, auto-inactivation). This spec documents the **as-built** system; the plan tracks what's coming next.
-- `docs/membership-lifecycle-testing-strategy.md` — staging and testing plan for Phase 2 features.
-- `docs/SWAPortal-Functional-Specs.md` — portal-wide role access matrix (the membership admin views inherit the admin/committee tier from here).
-- `docs/SWAPortal-Implementation-Plan.md` — overall implementation tracker.
+- `docs/plans/membership-lifecycle-plan.md` — the forward-looking design plan for the full lifecycle (Phase 2 cron, email reminders, auto-inactivation). This spec documents the **as-built** system; the plan tracks what's coming next.
+- `docs/plans/membership-lifecycle-testing-strategy.md` — staging and testing plan for Phase 2 features.
+- `docs/specs/SWAPortal-Functional-Specs.md` — portal-wide role access matrix (the membership admin views inherit the admin/committee tier from here).
+- `docs/plans/SWAPortal-Implementation-Plan.md` — overall implementation tracker.
 
 ## Release history (most recent first)
 

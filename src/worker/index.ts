@@ -27,6 +27,21 @@ import {
   handleMembershipApprove,
   handleMembershipReject,
 } from './api/membership-reg';
+import {
+  handleNamecardPage,
+  handleNamecardVcard,
+  handleNamecardCardSvg,
+  handlePublicNamecardPhoto,
+} from './api/namecard-public';
+import {
+  handleNamecards,
+  handleNamecardsBulk,
+  handleNamecardById,
+  handleNamecardSlug,
+  handleNamecardPhoto,
+  handleNamecardToggle,
+  handleNamecardMe,
+} from './api/namecards';
 
 const app = new Hono<{
   Bindings: Env;
@@ -34,6 +49,20 @@ const app = new Hono<{
 }>();
 
 app.use('/api/*', authMiddleware);
+
+// ── Public namecard surface (/c/*) ─────────────────────────────────────────
+//
+// Registered BEFORE the auth-gated /api/* block. authMiddleware is scoped to
+// '/api/*' only, so /c/* is public by construction. The wrangler.jsonc
+// `run_worker_first` setting must include '/c/*' so these requests reach the
+// Worker rather than the static asset handler (docs/NAMECARD.md §11.2).
+app.get('/c/:slug', handleNamecardPage);
+app.get('/c/:slug/contact.vcf', handleNamecardVcard);
+app.get('/c/:slug/card.svg', handleNamecardCardSvg);
+// Photo stream — no extension. The Content-Type header (from R2 metadata)
+// governs the response; an extension would risk the static-assets handler
+// intercepting the request before Hono's router fires.
+app.get('/c/:slug/photo', handlePublicNamecardPhoto);
 
 app.get('/api/health', (c) => {
   return c.json({ status: 'ok', service: 'swa-portal', timestamp: new Date().toISOString() });
@@ -131,5 +160,23 @@ app.get('/api/admin/forms/membership/image/:id/:kind', handleMembershipImage);
 // Online Forms — admin only approve / reject (writes to members + memberships)
 app.post('/api/admin/forms/membership/:id/approve', handleMembershipApprove);
 app.post('/api/admin/forms/membership/:id/reject', handleMembershipReject);
+
+// ── Namecards (admin CRUD + self-service) ──────────────────────────────────
+//
+// POST/PATCH/DELETE are admin-only via ADMIN_WRITE_API (middleware.ts).
+// GET stays open to every authenticated role so committee/volunteer/advisor
+// can use the self-service download panel. The /me route returns the caller's
+// own row only.
+app.get('/api/namecards', handleNamecards);
+app.post('/api/namecards', handleNamecards);
+app.post('/api/namecards/bulk', handleNamecardsBulk);
+app.get('/api/namecards/me', handleNamecardMe);
+app.get('/api/namecards/:id', handleNamecardById);
+app.patch('/api/namecards/:id', handleNamecardById);
+app.delete('/api/namecards/:id', handleNamecardById);
+app.patch('/api/namecards/:id/slug', handleNamecardSlug);
+app.patch('/api/namecards/:id/toggle', handleNamecardToggle);
+app.post('/api/namecards/:id/photo', handleNamecardPhoto);
+app.delete('/api/namecards/:id/photo', handleNamecardPhoto);
 
 export default app;

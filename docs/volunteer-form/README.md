@@ -19,9 +19,9 @@ This subfolder documents the **public volunteer registration form** at `/reg/vol
 
 ## Related docs elsewhere in `docs/`
 
-- `docs/SWAPortal-Functional-Specs.md` — portal-wide role access matrix (the volunteer form's admin views inherit the admin/committee tier from here).
+- `docs/specs/SWAPortal-Functional-Specs.md` — portal-wide role access matrix (the volunteer form's admin views inherit the admin/committee tier from here).
 - `docs/checklist/email-otp-security-checklist.md` — OTP flow (note: the volunteer form does NOT use OTP; it is Turnstile-gated and public).
-- `docs/SWAPortal-Implementation-Plan.md` — tracker entry for the original volunteer_registrations build.
+- `docs/plans/SWAPortal-Implementation-Plan.md` — tracker entry for the original volunteer_registrations build.
 - Outside this repo: `~/Documents/Projects/gtw2026/docs/GTW-D1-Incident-Report-2026-06-20.md` — the source for the D1 retryable-error matcher used by the form's 503 handler. Linked, not reproduced.
 
 ## Release history (most recent first)

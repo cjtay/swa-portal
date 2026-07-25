@@ -648,15 +648,15 @@ SWA's three-system digital ecosystem represents a deliberate architectural choic
 
 | Document | Location | Purpose |
 |----------|----------|---------|
-| Architecture Assessment | `swa-portal/docs/SWA-Workers-Architecture-Assessment.md` | Three-worker vs one-worker analysis and recommendation |
+| Architecture Assessment | `swa-portal/docs/specs/SWA-Workers-Architecture-Assessment.md` | Three-worker vs one-worker analysis and recommendation |
 | Cloudflare Migration Log | `swa2024/docs/cloudflare-workers-migration.md` | Netlify → Cloudflare migration record |
 | GTW Master Summary | `gtw2026/docs/GTW-Implementation-Master-Summary-1.2.md` | Canonical GTW implementation reference |
 | GTW Risk Report | `gtw2026/docs/GTW-Database-Design-and-Risk-Report.md` | Database rationale and risk register |
 | GTW Implementation Risk Report | `gtw2026/docs/GTW-Implementation-Risk-Report.md` | 16 identified risks across 6 implementation phases |
-| Portal Functional Spec | `swa-portal/docs/SWAPortal-Functional-Specification.md` | Complete portal features, roles, APIs, data flows |
-| Portal Implementation Plan | `swa-portal/docs/SWAPortal-Implementation-Plan.md` | Phased delivery tracker with decisions log |
+| Portal Functional Spec | `swa-portal/docs/specs/SWAPortal-Functional-Specification.md` | Complete portal features, roles, APIs, data flows |
+| Portal Implementation Plan | `swa-portal/docs/plans/SWAPortal-Implementation-Plan.md` | Phased delivery tracker with decisions log |
 | GTW System Specification | `gtw2026/docs/GTW-System-Specification.md` | Full GTW design and rationale |
-| Stale Session Risk Plan | `swa-portal/docs/stale-session-privilege-escalation-plan.md` | Documented mitigation plan for known session limitation |
+| Stale Session Risk Plan | `swa-portal/docs/plans/stale-session-privilege-escalation-plan.md` | Documented mitigation plan for known session limitation |
 
 ---
 
