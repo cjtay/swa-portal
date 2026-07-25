@@ -98,6 +98,10 @@ export async function handleNamecardPage(c: AppContext): Promise<Response> {
       // Short browser TTL, longer edge TTL — edits appear within 5-10 min
       // (docs/NAMECARD.md §8.5).
       'Cache-Control': 'public, max-age=300, s-maxage=600',
+      // Defence-in-depth on top of the admin-domain robots.txt block —
+      // prevents indexing if the URL is discovered via an external link
+      // and robots.txt is ever weakened.
+      'X-Robots-Tag': 'noindex, nofollow',
     },
   });
 }
@@ -328,6 +332,7 @@ function renderCardHtml(card: PublicNamecardRow, baseUrl: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
   <title>${safe(card.name)} — Digital Namecard | SWA</title>
   <meta name="description" content="Digital namecard for ${safe(card.name)}, ${safe(card.job_title)} at the Singapore Women's Association.">
   <link rel="canonical" href="${safe(cardUrl)}">
@@ -461,6 +466,7 @@ function brandedNotFound(c: AppContext): Response {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
   <title>Namecard not available | SWA</title>
   <link rel="stylesheet" href="/namecard-public.css">
 </head>
@@ -474,7 +480,7 @@ function brandedNotFound(c: AppContext): Response {
 </html>`;
   return new Response(html, {
     status: 404,
-    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60' },
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60', 'X-Robots-Tag': 'noindex, nofollow' },
   });
 }
 
