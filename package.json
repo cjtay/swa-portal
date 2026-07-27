@@ -26,15 +26,15 @@
   },
   "dependencies": {
     "astro": "^7",
-    "hono": "^4.12.27"
+    "hono": "^4.12.32"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
     "@cloudflare/vitest-pool-workers": "^0.18.8",
     "@cloudflare/workers-types": "^4.20260409.1",
-    "qrcode": "^1.4.4",
+    "qrcode": "^1.5.4",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10",
-    "wrangler": "^4.107.0"
+    "wrangler": "^4.114.0"
   }
 }
