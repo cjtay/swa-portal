@@ -1,0 +1,281 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Laughter Yoga Registrations — SWA Admin Portal" currentPath="/admin/forms/laughter-yoga">
+  <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem;">
+    <a href="/admin/forms" style="color:var(--text-muted);text-decoration:none;font-size:0.85rem;">Online Forms</a>
+    <span style="color:var(--text-muted);">/</span>
+    <span style="font-size:0.85rem;">Laughter Yoga Registration</span>
+  </div>
+  <h1>Laughter Yoga Registrations</h1>
+  <p style="color:var(--text-muted);margin-bottom:1.5rem;">All submissions from the public Certified Laughter Yoga Leader training registration form.</p>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:0.75rem;flex-wrap:wrap;">
+      <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+        <input type="search" id="search-input" class="form-input" placeholder="Search by name, email, phone, or organisation..." style="width:280px;max-width:100%;" />
+        <button class="btn btn-secondary" id="export-btn">Export CSV</button>
+      </div>
+      <span id="count-label" style="color:var(--text-muted);font-size:0.85rem;"></span>
+    </div>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="id">Ref</th>
+            <th>Event</th>
+            <th class="sortable" data-sort="full_name">Full Name</th>
+            <th class="sortable" data-sort="email">Email</th>
+            <th>Age</th>
+            <th>Address</th>
+            <th>Phone Number</th>
+            <th>Emergency Contact</th>
+            <th>Organisation Name</th>
+            <th>Occupation</th>
+            <th>Where Did You Find Out</th>
+            <th>WhatsApp Group</th>
+            <th>Indemnity &amp; PDPA</th>
+            <th class="sortable" data-sort="created_at">Submitted (SG)</th>
+          </tr>
+        </thead>
+        <tbody id="submissions-list"></tbody>
+      </table>
+    </div>
+  </div>
+</AdminLayout>
+
+<style is:global>
+  /* Widen this page's content for wide monitors (overrides .admin-main 1200px cap) */
+  .admin-main {
+    max-width: 1600px;
+  }
+
+  /* Visible horizontal scrollbar for the submissions table (Chrome/Edge + Firefox) */
+  .table-scroll {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 75vh;
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+  }
+
+  /* Sticky header so column titles stay visible while scrolling vertically */
+  .table-scroll .data-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bg);
+  }
+
+  /* Chrome, Edge, Safari */
+  .table-scroll::-webkit-scrollbar {
+    height: 12px;
+    width: 12px;
+  }
+  .table-scroll::-webkit-scrollbar-track {
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    border-radius: 0 0 0.4rem 0.4rem;
+  }
+  .table-scroll::-webkit-scrollbar-thumb {
+    background: var(--swa-3);
+    border-radius: 9999px;
+    border: 2px solid var(--bg);
+  }
+  .table-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--swa-1);
+  }
+
+  /* Firefox */
+  .table-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--swa-3) var(--bg);
+  }
+
+  /* Sortable column headers */
+  .data-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .data-table th.sortable:hover {
+    color: var(--swa-1);
+    background: #f5f0f8;
+  }
+  .data-table th.sortable[aria-sort="ascending"]::after {
+    content: ' ▲';
+    font-size: 0.65rem;
+  }
+  .data-table th.sortable[aria-sort="descending"]::after {
+    content: ' ▼';
+    font-size: 0.65rem;
+  }
+  .data-table th.sortable[aria-sort] {
+    color: var(--swa-1);
+  }
+</style>
+
+<script>
+  import { requireAuth } from '../../../scripts/auth-gate';
+
+  let allSubmissions: any[] = [];
+  let sortColumn: string | null = null;
+  let sortDirection: 'asc' | 'desc' = 'asc';
+
+  function sortSubmissions() {
+    if (!sortColumn) return;
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    allSubmissions.sort((a: any, b: any) => {
+      let va: any = a[sortColumn!];
+      let vb: any = b[sortColumn!];
+      if (sortColumn === 'id') {
+        return (Number(va) - Number(vb)) * dir;
+      }
+      if (sortColumn === 'created_at') {
+        return String(va || '').localeCompare(String(vb || '')) * dir;
+      }
+      // full_name, email — case-insensitive string
+      return String(va || '').toLowerCase().localeCompare(String(vb || '').toLowerCase()) * dir;
+    });
+  }
+
+  function updateSortHeaders() {
+    const thead = document.querySelector('.data-table thead');
+    if (!thead) return;
+    thead.querySelectorAll('th.sortable').forEach((th) => {
+      const col = (th as HTMLElement).dataset.sort;
+      if (col === sortColumn) {
+        th.setAttribute('aria-sort', sortDirection === 'asc' ? 'ascending' : 'descending');
+      } else {
+        th.removeAttribute('aria-sort');
+      }
+    });
+  }
+
+  async function loadSubmissions() {
+    const tbody = document.getElementById('submissions-list')!;
+    try {
+      const res = await fetch('/api/admin/forms/laughter-yoga');
+      const data = await res.json();
+      if (data.success) {
+        allSubmissions = data.submissions;
+        renderSubmissions();
+      } else if (data.error_code === 'FORBIDDEN') {
+        tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--danger);">You do not have permission to view submissions.</td></tr>';
+      } else {
+        tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--text-muted);">Could not load submissions.</td></tr>';
+      }
+    } catch {
+      tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--text-muted);">Network error.</td></tr>';
+    }
+  }
+
+  function escapeHtml(s: string): string {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+
+  function formatDateTimeSg(iso: string): string {
+    if (!iso) return '';
+    // D1 stores datetime('now') as UTC in "YYYY-MM-DD HH:MM:SS" (no Z).
+    // new Date() treats a no-suffix string as local time, so normalise to UTC
+    // before converting to Asia/Singapore for correct display in any timezone.
+    const normalised = /^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}/.test(iso)
+      ? iso.replace(' ', 'T') + 'Z'
+      : iso;
+    const d = new Date(normalised);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString('en-GB', {
+      timeZone: 'Asia/Singapore',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  }
+
+  function refFor(id: number): string {
+    return 'LY-' + String(id ?? 0).padStart(5, '0');
+  }
+
+  function dash(s: string): string {
+    const v = (s || '').trim();
+    return v.length > 0 ? escapeHtml(v) : '<span style="color:var(--text-muted);">&mdash;</span>';
+  }
+
+  function renderSubmissions() {
+    sortSubmissions();
+    updateSortHeaders();
+
+    const search = (document.getElementById('search-input') as HTMLInputElement).value.toLowerCase().trim();
+
+    const filtered = search
+      ? allSubmissions.filter((s: any) =>
+          (s.full_name || '').toLowerCase().includes(search) ||
+          (s.email || '').toLowerCase().includes(search) ||
+          (s.phone_number || '').toLowerCase().includes(search) ||
+          (s.organisation_name || '').toLowerCase().includes(search))
+      : allSubmissions;
+
+    const tbody = document.getElementById('submissions-list')!;
+    const countLabel = document.getElementById('count-label')!;
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--text-muted);">No submissions found.</td></tr>';
+      countLabel.textContent = allSubmissions.length === 0 ? '' : `${filtered.length} of ${allSubmissions.length}`;
+      return;
+    }
+
+    tbody.innerHTML = filtered.map((s: any) => {
+      const ref = refFor(s.id);
+      const submitted = formatDateTimeSg(s.created_at);
+
+      return `<tr>
+        <td style="font-family:'Courier New',monospace;font-size:0.8rem;color:var(--swa-2);white-space:nowrap;">${escapeHtml(ref)}</td>
+        <td>${dash(s.event_key || '')}</td>
+        <td>${escapeHtml(s.full_name || '')}</td>
+        <td>${escapeHtml(s.email || '')}</td>
+        <td>${dash(s.age || '')}</td>
+        <td>${dash(s.address || '')}</td>
+        <td>${dash(s.phone_number || '')}</td>
+        <td>${dash(s.emergency_contact || '')}</td>
+        <td>${dash(s.organisation_name || '')}</td>
+        <td>${dash(s.occupation || '')}</td>
+        <td>${dash(s.source || '')}</td>
+        <td>${s.whatsapp_group ? 'Yes' : 'No'}</td>
+        <td>${s.indemnity_pdpa ? 'Agreed' : 'Not agreed'}</td>
+        <td style="white-space:nowrap;font-size:0.85rem;">${escapeHtml(submitted)}</td>
+      </tr>`;
+    }).join('');
+
+    countLabel.textContent = search ? `${filtered.length} of ${allSubmissions.length} shown` : `${allSubmissions.length} total`;
+  }
+
+  document.getElementById('search-input')!.addEventListener('input', renderSubmissions);
+  document.getElementById('export-btn')!.addEventListener('click', () => {
+    window.location.href = '/api/admin/forms/laughter-yoga/export';
+  });
+
+  document.querySelector('.data-table thead')!.addEventListener('click', (e: Event) => {
+    const th = (e.target as HTMLElement).closest('th.sortable') as HTMLElement | null;
+    if (!th) return;
+    const col = th.dataset.sort!;
+    if (sortColumn === col) {
+      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortColumn = col;
+      sortDirection = 'asc';
+    }
+    renderSubmissions();
+  });
+
+  requireAuth({
+    onAuthenticated() {
+      loadSubmissions();
+    },
+  });
+</script>

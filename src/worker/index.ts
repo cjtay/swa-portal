@@ -18,6 +18,7 @@ import { handleSendMagicLink } from './api/reg/admin-magic-link';
 import { handleRegTables } from './api/reg/reg-tables';
 import { handleAdminSettingsGet, handleAdminSettingsPost } from './api/admin-settings';
 import { handleVolunteerConfig, handleVolunteerRegister, handleVolunteerSubmissions, handleVolunteerExport } from './api/volunteer-reg';
+import { handleLaughterYogaConfig, handleLaughterYogaRegister, handleLaughterYogaSubmissions, handleLaughterYogaExport } from './api/laughter-yoga-reg';
 import {
   handleMembershipConfig,
   handleMembershipRegister,
@@ -147,6 +148,14 @@ app.post('/api/volunteer/register', handleVolunteerRegister);
 // Online Forms — admin + committee view submissions
 app.get('/api/admin/forms/volunteer', handleVolunteerSubmissions);
 app.get('/api/admin/forms/volunteer/export', handleVolunteerExport);
+
+// Laughter Yoga Registration (public form at /reg/laughter-yoga/register)
+app.get('/api/laughter-yoga/config', handleLaughterYogaConfig);
+app.post('/api/laughter-yoga/register', handleLaughterYogaRegister);
+
+// Online Forms — admin + committee view Laughter Yoga submissions
+app.get('/api/admin/forms/laughter-yoga', handleLaughterYogaSubmissions);
+app.get('/api/admin/forms/laughter-yoga/export', handleLaughterYogaExport);
 
 // Membership Application (public form at /reg/membership/register)
 app.get('/api/membership/config', handleMembershipConfig);

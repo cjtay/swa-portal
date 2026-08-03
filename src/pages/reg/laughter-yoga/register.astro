@@ -1,0 +1,540 @@
+---
+import '../../../styles/volunteer-form.css';
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="index, follow" />
+  <title>Certified Laughter Yoga Leader Training — Singapore Women's Association</title>
+  <link rel="icon" type="image/webp" href="/swa-logo.webp" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+</head>
+<body>
+  <div class="vf-page" id="vf-app">
+    <!-- Loading shell replaced by JS -->
+    <div class="vf-brandband">
+      <a class="vf-brand" href="/">
+        <img class="vf-brand-logo" src="/swa-logo.webp" alt="SWA Logo" width="80" height="80" />
+        <span class="vf-brand-name">Singapore Women&rsquo;s Association</span>
+      </a>
+    </div>
+
+    <div class="vf-eventband">
+      <h1 id="vf-event-title">Certified Laughter Yoga Leader Training</h1>
+      <p id="vf-event-sub"></p>
+    </div>
+
+    <main class="vf-main" id="vf-main">
+      <div id="vf-content"><div class="vf-success" style="text-align:center;color:#6b7280;">Loading form…</div></div>
+    </main>
+
+    <footer class="vf-foot">
+      &copy; <span id="vf-year"></span> Singapore Women&rsquo;s Association &middot;
+      <a href="https://www.singaporewomenassociation.org/">Main Website</a>
+    </footer>
+  </div>
+
+  <script>
+    const app = document.getElementById('vf-app')!;
+    const main = document.getElementById('vf-main')!;
+    const content = document.getElementById('vf-content')!;
+    const titleEl = document.getElementById('vf-event-title')!;
+    const subEl = document.getElementById('vf-event-sub')!;
+    document.getElementById('vf-year')!.textContent = String(new Date().getFullYear());
+
+    // Embed mode: ?embed=1 hides logo bar, event title band, and footer (for iframe use).
+    if (new URLSearchParams(window.location.search).get('embed') === '1') {
+      app.classList.add('vf-embed');
+    }
+
+    let config: any = null;
+    let closed = false;
+    let turnstileToken: string | null = null;
+    let turnstileWidgetId: string | null = null;
+    // Tracks what's actually happening with the invisible Turnstile widget so
+    // we can give an honest, actionable message instead of "please complete
+    // the security verification" (which is impossible when the widget is
+    // silent and failing for reasons the user can't see or fix).
+    let turnstileState: 'loading' | 'ready' | 'error' | 'expired' | 'unavailable' | 'bypassed' = 'loading';
+
+    const TURNSTILE_MESSAGES: Record<typeof turnstileState, string> = {
+      loading: 'Just a moment \u2014 the security check is still loading. Please wait a few seconds and try again.',
+      ready: '',
+      error: 'The security check could not be loaded. Please refresh the page and try again.',
+      expired: 'The security check has expired. Please tap Submit again.',
+      unavailable: 'The security check is unavailable. Please refresh the page and try again.',
+      bypassed: '',
+    };
+
+    const SOURCE_OPTIONS = [
+      'Singapore Women\u2019s Association website',
+      'www.laughteryoga.org',
+      'Facebook',
+      'Google',
+      'Friend',
+    ];
+
+    const INDEMNITY_TEXT =
+      'By participating in programmes organised by SWA, participants agree to fully indemnify and hold harmless ' +
+      'SWA, its affiliates, officers, and representatives from any and all liabilities, claims, losses, or damages ' +
+      'arising out of or in connection with their participation in the programme.\n\n' +
+      'Participants also acknowledge and consent to the collection, use, and disclosure of photographs and/or video ' +
+      'recordings taken during the programme for SWA\u2019s publicity and archival purposes, in accordance with the ' +
+      'Personal Data Protection Act (PDPA). Should any participant wish to withdraw their consent, they may do so by ' +
+      'contacting SWA in writing';
+
+    async function init() {
+      try {
+        const res = await fetch('/api/laughter-yoga/config');
+        const data = await res.json();
+        if (!data.success) throw new Error('config');
+        config = data.config;
+        closed = !!data.closed;
+      } catch {
+        content.innerHTML = '<div class="vf-alert vf-alert-error">Could not load the form. Please refresh the page or try again later.</div>';
+        return;
+      }
+
+      titleEl.textContent = config.eventTitle || 'Certified Laughter Yoga Leader Training';
+      if (config.eventSubtitle) {
+        subEl.textContent = config.eventSubtitle;
+      } else {
+        subEl.remove();
+      }
+
+      if (closed) {
+        renderClosed();
+        return;
+      }
+      renderForm();
+    }
+
+    function escapeHtml(s: string): string {
+      const d = document.createElement('div');
+      d.textContent = s || '';
+      return d.innerHTML;
+    }
+
+    function renderClosed() {
+      content.innerHTML =
+        '<div class="vf-closed">' +
+        '<h2>Registrations are closed</h2>' +
+        '<p>We are no longer accepting registrations for this training programme. Thank you for your interest.</p>' +
+        enquiryBlock() +
+        '</div>';
+    }
+
+    function enquiryBlock(): string {
+      if (!config || !config.enquiry) return '';
+      const e = config.enquiry;
+      let html = '<div class="vf-enquiry" style="margin-top:1.2rem;padding-top:1rem;border-top:1px solid #f0e3f5;font-size:0.85rem;color:#6b7280;">';
+      html += '<strong>For enquiries</strong><br/>' + escapeHtml(e.name || '');
+      if (e.email) html += ' &middot; <a href="mailto:' + escapeHtml(e.email) + '">' + escapeHtml(e.email) + '</a>';
+      if (e.phone) {
+        const waDigits = (e.phone as string).replace(/[^\d]/g, '');
+        const waHref = 'https://wa.me/' + (waDigits.length === 8 ? '65' + waDigits : waDigits);
+        html += ' &middot; <a href="' + waHref + '" target="_blank" rel="noopener" style="color:#25d366;text-decoration:none;">WhatsApp</a>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function renderForm() {
+      const intro = config.introHtml || '';
+
+      const sourceChoices = SOURCE_OPTIONS.map((opt) =>
+        '<label class="vf-choice">' +
+        '<input type="radio" name="source" value="' + escapeHtml(opt) + '" />' +
+        '<span class="vf-choice-main">' + escapeHtml(opt) + '</span></label>'
+      ).join('') +
+        '<label class="vf-choice">' +
+        '<input type="radio" name="source" value="Other" />' +
+        '<span class="vf-choice-main">Other</span></label>';
+
+      content.innerHTML =
+        '<div id="vf-top-alert" role="alert" aria-live="assertive"></div>' +
+
+        '<section class="vf-section vf-intro">' + intro + enquiryBlock() + '</section>' +
+
+        '<form id="vf-form" novalidate>' +
+
+        '<fieldset class="vf-section">' +
+        '<h2 class="vf-section-title">About This Training</h2>' +
+        fieldGroup('whatsappGroup', 'By signing up, you agree that we can include you in a WhatsApp group with other participants of the training course', '',
+          '',
+          '<div class="vf-choice-row">' + choiceRow('wa', 'yes', 'Yes') + choiceRow('wa', 'no', 'No') + '</div>') +
+        fieldGroup('source', 'Where did you find out about this training programme?', '*',
+          '',
+          '<div class="vf-choice-row" id="src-row">' + sourceChoices + '</div>' +
+          '<div class="vf-other" id="src-other"><input type="text" class="vf-input" name="sourceOther" placeholder="Please specify" maxlength="200" /></div>') +
+        '</fieldset>' +
+
+        '<fieldset class="vf-section">' +
+        '<h2 class="vf-section-title">Personal Particulars</h2>' +
+        '<div class="vf-grid2">' +
+        field('email', 'Email', '*', '<input type="email" class="vf-input" id="email" name="email" autocomplete="email" inputmode="email" maxlength="160" />', 'Please provide full email address as you will be registered with Laughter Yoga International on completion') +
+        field('fullName', 'Full Name', '*', '<input type="text" class="vf-input" id="fullName" name="fullName" autocomplete="name" maxlength="120" />', 'Will be written on your Certificate') +
+        field('age', 'Age', '*', '<input type="text" class="vf-input" id="age" name="age" autocomplete="off" inputmode="numeric" maxlength="3" />') +
+        field('address', 'Address', '*', '<input type="text" class="vf-input" id="address" name="address" autocomplete="street-address" maxlength="300" />') +
+        field('phoneNumber', 'Phone number', '*', '<input type="tel" class="vf-input" id="phoneNumber" name="phoneNumber" autocomplete="tel" inputmode="tel" maxlength="30" />') +
+        field('occupation', 'Occupation', '*', '<input type="text" class="vf-input" id="occupation" name="occupation" autocomplete="organization-title" maxlength="120" />') +
+        '</div>' +
+        '</fieldset>' +
+
+        '<fieldset class="vf-section">' +
+        '<h2 class="vf-section-title">Programme Details</h2>' +
+        field('emergencyContact', 'Emergency Contact person', '*', '<input type="text" class="vf-input" id="emergencyContact" name="emergencyContact" autocomplete="off" maxlength="300" />', 'Name, relationship and phone number') +
+        field('organisationName', 'Organisation Name', '*', '<input type="text" class="vf-input" id="organisationName" name="organisationName" autocomplete="organization" maxlength="200" />') +
+        '</fieldset>' +
+
+        '<fieldset class="vf-section">' +
+        '<h2 class="vf-section-title">Consent &amp; Declaration</h2>' +
+        fieldGroup('indemnityPdpa', 'Indemnity and PDPA', '',
+          INDEMNITY_TEXT,
+          '<div class="vf-choice-row">' + choiceRow('ind', 'yes', 'Yes') + choiceRow('ind', 'no', 'No') + '</div>') +
+        '</fieldset>' +
+
+        '<div class="vf-turnstile-wrap" id="turnstile-container"></div>' +
+        '<div class="vf-error vf-turnstile-error" id="err-turnstile" role="alert"></div>' +
+        '<div class="vf-submit-alert" id="vf-submit-alert" role="alert" aria-live="assertive" tabindex="-1"></div>' +
+
+        '<div class="vf-submitbar">' +
+        '<div class="vf-submit-meta">All fields marked <b>*</b> are required.</div>' +
+        '<button type="submit" class="vf-btn vf-btn-primary" id="vf-submit" disabled>Submit Registration</button>' +
+        '</div>' +
+
+        '</form>';
+
+      wireForm();
+      initTurnstile();
+    }
+
+    function field(name: string, label: string, req: string, inputHtml: string, hint?: string): string {
+      return '<div class="vf-field">' +
+        '<label class="vf-label" for="' + name + '">' + escapeHtml(label) +
+        (req ? ' <span class="vf-req">' + req + '</span>' : '') + '</label>' +
+        inputHtml +
+        (hint ? '<span class="vf-hint">' + escapeHtml(hint) + '</span>' : '') +
+        '<div class="vf-error" id="err-' + name + '"></div>' +
+        '</div>';
+    }
+
+    function fieldGroup(name: string, label: string, req: string, note: string, bodyHtml: string): string {
+      return '<div class="vf-field" id="grp-' + name + '">' +
+        '<span class="vf-label">' + escapeHtml(label) +
+        (req ? ' <span class="vf-req">' + req + '</span>' : '') + '</span>' +
+        (note ? '<span class="vf-section-note">' + escapeHtml(note) + '</span>' : '') +
+        bodyHtml +
+        '<div class="vf-error" id="err-' + name + '"></div>' +
+        '</div>';
+    }
+
+    function choiceRow(group: string, value: string, text: string): string {
+      const id = group + '-' + value;
+      return '<label class="vf-choice" for="' + id + '">' +
+        '<input type="radio" name="' + radioName(group) + '" id="' + id + '" value="' + value + '" />' +
+        '<span class="vf-choice-main">' + text + '</span></label>';
+    }
+
+    function radioName(group: string): string {
+      if (group === 'wa') return 'whatsappGroup';
+      if (group === 'src') return 'source';
+      if (group === 'ind') return 'indemnityPdpa';
+      return group;
+    }
+
+    /* ---------------- behaviour ---------------- */
+
+    function setError(name: string, msg: string) {
+      const el = document.getElementById('err-' + name);
+      if (!el) return;
+      if (msg) {
+        el.textContent = msg;
+        el.classList.add('is-open');
+      } else {
+        el.textContent = '';
+        el.classList.remove('is-open');
+      }
+      const input = document.getElementById(name);
+      if (input) input.setAttribute('aria-invalid', msg ? 'true' : 'false');
+      const grp = document.getElementById('grp-' + name);
+      if (grp) {
+        if (msg) grp.setAttribute('aria-invalid', 'true'); else grp.removeAttribute('aria-invalid');
+      }
+    }
+
+    function clearAllErrors() {
+      document.querySelectorAll('.vf-error').forEach((el) => {
+        el.textContent = '';
+        el.classList.remove('is-open');
+      });
+      document.querySelectorAll('[aria-invalid]').forEach((el) => el.removeAttribute('aria-invalid'));
+    }
+
+    function topAlert(msg: string, isError = true) {
+      const el = document.getElementById('vf-top-alert');
+      if (!el) return;
+      el.innerHTML = isError
+        ? '<div class="vf-alert vf-alert-error">' + escapeHtml(msg) + '</div>'
+        : '<div class="vf-alert vf-alert-banner">' + escapeHtml(msg) + '</div>';
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // Form-level error shown at submit time. Renders the same message to BOTH
+    // the top alert and a compact alert above the Submit button, briefly shakes
+    // the Submit button (strong mobile cue), and scrolls the submit-level
+    // alert into view (centred) — keeping the user near the button they just
+    // tapped instead of jumping away.
+    function showFormError(msg: string) {
+      const html = '<div class="vf-alert vf-alert-error">' + escapeHtml(msg) + '</div>';
+      const top = document.getElementById('vf-top-alert');
+      const sub = document.getElementById('vf-submit-alert');
+      if (top) top.innerHTML = html;
+      if (sub) sub.innerHTML = html;
+      const submit = document.getElementById('vf-submit') as HTMLButtonElement | null;
+      if (submit) {
+        submit.classList.remove('is-shake');
+        // Force reflow so the animation restarts on repeated taps.
+        void submit.offsetWidth;
+        submit.classList.add('is-shake');
+      }
+      if (sub) {
+        sub.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        try { sub.focus({ preventScroll: true }); } catch { /* older browsers */ }
+      }
+    }
+
+    function clearFormAlerts() {
+      const top = document.getElementById('vf-top-alert');
+      const sub = document.getElementById('vf-submit-alert');
+      if (top) top.innerHTML = '';
+      if (sub) sub.innerHTML = '';
+    }
+
+    function wireForm() {
+      const form = document.getElementById('vf-form') as HTMLFormElement;
+
+      // Source "other" reveal
+      const srcRow = document.getElementById('src-row');
+      if (srcRow) {
+        srcRow.addEventListener('change', (e: Event) => {
+          const t = e.target as HTMLInputElement;
+          if (t.name === 'source') {
+            const other = document.getElementById('src-other')!;
+            if (t.value === 'Other') other.classList.add('is-open');
+            else other.classList.remove('is-open');
+          }
+        });
+      }
+
+      // Live error clearing on edit
+      form.addEventListener('input', (e: Event) => {
+        const t = e.target as HTMLElement;
+        const name = (t as HTMLInputElement).name;
+        if (name && document.getElementById('err-' + name)) setError(name, '');
+        // Any user activity clears the form-level alerts so the red boxes
+        // don't linger after the user has started fixing the issue.
+        clearFormAlerts();
+      });
+      form.addEventListener('change', (e: Event) => {
+        const t = e.target as HTMLInputElement;
+        const name = t.name;
+        if (!name) return;
+        if (name === 'source') setError('source', '');
+        // Any user activity clears the form-level alerts so the red boxes
+        // don't linger after the user has started fixing the issue.
+        clearFormAlerts();
+      });
+
+      form.addEventListener('submit', onSubmit);
+    }
+
+    function initTurnstile() {
+      const container = document.getElementById('turnstile-container')!;
+      const submit = document.getElementById('vf-submit') as HTMLButtonElement;
+
+      async function load() {
+        let siteKey = '';
+        try {
+          const res = await fetch('/api/turnstile-config');
+          const data = await res.json();
+          siteKey = data.siteKey;
+        } catch {
+          turnstileState = 'unavailable';
+          const msg = TURNSTILE_MESSAGES.unavailable;
+          setError('turnstile', msg);
+          return;
+        }
+        if (!siteKey) {
+          // No Turnstile configured (e.g. local dev with the dev bypass active):
+          // the server skips siteverify in dev, so allow token-less submission.
+          turnstileState = 'bypassed';
+          submit.disabled = false;
+          return;
+        }
+        if (!(window as any).turnstile) {
+          turnstileState = 'unavailable';
+          submit.disabled = false;
+          return;
+        }
+        turnstileWidgetId = (window as any).turnstile.render('#' + container.id, {
+          sitekey: siteKey,
+          callback: (token: string) => {
+            turnstileToken = token;
+            turnstileState = 'ready';
+            setError('turnstile', '');
+            submit.disabled = false;
+          },
+          'error-callback': () => {
+            turnstileState = 'error';
+            turnstileToken = null;
+            submit.disabled = true;
+            const msg = TURNSTILE_MESSAGES.error;
+            setError('turnstile', msg);
+          },
+          'expired-callback': () => {
+            turnstileState = 'expired';
+            turnstileToken = null;
+            submit.disabled = true;
+            const msg = TURNSTILE_MESSAGES.expired;
+            setError('turnstile', msg);
+          },
+        });
+      }
+      load();
+    }
+
+    function collectForm(): Record<string, unknown> | null {
+      clearAllErrors();
+      const errors: Record<string, string> = {};
+
+      const email = (document.getElementById('email') as HTMLInputElement).value.trim().toLowerCase();
+      const fullName = (document.getElementById('fullName') as HTMLInputElement).value.trim();
+      const age = (document.getElementById('age') as HTMLInputElement).value.trim();
+      const address = (document.getElementById('address') as HTMLInputElement).value.trim();
+      const phoneNumber = (document.getElementById('phoneNumber') as HTMLInputElement).value.trim();
+      const occupation = (document.getElementById('occupation') as HTMLInputElement).value.trim();
+      const emergencyContact = (document.getElementById('emergencyContact') as HTMLInputElement).value.trim();
+      const organisationName = (document.getElementById('organisationName') as HTMLInputElement).value.trim();
+
+      if (!email) errors.email = 'Email is required.';
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Enter a valid email address.';
+      if (!fullName) errors.fullName = 'Full name is required.';
+      if (!age) errors.age = 'Age is required.';
+      else if (!/^\d{1,3}$/.test(age)) errors.age = 'Enter a valid age.';
+      if (!address) errors.address = 'Address is required.';
+      if (!phoneNumber) errors.phoneNumber = 'Phone number is required.';
+      else if (!/^[0-9+\-\s()]{6,}$/.test(phoneNumber)) errors.phoneNumber = 'Enter a valid phone number.';
+      if (!occupation) errors.occupation = 'Occupation is required.';
+      if (!emergencyContact) errors.emergencyContact = 'Emergency contact is required.';
+      if (!organisationName) errors.organisationName = 'Organisation name is required.';
+
+      const sourceEl = document.querySelector('input[name="source"]:checked') as HTMLInputElement | null;
+      const sourceOther = (document.querySelector('input[name="sourceOther"]') as HTMLInputElement).value.trim();
+      if (!sourceEl) errors.source = 'Please select an option.';
+      else if (sourceEl.value === 'Other' && !sourceOther) errors.source = 'Please specify how you found out about this training programme.';
+
+      const whatsappEl = document.querySelector('input[name="whatsappGroup"]:checked') as HTMLInputElement | null;
+      const indemnityEl = document.querySelector('input[name="indemnityPdpa"]:checked') as HTMLInputElement | null;
+
+      if (Object.keys(errors).length > 0) {
+        for (const k of Object.keys(errors)) setError(k, errors[k]);
+        const firstErr = document.querySelector('.vf-error.is-open');
+        if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        showFormError('Please correct the highlighted fields.');
+        return null;
+      }
+
+      return {
+        whatsappGroup: whatsappEl ? whatsappEl.value === 'yes' : false,
+        source: sourceEl ? sourceEl.value : '',
+        sourceOther,
+        email, fullName, age, address, phoneNumber, occupation, emergencyContact, organisationName,
+        indemnityPdpa: indemnityEl ? indemnityEl.value === 'yes' : false,
+        turnstileToken: turnstileToken || '',
+      };
+    }
+
+    async function onSubmit(e: Event) {
+      e.preventDefault();
+      const payload = collectForm();
+      if (!payload) return;
+
+      const submit = document.getElementById('vf-submit') as HTMLButtonElement;
+      if (!turnstileToken && turnstileState !== 'bypassed') {
+        const msg = TURNSTILE_MESSAGES[turnstileState] || TURNSTILE_MESSAGES.loading;
+        setError('turnstile', msg);
+        showFormError(msg);
+        return;
+      }
+
+      submit.disabled = true;
+      const original = submit.textContent;
+      submit.innerHTML = '<span class="vf-spinner"></span>Submitting…';
+
+      try {
+        const res = await fetch('/api/laughter-yoga/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (data.success) {
+          renderSuccess(data.reference);
+          return;
+        }
+        // Transient D1 platform error — form data kept, visitor can re-click Submit.
+        // Falls through (no early return) so the shared cleanup below re-enables the
+        // submit button and resets Turnstile for the retry.
+        if (res.status === 503 && data.error_code === 'D1_WRITE_FAILED') {
+          showFormError(data.message || 'We couldn\u2019t save your registration this time. Please click Submit again \u2014 your details are kept.');
+        } else if (data.errors && typeof data.errors === 'object') {
+          // server returned known errors object?
+          clearAllErrors();
+          for (const k of Object.keys(data.errors)) setError(k, data.errors[k]);
+          const firstErr = document.querySelector('.vf-error.is-open');
+          if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          showFormError(data.message || 'Please correct the highlighted fields.');
+        } else if (data.error_code === 'FORM_CLOSED') {
+          renderClosed();
+        } else {
+          showFormError(data.message || 'Submission failed. Please try again.');
+        }
+      } catch {
+        showFormError('Network error. Please check your connection and try again.');
+      }
+
+      if ((window as any).turnstile && turnstileWidgetId) {
+        (window as any).turnstile.reset(turnstileWidgetId);
+        turnstileToken = null;
+      }
+      submit.disabled = false;
+      submit.innerHTML = original;
+    }
+
+    function renderSuccess(ref: string) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      content.innerHTML =
+        '<div class="vf-success">' +
+        '<div class="vf-check"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>' +
+        '<h2>Thank you for registering!</h2>' +
+        '<p>Your Certified Laughter Yoga Leader training registration has been received.</p>' +
+        '<div class="vf-ref">' + escapeHtml(ref || '') + '</div>' +
+        '<p>Upon receipt of this registration and payment, we will email you a confirmation with further instructions. A reminder email will be sent a week before the training and further details. Kindly keep this reference for your records.</p>' +
+        enquiryBlock() +
+        '<button class="vf-again" id="vf-register-another">Register another participant</button>' +
+        '</div>';
+      const again = document.getElementById('vf-register-another');
+      if (again) again.addEventListener('click', () => { window.location.reload(); });
+    }
+
+    init();
+  </script>
+</body>
+</html>

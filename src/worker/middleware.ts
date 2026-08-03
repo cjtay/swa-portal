@@ -41,6 +41,10 @@ const MEMBERSHIP_API = new Set([
   '/api/membership',
 ]);
 
+const LAUGHTER_YOGA_API = new Set([
+  '/api/laughter-yoga',
+]);
+
 const REG_VOLUNTEER_API = new Set([
   '/api/reg/volunteer',
 ]);
@@ -92,6 +96,11 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
 
   // 3d. Membership application routes — public, Turnstile-verified in handler
   if (pathStartsWithAny(path, MEMBERSHIP_API)) {
+    return next();
+  }
+
+  // 3e. Laughter Yoga registration routes — public, Turnstile-verified in handler
+  if (pathStartsWithAny(path, LAUGHTER_YOGA_API)) {
     return next();
   }
 

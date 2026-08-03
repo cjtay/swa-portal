@@ -35,11 +35,19 @@ export const VOLUNTEER_NOTIFY_EMAILS = [
   'angela.wong@singaporewomenassociation.org',
 ];
 
+// Laughter Yoga form — recipients for new submission notifications.
+// May be overridden per-event via KV (swa:laughter_yoga_config.notifyEmail).
+export const LAUGHTER_YOGA_NOTIFY_EMAILS = [
+  'cjtay@singaporewomenassociation.org',
+  // 'jolene.lim@singaporewomenassociation.org',
+  // 'angela.wong@singaporewomenassociation.org',
+];
+
 // Membership application form — recipients for new submission notifications.
 export const MEMBERSHIP_NOTIFY_EMAILS = [
   'cjtay@singaporewomenassociation.org',
-  'jolene.lim@singaporewomenassociation.org',
-  'angela.wong@singaporewomenassociation.org',
+  // 'jolene.lim@singaporewomenassociation.org',
+  // 'angela.wong@singaporewomenassociation.org',
 ];
 
 // Restricted set of admins who can approve or reject membership applications.
