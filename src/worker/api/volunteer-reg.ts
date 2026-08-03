@@ -50,7 +50,7 @@ const DEFAULT_CONFIG = {
   declarationStatement:
     "I certify that I am physically fit to participate in this event and will not hold Singapore Women\u2019s Association, Ren Ci Community Hospital, or event organisers responsible for any injuries, losses, or damages sustained during the event.",
   formCutoffTime: null as string | null,
-  isActive: true,
+  isActive: false,
 };
 
 export function buildDefaultConfig() {
