@@ -297,7 +297,7 @@ export async function handleLaughterYogaExport(c: AppContext) {
     'Email',
     'Age',
     'Address',
-    'Phone Number',
+    'Mobile Number',
     'Emergency Contact',
     'Organisation Name',
     'Occupation',
@@ -432,6 +432,7 @@ function validateSubmission(b: Record<string, unknown>): { data: Validated; erro
   const errors: Record<string, string> = {};
 
   const whatsappGroup = b.whatsappGroup === true;
+  if (!whatsappGroup) errors.whatsappGroup = 'Please check this box to continue.';
 
   const sourceChoice = str(b, 'source');
   const sourceOther = str(b, 'sourceOther');
@@ -460,8 +461,8 @@ function validateSubmission(b: Record<string, unknown>): { data: Validated; erro
   if (!address) errors.address = 'Address is required.';
 
   const phoneNumber = str(b, 'phoneNumber');
-  if (!phoneNumber) errors.phoneNumber = 'Phone number is required.';
-  else if (!/^[0-9+\-\s()]{6,}$/.test(phoneNumber)) errors.phoneNumber = 'Enter a valid phone number.';
+  if (!phoneNumber) errors.phoneNumber = 'Mobile number is required.';
+  else if (!/^[0-9+\-\s()]{6,}$/.test(phoneNumber)) errors.phoneNumber = 'Enter a valid mobile number.';
 
   const emergencyContact = str(b, 'emergencyContact');
   if (!emergencyContact) errors.emergencyContact = 'Emergency contact is required.';
@@ -470,6 +471,7 @@ function validateSubmission(b: Record<string, unknown>): { data: Validated; erro
   if (!organisationName) errors.organisationName = 'Organisation name is required.';
 
   const indemnityPdpa = b.indemnityPdpa === true;
+  if (!indemnityPdpa) errors.indemnityPdpa = 'Please check this box to continue.';
   const occupation = str(b, 'occupation');
   if (!occupation) errors.occupation = 'Occupation is required.';
 

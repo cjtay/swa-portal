@@ -165,10 +165,17 @@ import '../../../styles/volunteer-form.css';
         '<form id="vf-form" novalidate>' +
 
         '<fieldset class="vf-section">' +
-        '<h2 class="vf-section-title">About This Training</h2>' +
-        fieldGroup('whatsappGroup', 'By signing up, you agree that we can include you in a WhatsApp group with other participants of the training course', '',
-          '',
-          '<div class="vf-choice-row">' + choiceRow('wa', 'yes', 'Yes') + choiceRow('wa', 'no', 'No') + '</div>') +
+        '<h2 class="vf-section-title">Personal Particulars</h2>' +
+        '<div class="vf-grid2">' +
+        field('fullName', 'Full Name', '*', '<input type="text" class="vf-input" id="fullName" name="fullName" autocomplete="name" maxlength="120" />', 'Will be written on your Certificate') +
+        field('email', 'Email', '*', '<input type="email" class="vf-input" id="email" name="email" autocomplete="email" inputmode="email" maxlength="160" />', 'Please provide full email address as you will be registered with Laughter Yoga International on completion') +
+        field('phoneNumber', 'Mobile number', '*', '<input type="tel" class="vf-input" id="phoneNumber" name="phoneNumber" autocomplete="tel" inputmode="tel" maxlength="30" />') +
+        field('age', 'Age', '*', '<input type="text" class="vf-input" id="age" name="age" autocomplete="off" inputmode="numeric" maxlength="3" />') +
+        field('occupation', 'Occupation', '*', '<input type="text" class="vf-input" id="occupation" name="occupation" autocomplete="organization-title" maxlength="120" />') +
+        field('organisationName', 'Organisation Name', '*', '<input type="text" class="vf-input" id="organisationName" name="organisationName" autocomplete="organization" maxlength="200" />') +
+        '</div>' +
+        field('address', 'Address', '*', '<input type="text" class="vf-input" id="address" name="address" autocomplete="street-address" maxlength="300" />') +
+        field('emergencyContact', 'Emergency Contact person', '*', '<input type="text" class="vf-input" id="emergencyContact" name="emergencyContact" autocomplete="off" maxlength="300" />', 'Name, relationship and phone number') +
         fieldGroup('source', 'Where did you find out about this training programme?', '*',
           '',
           '<div class="vf-choice-row" id="src-row">' + sourceChoices + '</div>' +
@@ -176,28 +183,17 @@ import '../../../styles/volunteer-form.css';
         '</fieldset>' +
 
         '<fieldset class="vf-section">' +
-        '<h2 class="vf-section-title">Personal Particulars</h2>' +
-        '<div class="vf-grid2">' +
-        field('email', 'Email', '*', '<input type="email" class="vf-input" id="email" name="email" autocomplete="email" inputmode="email" maxlength="160" />', 'Please provide full email address as you will be registered with Laughter Yoga International on completion') +
-        field('fullName', 'Full Name', '*', '<input type="text" class="vf-input" id="fullName" name="fullName" autocomplete="name" maxlength="120" />', 'Will be written on your Certificate') +
-        field('age', 'Age', '*', '<input type="text" class="vf-input" id="age" name="age" autocomplete="off" inputmode="numeric" maxlength="3" />') +
-        field('address', 'Address', '*', '<input type="text" class="vf-input" id="address" name="address" autocomplete="street-address" maxlength="300" />') +
-        field('phoneNumber', 'Phone number', '*', '<input type="tel" class="vf-input" id="phoneNumber" name="phoneNumber" autocomplete="tel" inputmode="tel" maxlength="30" />') +
-        field('occupation', 'Occupation', '*', '<input type="text" class="vf-input" id="occupation" name="occupation" autocomplete="organization-title" maxlength="120" />') +
-        '</div>' +
-        '</fieldset>' +
-
-        '<fieldset class="vf-section">' +
-        '<h2 class="vf-section-title">Programme Details</h2>' +
-        field('emergencyContact', 'Emergency Contact person', '*', '<input type="text" class="vf-input" id="emergencyContact" name="emergencyContact" autocomplete="off" maxlength="300" />', 'Name, relationship and phone number') +
-        field('organisationName', 'Organisation Name', '*', '<input type="text" class="vf-input" id="organisationName" name="organisationName" autocomplete="organization" maxlength="200" />') +
-        '</fieldset>' +
-
-        '<fieldset class="vf-section">' +
         '<h2 class="vf-section-title">Consent &amp; Declaration</h2>' +
-        fieldGroup('indemnityPdpa', 'Indemnity and PDPA', '',
+        fieldGroup('whatsappGroup', 'By signing up, you agree that we can include you in a WhatsApp group with other participants of the training course', '*',
+          '',
+          '<div class="vf-choice-list"><label class="vf-choice">' +
+          '<input type="checkbox" name="whatsappGroup" value="true" />' +
+          '<span class="vf-choice-main">I agree</span></label></div>') +
+        fieldGroup('indemnityPdpa', 'Indemnity and PDPA', '*',
           INDEMNITY_TEXT,
-          '<div class="vf-choice-row">' + choiceRow('ind', 'yes', 'Yes') + choiceRow('ind', 'no', 'No') + '</div>') +
+          '<div class="vf-choice-list"><label class="vf-choice">' +
+          '<input type="checkbox" name="indemnityPdpa" value="true" />' +
+          '<span class="vf-choice-main">I agree</span></label></div>') +
         '</fieldset>' +
 
         '<div class="vf-turnstile-wrap" id="turnstile-container"></div>' +
@@ -233,20 +229,6 @@ import '../../../styles/volunteer-form.css';
         bodyHtml +
         '<div class="vf-error" id="err-' + name + '"></div>' +
         '</div>';
-    }
-
-    function choiceRow(group: string, value: string, text: string): string {
-      const id = group + '-' + value;
-      return '<label class="vf-choice" for="' + id + '">' +
-        '<input type="radio" name="' + radioName(group) + '" id="' + id + '" value="' + value + '" />' +
-        '<span class="vf-choice-main">' + text + '</span></label>';
-    }
-
-    function radioName(group: string): string {
-      if (group === 'wa') return 'whatsappGroup';
-      if (group === 'src') return 'source';
-      if (group === 'ind') return 'indemnityPdpa';
-      return group;
     }
 
     /* ---------------- behaviour ---------------- */
@@ -347,6 +329,8 @@ import '../../../styles/volunteer-form.css';
         const name = t.name;
         if (!name) return;
         if (name === 'source') setError('source', '');
+        if (name === 'whatsappGroup') setError('whatsappGroup', '');
+        if (name === 'indemnityPdpa') setError('indemnityPdpa', '');
         // Any user activity clears the form-level alerts so the red boxes
         // don't linger after the user has started fixing the issue.
         clearFormAlerts();
@@ -429,8 +413,8 @@ import '../../../styles/volunteer-form.css';
       if (!age) errors.age = 'Age is required.';
       else if (!/^\d{1,3}$/.test(age)) errors.age = 'Enter a valid age.';
       if (!address) errors.address = 'Address is required.';
-      if (!phoneNumber) errors.phoneNumber = 'Phone number is required.';
-      else if (!/^[0-9+\-\s()]{6,}$/.test(phoneNumber)) errors.phoneNumber = 'Enter a valid phone number.';
+      if (!phoneNumber) errors.phoneNumber = 'Mobile number is required.';
+      else if (!/^[0-9+\-\s()]{6,}$/.test(phoneNumber)) errors.phoneNumber = 'Enter a valid mobile number.';
       if (!occupation) errors.occupation = 'Occupation is required.';
       if (!emergencyContact) errors.emergencyContact = 'Emergency contact is required.';
       if (!organisationName) errors.organisationName = 'Organisation name is required.';
@@ -440,8 +424,10 @@ import '../../../styles/volunteer-form.css';
       if (!sourceEl) errors.source = 'Please select an option.';
       else if (sourceEl.value === 'Other' && !sourceOther) errors.source = 'Please specify how you found out about this training programme.';
 
-      const whatsappEl = document.querySelector('input[name="whatsappGroup"]:checked') as HTMLInputElement | null;
-      const indemnityEl = document.querySelector('input[name="indemnityPdpa"]:checked') as HTMLInputElement | null;
+      const whatsappEl = document.querySelector('input[name="whatsappGroup"]') as HTMLInputElement | null;
+      const indemnityEl = document.querySelector('input[name="indemnityPdpa"]') as HTMLInputElement | null;
+      if (!whatsappEl || !whatsappEl.checked) errors.whatsappGroup = 'Please check this box to continue.';
+      if (!indemnityEl || !indemnityEl.checked) errors.indemnityPdpa = 'Please check this box to continue.';
 
       if (Object.keys(errors).length > 0) {
         for (const k of Object.keys(errors)) setError(k, errors[k]);
@@ -452,11 +438,11 @@ import '../../../styles/volunteer-form.css';
       }
 
       return {
-        whatsappGroup: whatsappEl ? whatsappEl.value === 'yes' : false,
+        whatsappGroup: !!whatsappEl && whatsappEl.checked,
         source: sourceEl ? sourceEl.value : '',
         sourceOther,
         email, fullName, age, address, phoneNumber, occupation, emergencyContact, organisationName,
-        indemnityPdpa: indemnityEl ? indemnityEl.value === 'yes' : false,
+        indemnityPdpa: !!indemnityEl && indemnityEl.checked,
         turnstileToken: turnstileToken || '',
       };
     }
