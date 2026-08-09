@@ -21,23 +21,23 @@ const LY_RATE_LIMIT_MAX_REQUESTS = 8;
    without a deploy.
    ---------------------------------------------------- */
 const DEFAULT_CONFIG = {
-  eventTitle: 'Certified Laughter Yoga Leader Training Aug 2026',
+  eventTitle: 'Certified Laughter Yoga Leader Training Oct 2026',
   introHtml:
     '<p class="lead">Join us for the Certified Laughter Yoga Leader (CLYL) Training.</p>' +
-    '<p><strong>Date:</strong> 13 &amp; 14 Aug, 2026</p>' +
-    '<p><strong>Time:</strong> Thu (9.30am&ndash;5.30pm), Fri (9.30am&ndash;1.00pm)</p>' +
+    '<p><strong>Date:</strong> 24 &amp; 25 Oct, 2026</p>' +
+    '<p><strong>Time:</strong> Sat (9.30am&ndash;5.30pm), Sun (9.30am&ndash;1.00pm)</p>' +
     '<p><strong>Venue:</strong> 409 Serangoon Central #01-303 (550409)</p>' +
     '<p><strong>Fee:</strong> SGD 290 (inclusive of CLYL Manual, International Certified Laughter Yoga Leader Certificate, 1 lunch, tea-breaks, CLYL T-shirt).</p>' +
     '<p><strong>Payment:</strong> Please make payment via PayNow to Singapore Women\u2019s Association using UEN S54SS0010L and indicate CLYL and your name [CLYL-NAME] in the reference field.</p>' +
     '<p><strong>Organiser:</strong> Singapore Women\u2019s Association Laughter Yoga Wellness Club</p>' +
-    '<p><strong>Closing Date:</strong> 9 Aug 2026</p>' +
+    '<p><strong>Closing Date:</strong> 20 Oct 2026</p>' +
     '<p>Upon receipt of this registration and payment, participants will receive an email confirmation with further instructions. A reminder email will be sent a week before the training and further details. If you have any questions, please contact Angela Wong at 96741022 via WhatsApp.</p>',
   enquiry: {
     name: 'Angela Wong',
     email: '',
     phone: '96741022',
   },
-  formCutoffTime: '2026-08-09T15:45:00.000Z',
+  formCutoffTime: '2026-10-20T15:45:00.000Z',
   isActive: true,
 };
 
