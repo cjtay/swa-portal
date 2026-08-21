@@ -1,5 +1,5 @@
-import type { Context, Next } from 'hono';
-import type { Env } from './types';
+import type { Next } from 'hono';
+import type { AppContext } from './types';
 import { getSession, getDevBypassSession } from './api/session';
 import { IT_ADMIN_EMAILS } from '../constants/portal';
 import { checkApiRateLimit, getEndpointKey } from './lib/rate-limit';
@@ -69,7 +69,7 @@ function pathStartsWithAny(path: string, prefixes: Set<string>): boolean {
   return false;
 }
 
-export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
+export async function authMiddleware(c: AppContext, next: Next) {
   const path = c.req.path;
   const basePath = getBasePath(path);
   const method = c.req.method;

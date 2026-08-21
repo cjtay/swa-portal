@@ -1,12 +1,11 @@
 import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { Env, AppContext } from '../types';
 import { handleApiError } from '../lib/error-handler';
 import { logError } from '../lib/log-error';
 import { buildVolunteerNotificationEmail } from '../lib/email-volunteer-notification';
 import { isDevBypassActive } from './session';
 import { VOLUNTEER_NOTIFY_EMAILS } from '../../constants/portal';
 
-type AppContext = Context<{ Bindings: Env }>;
 
 const KV_KEY = 'swa:volunteer_event_config';
 

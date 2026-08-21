@@ -8,7 +8,7 @@
 // docs/plans/Namecard-Implementation-Plan.md §1.3.
 
 import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { Env, AppContext } from '../types';
 import {
   NAMECARD_PUBLIC_RATE_LIMIT_MAX_REQUESTS,
 } from '../../constants/portal';
@@ -17,7 +17,6 @@ import { streamNamecardPhoto, readNamecardPhotoBytes } from '../lib/namecard-pho
 import { buildVcard } from '../lib/namecard-vcard';
 import { renderCardSvg } from '../lib/namecard-svg';
 
-type AppContext = Context<{ Bindings: Env }>;
 
 /** The canonical read model: namecard row joined with member identity. */
 export interface PublicNamecardRow {
@@ -87,7 +86,7 @@ function cardBaseUrl(c: AppContext): string {
 
 // ── GET /c/:slug — HTML card page ──────────────────────────────────────────
 export async function handleNamecardPage(c: AppContext): Promise<Response> {
-  const slug = c.req.param('slug');
+  const slug = c.req.param('slug') ?? '';
   const card = await readNamecard(c.env, slug);
   if (!card) return brandedNotFound(c);
 
@@ -108,7 +107,7 @@ export async function handleNamecardPage(c: AppContext): Promise<Response> {
 
 // ── GET /c/:slug/contact.vcf — vCard download ──────────────────────────────
 export async function handleNamecardVcard(c: AppContext): Promise<Response> {
-  const slug = c.req.param('slug');
+  const slug = c.req.param('slug') ?? '';
   const ip = clientIp(c.req.raw);
   const rl = await checkNamecardIpRateLimit(c.env.SWA_SESSION, ip);
   if (!rl.allowed) {
@@ -185,7 +184,7 @@ export async function handleNamecardVcard(c: AppContext): Promise<Response> {
 
 // ── GET /c/:slug/card.svg — branded card image ─────────────────────────────
 export async function handleNamecardCardSvg(c: AppContext): Promise<Response> {
-  const slug = c.req.param('slug');
+  const slug = c.req.param('slug') ?? '';
   const ip = clientIp(c.req.raw);
   const rl = await checkNamecardIpRateLimit(c.env.SWA_SESSION, ip);
   if (!rl.allowed) {
@@ -251,7 +250,7 @@ export async function handleNamecardCardSvg(c: AppContext): Promise<Response> {
 // The Content-Type header (from R2 metadata) governs the response, so the
 // browser renders the image correctly without a file extension in the URL.
 export async function handlePublicNamecardPhoto(c: AppContext): Promise<Response> {
-  const slug = c.req.param('slug');
+  const slug = c.req.param('slug') ?? '';
   const ip = clientIp(c.req.raw);
   const rl = await checkNamecardIpRateLimit(c.env.SWA_SESSION, ip);
   if (!rl.allowed) {

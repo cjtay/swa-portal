@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { AppContext } from '../types';
 import { signHmac, base64urlEncode } from '../lib/crypto';
 import { resolveSessionRole } from '../lib/session-role';
 import { isDevBypassActive } from './session';
@@ -16,13 +16,13 @@ import {
 // 404 otherwise, and the login page's dev panel stays hidden (it gates on a
 // successful /api/dev/members response).
 
-function devGuard(c: Context<{ Bindings: Env }>): boolean {
+function devGuard(c: AppContext): boolean {
   return isDevBypassActive(c.env, c.req.url);
 }
 
 // GET /api/dev/members — lists login-capable members with their resolved
 // session role so the login page can render a one-click picker.
-export async function handleDevMembers(c: Context<{ Bindings: Env }>) {
+export async function handleDevMembers(c: AppContext) {
   if (!devGuard(c)) {
     return c.json({ success: false, error_code: 'NOT_FOUND' }, 404);
   }
@@ -51,7 +51,7 @@ export async function handleDevMembers(c: Context<{ Bindings: Env }>) {
 // chosen member (same shape/secret/TTL as verify-otp) and clears the
 // dev-logout marker so the bypass fallback doesn't immediately overwrite the
 // picked identity. Skips OTP, Turnstile, and rate limiting entirely.
-export async function handleDevLogin(c: Context<{ Bindings: Env }>) {
+export async function handleDevLogin(c: AppContext) {
   if (!devGuard(c)) {
     return c.json({ success: false, error_code: 'NOT_FOUND' }, 404);
   }

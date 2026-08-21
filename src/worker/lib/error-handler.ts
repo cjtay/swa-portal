@@ -1,16 +1,16 @@
-import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
+import type { AppContext } from '../types';
 import { logError } from './log-error';
 
 export async function handleApiError(
-  c: Context<{ Bindings: Env }>,
+  c: AppContext,
   endpoint: string,
   error: unknown,
   userMessage: string,
   options?: {
     user_email?: string;
     error_type?: string;
-    http_status?: number;
+    http_status?: ContentfulStatusCode;
   },
 ): Promise<Response> {
   const msg = error instanceof Error ? error.message : String(error);

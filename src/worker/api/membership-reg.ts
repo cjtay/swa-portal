@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { Env, AppContext } from '../types';
 import { handleApiError } from '../lib/error-handler';
 import { logError } from '../lib/log-error';
 import { buildMembershipNotificationEmail } from '../lib/email-membership-notification';
@@ -18,7 +18,6 @@ import {
   isMembershipApprover,
 } from '../../constants/portal';
 
-type AppContext = Context<{ Bindings: Env }>;
 
 /** Session vars are set by auth middleware; read via the request context.
  *  Cast keeps AppContext compatible with shared helpers (handleApiError) that

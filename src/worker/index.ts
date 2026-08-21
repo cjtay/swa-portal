@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import type { Env } from './types';
+import type { AppEnv } from './types';
 import { authMiddleware } from './middleware';
 import { handleSession, handleLogout, isDevBypassActive } from './api/session';
 import { handleSendOtp } from './api/send-otp';
@@ -44,10 +44,7 @@ import {
   handleNamecardMe,
 } from './api/namecards';
 
-const app = new Hono<{
-  Bindings: Env;
-  Variables: { sessionEmail: string; sessionName: string; sessionRole: string; sessionRegRole: string | null };
-}>();
+const app = new Hono<AppEnv>();
 
 app.use('/api/*', authMiddleware);
 

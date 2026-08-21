@@ -402,7 +402,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       wrap.innerHTML = `<div class="action-info">Rejected${s.reviewed_by ? ' by ' + escapeHtml(s.reviewed_by) : ''}.</div>`;
       return;
     }
-    if (window.__role !== 'admin') {
+    if ((window as any).__role !== 'admin') {
       wrap.innerHTML = `<div class="action-info">Only admins can approve or reject applications.</div>`;
       return;
     }

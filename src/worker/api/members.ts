@@ -1,13 +1,9 @@
 import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { Env, AppContext } from '../types';
 import { IT_ADMIN_EMAILS } from '../../constants/portal';
 
-type AppContext = Context<{
-  Bindings: Env;
-  Variables: { sessionEmail: string; sessionName: string; sessionRole: string; sessionRegRole: string | null };
-}>;
 
-export async function handleMembers(c: Context<{ Bindings: Env }>) {
+export async function handleMembers(c: AppContext) {
   if (c.req.method === 'GET') {
     const category = c.req.query('category');
     const search = c.req.query('search');

@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { Env, AppContext } from '../types';
 import { IT_ADMIN_EMAILS, SESSION_COOKIE_NAME, DEV_LOGOUT_COOKIE_NAME } from '../../constants/portal';
 import { verifyHmac, base64urlDecode } from '../lib/crypto';
 
@@ -37,7 +37,7 @@ export function isDevBypassHost(host: string, adminDomain?: string): boolean {
 //   3. Request host is in the dev-bypass allowlist  (localhost / *.workers.dev / SWA_ADMIN_DOMAIN)
 // Takes `env` + `url` rather than the full Hono Context to avoid the Context
 // generic variance issue when called from `app.get` handlers (whose `c`
-// carries app-level Variables the bare `Context<{ Bindings: Env }>` doesn't).
+// carries app-level Variables the bare `AppContext` doesn't).
 // No logging here — getDevBypassSession retains the detailed abort diagnostics
 // for the auth path; this helper stays silent so it can be cheaply sprinkled
 // into other handlers (Turnstile, etc.) without noise.
@@ -58,7 +58,7 @@ export type DevBypassResult =
   | { kind: 'session'; data: SessionData }
   | null;
 
-export function getDevBypassSession(c: Context<{ Bindings: Env }>): DevBypassResult {
+export function getDevBypassSession(c: AppContext): DevBypassResult {
   if (c.env.DEV_BYPASS_AUTH !== 'true') return null;
 
   // Second trust anchor: prod's real SESSION_SECRET is a high-entropy value
@@ -110,7 +110,7 @@ export function getDevBypassSession(c: Context<{ Bindings: Env }>): DevBypassRes
 }
 // --------------------------------------------------------------------------
 
-export async function getSession(c: Context<{ Bindings: Env }>): Promise<SessionData | null> {
+export async function getSession(c: AppContext): Promise<SessionData | null> {
   const cookieHeader = c.req.header('Cookie') || '';
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE_NAME}=([^;]+)`));
   if (!match) return null;
@@ -145,7 +145,7 @@ export async function getSession(c: Context<{ Bindings: Env }>): Promise<Session
   }
 }
 
-export async function handleSession(c: Context<{ Bindings: Env }>) {
+export async function handleSession(c: AppContext) {
   // Real cookie takes precedence over the dev-bypass injection. This lets
   // /api/dev/login switch to a chosen member identity even while the bypass
   // flag is on: the picked session cookie is honoured, and the bypass only
@@ -187,7 +187,7 @@ export async function handleSession(c: Context<{ Bindings: Env }>) {
   return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false });
 }
 
-export async function handleLogout(c: Context<{ Bindings: Env }>) {
+export async function handleLogout(c: AppContext) {
   // Always clear the real session cookie.
   c.header(
     'Set-Cookie',

@@ -1,10 +1,6 @@
 import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { AppContext } from "../types";
 
-type AppContext = Context<{
-  Bindings: Env;
-  Variables: { sessionEmail: string; sessionName: string; sessionRole: string; sessionRegRole: string | null };
-}>;
 
 const KNOWN_KEYS = ['swa:reg_tables_config'] as const;
 type KnownKey = (typeof KNOWN_KEYS)[number];

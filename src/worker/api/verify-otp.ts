@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { AppContext } from '../types';
 import { signHmac, timingSafeEqual, base64urlEncode } from '../lib/crypto';
 import { resolveSessionRole } from '../lib/session-role';
 import { SESSION_COOKIE_NAME, SESSION_DEFAULT_EXPIRY_MS, SESSION_EXTENDED_EXPIRY_MS, OTP_TTL_SECONDS, VERIFY_RATE_LIMIT_WINDOW_SECONDS, VERIFY_RATE_LIMIT_MAX_ATTEMPTS_IP, VERIFY_RATE_LIMIT_MAX_ATTEMPTS_EMAIL, VERIFY_MAX_FAILURES_PER_OTP } from '../../constants/portal';
@@ -34,7 +34,7 @@ async function incrementVerifyAttempts(kv: KVNamespace, ip: string, email: strin
   await kv.put(emailKey, String(emailAttempts), { expirationTtl: OTP_TTL_SECONDS + 60 });
 }
 
-export async function handleVerifyOtp(c: Context<{ Bindings: Env }>) {
+export async function handleVerifyOtp(c: AppContext) {
   const env = c.env;
   const ip = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || 'unknown';
 

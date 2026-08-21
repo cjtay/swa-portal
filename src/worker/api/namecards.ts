@@ -20,7 +20,7 @@
 // The in-handler role check below is defence-in-depth, not the primary gate.
 
 import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { AppContext } from "../types";
 import { NAMECARD_PHOTO_MAX_BYTES } from '../../constants/portal';
 import { handleApiError } from '../lib/error-handler';
 import {
@@ -30,10 +30,6 @@ import {
 } from '../lib/namecard-slug';
 import { isSafeUrl, normaliseWhatsApp, WhatsAppNormalisationError } from '../lib/namecard-sanitize';
 
-type AppContext = Context<{
-  Bindings: Env;
-  Variables: { sessionEmail: string; sessionName: string; sessionRole: string; sessionRegRole: string | null };
-}>;
 
 /** Fields the admin may PATCH on a namecard row. */
 const EDITABLE_FIELDS = [
@@ -160,7 +156,7 @@ export async function handleNamecards(c: AppContext): Promise<Response> {
     )
       .bind(memberId, slug)
       .run()
-      .catch((err: unknown) => err);
+      .catch((err: unknown): Error => (err instanceof Error ? err : new Error(String(err))));
 
     if (result instanceof Error) {
       // UNIQUE violations: distinguish member_id clash (member already has a

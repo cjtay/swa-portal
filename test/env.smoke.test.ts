@@ -30,7 +30,7 @@ describe('env bindings smoke', () => {
     const r = await env.DB.prepare(
       `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('members', 'namecards') ORDER BY name`,
     ).all<{ name: string }>();
-    expect(r.results.map((row) => row.name)).toEqual(['members', 'namecards']);
+    expect(r.results.map((row: { name: string }) => row.name)).toEqual(['members', 'namecards']);
   });
 
   it('migration 007 enforces the namecards 1:1 relationship and slug uniqueness', async () => {

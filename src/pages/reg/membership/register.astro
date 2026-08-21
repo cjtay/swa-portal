@@ -56,9 +56,10 @@ import '../../../styles/membership-form.css';
     // we can give an honest, actionable message instead of "please complete
     // the security verification" (which is impossible when the widget is
     // silent and failing for reasons the user can't see or fix).
-    let turnstileState: 'loading' | 'ready' | 'error' | 'expired' | 'unavailable' | 'bypassed' = 'loading';
+    type TurnstileState = 'loading' | 'ready' | 'error' | 'expired' | 'unavailable' | 'bypassed';
+    let turnstileState: TurnstileState = 'loading';
 
-    const TURNSTILE_MESSAGES: Record<typeof turnstileState, string> = {
+    const TURNSTILE_MESSAGES: Record<TurnstileState, string> = {
       loading: 'Just a moment \u2014 the security check is still loading. Please wait a few seconds and try again.',
       ready: '',
       error: 'The security check could not be loaded. Please refresh the page and try again.',
@@ -294,7 +295,7 @@ import '../../../styles/membership-form.css';
       if (!canvas) return null;
       const dataUrl = canvas.toDataURL('image/png');
       const bytes = base64ToBytes(dataUrl.split(',')[1] || '');
-      return new File([bytes], 'signature.png', { type: 'image/png' });
+      return new File([bytes as BlobPart], 'signature.png', { type: 'image/png' });
     }
 
     function base64ToBytes(b64: string): Uint8Array {

@@ -391,20 +391,29 @@ import '../../../styles/admin.css';
 <script>
   import { requireRegVolunteer } from '../../../scripts/auth-gate';
 
-  let tables = [];
-  const searchInput = document.getElementById('search-input');
-  const tableFilter = document.getElementById('table-filter');
-  const resultsList = document.getElementById('results-list');
-  const noResults = document.getElementById('no-results');
-  const loading = document.getElementById('loading');
+  declare global {
+  interface Window {
+    saveGuestName: (id: string | number) => Promise<void>;
+    markArrived: (id: string | number) => Promise<void>;
+  }
+}
 
-  function esc(s) {
+interface TableRow { id: string | number; label: string; isVIP?: boolean }
+  interface GuestRow { id: string | number; guest_name?: string | null; notes?: string | null; arrived_at?: string | null; is_walk_in?: boolean; is_buyer?: boolean; buyer_name?: string | null; ticket_code?: string; table_label?: string }
+  let tables: TableRow[] = [];
+  const searchInput = document.getElementById('search-input') as HTMLInputElement;
+  const tableFilter = document.getElementById('table-filter') as HTMLSelectElement;
+  const resultsList = document.getElementById('results-list') as HTMLElement;
+  const noResults = document.getElementById('no-results') as HTMLElement;
+  const loading = document.getElementById('loading') as HTMLElement;
+
+  function esc(s: string | null | undefined) {
     const d = document.createElement('div');
     d.textContent = s || '';
     return d.innerHTML;
   }
 
-  let searchTimeout;
+  let searchTimeout: ReturnType<typeof setTimeout> | undefined;
   searchInput.addEventListener('input', () => {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(doSearch, 250);
@@ -442,7 +451,7 @@ import '../../../styles/admin.css';
     }
   }
 
-  function renderResults(results) {
+  function renderResults(results: GuestRow[]) {
     if (results.length === 0) {
       resultsList.innerHTML = '';
       noResults.style.display = '';
@@ -450,7 +459,7 @@ import '../../../styles/admin.css';
     }
     noResults.style.display = 'none';
 
-    resultsList.innerHTML = results.map(g => {
+    resultsList.innerHTML = results.map((g: GuestRow) => {
       const arrived = !!g.arrived_at;
       const vipBadge = g.is_walk_in
         ? ' <span class="guest-badge guest-badge-walkin">Walk-in</span>'
@@ -482,7 +491,7 @@ import '../../../styles/admin.css';
       const actionHtml = arrived
         ? `<div class="arrived-label">
             <span class="check-icon">✓</span>
-            Arrived at ${new Date(g.arrived_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+            Arrived at ${new Date(g.arrived_at as string).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
           </div>`
         : `<button class="btn-arrive" onclick="markArrived('${g.id}')">Mark Arrived</button>`;
 
@@ -500,8 +509,8 @@ import '../../../styles/admin.css';
     }).join('');
   }
 
-  window.saveGuestName = async (id) => {
-    const input = document.getElementById(`gn-${id}`);
+  window.saveGuestName = async (id: string | number) => {
+    const input = document.getElementById(`gn-${id}`) as HTMLInputElement;
     const guestName = input.value.trim();
     if (!guestName) {
       alert('Please enter a guest name (or "NA" if unknown).');
@@ -524,7 +533,7 @@ import '../../../styles/admin.css';
     }
   };
 
-  window.markArrived = async (id) => {
+  window.markArrived = async (id: string | number) => {
     try {
       const res = await fetch(`/api/reg/volunteer/arrive/${id}`, { method: 'POST' });
       const data = await res.json();
@@ -546,7 +555,7 @@ import '../../../styles/admin.css';
       if (data.success && data.tables) tables = data.tables;
     } catch {}
     tableFilter.innerHTML = '<option value="">All</option>';
-    tables.forEach(t => {
+    tables.forEach((t: TableRow) => {
       tableFilter.innerHTML += `<option value="${t.id}">${t.label}${t.isVIP ? ' (VIP)' : ''}</option>`;
     });
   }

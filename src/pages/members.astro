@@ -237,7 +237,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
   window.deleteMember = async (id: number) => {
     const m = allMembers.find((x: any) => x.id === id);
     const name = m?.name ?? `member #${id}`;
-    let deps: { memberships?: number; bookings?: number; applications?: number } = {};
+    let deps: { memberships?: number; bookings?: number; applications?: number; payments?: number } = {};
     try {
       const res = await fetch(`/api/members/${id}/dependencies`);
       const data = await res.json();

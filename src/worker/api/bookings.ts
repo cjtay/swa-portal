@@ -1,11 +1,5 @@
-import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { Env, AppContext } from '../types';
 import { buildBookingConfirmationEmail } from '../lib/email-booking';
-
-type AppContext = Context<{
-  Bindings: Env;
-  Variables: { sessionEmail: string; sessionName: string; sessionRole: string };
-}>;
 
 async function sendConfirmationEmail(env: Env, booking: Record<string, unknown>) {
   try {

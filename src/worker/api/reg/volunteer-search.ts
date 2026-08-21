@@ -1,12 +1,8 @@
 import type { Context } from 'hono';
-import type { Env } from '../../types';
+import type { AppContext } from "../../types";
 import { markArrived } from '../../lib/reg/guests';
 import { loadTablesConfig, getTable } from '../../lib/reg/tables';
 
-type AppContext = Context<{
-  Bindings: Env;
-  Variables: { sessionEmail: string; sessionName: string; sessionRole: string; sessionRegRole: string | null };
-}>;
 
 export async function handleVolunteerSearch(c: AppContext) {
   const q = (c.req.query('q') || '').trim();
@@ -53,7 +49,7 @@ export async function handleVolunteerSearch(c: AppContext) {
 
 export async function handleVolunteerArrive(c: AppContext) {
   const sessionEmail = c.get('sessionEmail') as string;
-  const guestId = c.req.param('id');
+  const guestId = c.req.param('id') ?? '';
 
   const guest = await c.env.DB.prepare(
     'SELECT * FROM reg_guests WHERE id = ?',
@@ -151,7 +147,7 @@ export async function handleVolunteerWalkin(c: AppContext) {
 }
 
 export async function handleVolunteerUpdateGuest(c: AppContext) {
-  const guestId = c.req.param('id');
+  const guestId = c.req.param('id') ?? '';
 
   let body: Record<string, unknown>;
   try {

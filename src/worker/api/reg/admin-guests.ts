@@ -1,12 +1,8 @@
 import type { Context } from 'hono';
-import type { Env } from '../../types';
+import type { AppContext } from "../../types";
 import { loadTablesConfig, getTable } from '../../lib/reg/tables';
 import { allocateGuestSlot } from '../../lib/reg/tickets';
 
-type AppContext = Context<{
-  Bindings: Env;
-  Variables: { sessionEmail: string; sessionName: string; sessionRole: string; sessionRegRole: string | null };
-}>;
 
 export async function handleAdminGuests(c: AppContext) {
   if (c.req.method === 'POST') {

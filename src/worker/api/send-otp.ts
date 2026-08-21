@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { AppContext } from '../types';
 import { buildOtpEmail } from '../lib/email-otp';
 import { signHmac } from '../lib/crypto';
 import { handleApiError } from '../lib/error-handler';
@@ -45,7 +45,7 @@ async function checkRateLimit(kv: KVNamespace, ip: string): Promise<{ allowed: b
   return { allowed: true, remaining: OTP_RATE_LIMIT_MAX_REQUESTS - records.length };
 }
 
-export async function handleSendOtp(c: Context<{ Bindings: Env }>) {
+export async function handleSendOtp(c: AppContext) {
   const endpoint = 'send-otp';
   const env = c.env;
 

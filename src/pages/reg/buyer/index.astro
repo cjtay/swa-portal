@@ -67,20 +67,28 @@ import '../../../styles/admin.css';
   const params = new URLSearchParams(window.location.search);
   const token = params.get('token') || '';
 
-  const loading = document.getElementById('loading');
-  const errorView = document.getElementById('error-view');
-  const closedView = document.getElementById('closed-view');
-  const closedReason = document.getElementById('closed-reason');
-  const formView = document.getElementById('form-view');
-  const buyerNameHeading = document.getElementById('buyer-name-heading');
-  const bookingInfo = document.getElementById('booking-info');
-  const instructionText = document.getElementById('instruction-text');
-  const guestList = document.getElementById('guest-list');
-  const lastUpdated = document.getElementById('last-updated');
+  const loading = document.getElementById('loading') as HTMLElement;
+  const errorView = document.getElementById('error-view') as HTMLElement;
+  const closedView = document.getElementById('closed-view') as HTMLElement;
+  const closedReason = document.getElementById('closed-reason') as HTMLElement;
+  const formView = document.getElementById('form-view') as HTMLElement;
+  const buyerNameHeading = document.getElementById('buyer-name-heading') as HTMLElement;
+  const bookingInfo = document.getElementById('booking-info') as HTMLElement;
+  const instructionText = document.getElementById('instruction-text') as HTMLElement;
+  const guestList = document.getElementById('guest-list') as HTMLElement;
+  const lastUpdated = document.getElementById('last-updated') as HTMLElement;
 
-  let guests = [];
+  declare global {
+  interface Window {
+    toggleEdit: (i: number) => void;
+    saveGuest: (i: number) => Promise<void>;
+  }
+}
 
-  function esc(s) {
+interface GuestRow { id: number; guest_name?: string | null; notes?: string | null; ticket_code?: string; is_buyer?: boolean }
+  let guests: GuestRow[] = [];
+
+  function esc(s: string | null | undefined) {
     const d = document.createElement('div');
     d.textContent = s || '';
     return d.innerHTML;
@@ -129,7 +137,7 @@ import '../../../styles/admin.css';
   }
 
   function renderGuests() {
-    guestList.innerHTML = guests.map((g, i) => {
+    guestList.innerHTML = guests.map((g: GuestRow, i: number) => {
       const hasName = g.guest_name && g.guest_name.trim();
       const isBuyer = g.is_buyer;
 
@@ -161,14 +169,14 @@ import '../../../styles/admin.css';
     }).join('');
   }
 
-  window.toggleEdit = (i) => {
-    const form = document.getElementById(`form-${i}`);
+  window.toggleEdit = (i: number) => {
+    const form = document.getElementById(`form-${i}`) as HTMLElement;
     form.style.display = form.style.display === 'none' ? '' : 'none';
   };
 
-  window.saveGuest = async (i) => {
-    const nameInput = document.getElementById(`input-name-${i}`);
-    const notesInput = document.getElementById(`input-notes-${i}`);
+  window.saveGuest = async (i: number) => {
+    const nameInput = document.getElementById(`input-name-${i}`) as HTMLInputElement;
+    const notesInput = document.getElementById(`input-notes-${i}`) as HTMLInputElement;
     const name = nameInput.value.trim();
     const notes = notesInput.value.trim();
 

@@ -84,8 +84,8 @@ describe('GET /api/namecards — list', () => {
     const body = await res.json<{ success: boolean; namecards: Array<{ slug: string; member_name: string }> }>();
     expect(body.success).toBe(true);
     expect(body.namecards.length).toBeGreaterThanOrEqual(1);
-    expect(body.namecards.some((n) => n.slug === 'alice-cheng')).toBe(true);
-    expect(body.namecards.find((n) => n.slug === 'alice-cheng')!.member_name).toBe('Alice Cheng');
+    expect(body.namecards.some((n: { slug: string }) => n.slug === 'alice-cheng')).toBe(true);
+    expect(body.namecards.find((n: { slug: string }) => n.slug === 'alice-cheng')!.member_name).toBe('Alice Cheng');
   });
 
   it('returns 401 when no session is provided AND the dev bypass is suppressed', async () => {
@@ -186,7 +186,7 @@ describe('POST /api/namecards/bulk — bulk create', () => {
       skipped: Array<{ member_id: number }>;
     }>();
     expect(body.success).toBe(true);
-    expect(body.created.some((c) => c.member_id === bobId)).toBe(true);
+    expect(body.created.some((c: { member_id: number }) => c.member_id === bobId)).toBe(true);
     // Alice already had a card — must not appear in `created`.
     expect(body.created.length).toBeGreaterThanOrEqual(1);
   });

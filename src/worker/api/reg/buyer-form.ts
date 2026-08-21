@@ -1,17 +1,13 @@
 import type { Context } from 'hono';
-import type { Env } from '../../types';
+import type { Env, AppContext } from '../../types';
 import { validateToken } from '../../lib/reg/tokens';
 import { loadTablesConfig, getTable, isFormOpen, formatCutoffTime } from '../../lib/reg/tables';
 import { handleApiError } from '../../lib/error-handler';
 
-type AppContext = Context<{
-  Bindings: Env;
-  Variables: { sessionEmail: string; sessionName: string; sessionRole: string; sessionRegRole: string | null };
-}>;
 
 export async function handleBuyerForm(c: AppContext) {
   try {
-    const token = c.req.param('token');
+    const token = c.req.param('token') ?? '';
 
     const tokenRow = await validateToken(c.env.DB, token);
     if (!tokenRow) {
@@ -64,13 +60,13 @@ export async function handleBuyerForm(c: AppContext) {
       formCutoffFormatted: formatCutoffTime(config),
     });
   } catch (err) {
-    return handleApiError(c as Context<{ Bindings: Env }>, '/api/reg/buyer/:token', err, 'Unable to load your registration. Please try again.');
+    return handleApiError(c, '/api/reg/buyer/:token', err, 'Unable to load your registration. Please try again.');
   }
 }
 
 export async function handleBuyerUpdateGuest(c: AppContext) {
-  const token = c.req.param('token');
-  const guestId = c.req.param('id');
+  const token = c.req.param('token') ?? '';
+  const guestId = c.req.param('id') ?? '';
 
   const tokenRow = await validateToken(c.env.DB, token);
   if (!tokenRow) {

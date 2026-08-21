@@ -91,7 +91,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   const bookingsList = document.getElementById('bookings-list')!;
   const addBtn = document.getElementById('add-booking-btn')!;
   const cancelBtn = document.getElementById('cancel-form-btn')!;
-  const printBtn = document.getElementById('print-guest-list-btn')!;
+  const printBtn = document.getElementById('print-guest-list-btn') as HTMLButtonElement;
   const formEl = document.getElementById('new-booking-form') as HTMLDivElement;
   const form = document.getElementById('booking-form') as HTMLFormElement;
   const errEl = document.getElementById('form-error')!;

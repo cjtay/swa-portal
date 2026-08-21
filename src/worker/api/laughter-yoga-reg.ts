@@ -1,12 +1,11 @@
 import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { Env, AppContext } from '../types';
 import { handleApiError } from '../lib/error-handler';
 import { logError } from '../lib/log-error';
 import { buildLaughterYogaNotificationEmail } from '../lib/email-volunteer-notification';
 import { isDevBypassActive } from './session';
 import { LAUGHTER_YOGA_NOTIFY_EMAILS } from '../../constants/portal';
 
-type AppContext = Context<{ Bindings: Env }>;
 
 const KV_KEY = 'swa:laughter_yoga_config';
 

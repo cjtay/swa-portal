@@ -1,3 +1,5 @@
+import type { Context } from 'hono';
+
 export type Env = {
   DB: D1Database;
   R2_BUCKET: R2Bucket;
@@ -18,3 +20,17 @@ export type Env = {
 };
 
 export type RegRole = 'reg_admin' | 'reg_volunteer' | null;
+
+export type AppVariables = {
+  sessionEmail: string;
+  sessionName: string;
+  sessionRole: string;
+  sessionRegRole: string | null;
+};
+
+export type AppEnv = {
+  Bindings: Env;
+  Variables: AppVariables;
+};
+
+export type AppContext = Context<AppEnv>;
