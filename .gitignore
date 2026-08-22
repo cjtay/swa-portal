@@ -26,6 +26,7 @@ backups/
 
 # AI tool session state
 .zcode/
+.qwen/
 
 # OS
 .DS_Store
