@@ -13,9 +13,9 @@ npm run db:clear:membership  # Clear local membership applications + approved te
 
 ## Project Status
 
-**Phase 1 partial complete.** Auth system, project scaffold, member directory, and base pages are done. Office booking UI still needed.
+**Phase 1 complete + feature expansion.** Auth, office booking, member directory, online forms (membership application, volunteer, laughter yoga) and the event registration/check-in system are built and deployed. The full security remediation plan (1 critical, 2 high, 7 medium findings from the 2026-08-21 audit) was implemented 22-08-2026 — see `docs/plans/security-remediation-plan.md` for the implementation log.
 
-The public-website integration (namecards, `show_on_website`, `has_namecard`, `slug`, photo uploads, `/api/sync-website`) was **removed on 19-07-2026** — swa-portal is now isolated from the public `swa2024` website for risk segregation. Member profile/bio/socials are no longer managed here.
+The public-website integration (`show_on_website`, `has_namecard`, `slug`, photo uploads, `/api/sync-website`) was **removed on 19-07-2026** — swa-portal is isolated from the public `swa2024` website for risk segregation. The digital namecard feature built 25-07-2026 (public `/c/:slug` pages + admin UI, spec `docs/NAMECARD.md`) is a separate portal feature; it was **hidden on 22-08-2026** following the security audit (unauthenticated PII exposure). Everything is restorable — search for the `DISABLED 2026-08` markers.
 
 See `docs/plans/SWAPortal-Implementation-Plan.md` for full progress tracker.
 
@@ -116,7 +116,10 @@ Secrets: `OTP_SECRET`, `SESSION_SECRET`, `RESEND_API_KEY` (set interactively via
 - Explain only when asked or when decisions are non-obvious
 
 ## Next Steps
-- Office booking calendar UI (Phase 1D)
-- Member directory with search/filter/pagination (Phase 1F)
+- Deploy the security remediation commit (`02799aa`) — owner runs `npm run deploy`
+- Phase 2B: membership fee payment reminders (cron) — see `docs/plans/membership-lifecycle-plan.md`
+- Member directory pagination (currently loads all members — will break at scale)
+- Decide: restore or formally retire the hidden namecard feature (`DISABLED 2026-08` markers)
+- Backport the `namecards` table into `schema.sql` (see progress.md 2026-07-25 local-dev gotcha)
 - Domain transfer: configure `admin.singaporewomenassociation.org` custom domain
-- Phase 2: Membership fees, payment reminders, member self-service
+- Phase 2C/3: member self-service, CMS, Microsoft Forms migration

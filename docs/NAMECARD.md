@@ -1,8 +1,18 @@
 # SWA Digital Namecard System - Technical & Functional Specification
 
+> ⚠️ **FEATURE HIDDEN — 22-08-2026.** The public `/c/*` surface was disabled
+> by the security audit (unauthenticated exposure of member email, mobile and
+> home address via guessable slugs). The code is preserved, not deleted:
+> routes commented out in `src/worker/index.ts`, page renamed to
+> `src/pages/_namecards.astro`, nav link removed — search for the
+> `DISABLED 2026-08` markers to restore. See
+> `docs/plans/security-remediation-plan.md` (Phase 2). This spec below
+> describes the feature as built; treat the public surface as dormant until
+> the owner decides to restore or retire it.
+
 > **Version**: 2.1 (rewrite, single-Worker)
 > **Date**: 2026-07-25
-> **Status**: Draft for review
+> **Status**: Hidden (2026-08-22) — previously "Draft for review"
 > **Scope**: Full redesign of the digital namecard feature. Hosted inside the existing `swa-portal` Worker (no separate subdomain, no separate deployment). Shares auth, data plane, and bindings with the rest of the portal. Decoupled from the public marketing website (`swa2024`).
 
 ---
