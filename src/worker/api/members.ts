@@ -2,6 +2,14 @@ import type { Context } from 'hono';
 import type { Env, AppContext } from '../types';
 import { IT_ADMIN_EMAILS } from '../../constants/portal';
 
+// Explicit column list instead of SELECT *: `nric` is not displayed anywhere
+// in the portal, so it must never leave the API (security-remediation-plan
+// Phase 4a). If a future feature needs NRIC, add a dedicated admin-only
+// endpoint rather than widening this list.
+const MEMBER_COLUMNS = `id, name, role, email, mobile, job_title, category, can_login,
+  address_line1, address_line2, address_postal_code, address_country,
+  sort_order, membership_status, fee_due_date, fee_waived, reg_role,
+  deleted_at, created_at, updated_at`;
 
 export async function handleMembers(c: AppContext) {
   if (c.req.method === 'GET') {
@@ -10,7 +18,7 @@ export async function handleMembers(c: AppContext) {
 
     // Soft-deleted members are hidden everywhere this endpoint feeds:
     // the directory, the namecards page, and the roles page.
-    let query = 'SELECT * FROM members WHERE deleted_at IS NULL';
+    let query = `SELECT ${MEMBER_COLUMNS} FROM members WHERE deleted_at IS NULL`;
     const params: unknown[] = [];
 
     if (category) {
@@ -80,7 +88,9 @@ export async function handleMemberById(c: AppContext) {
   const id = c.req.param('id');
 
   if (c.req.method === 'GET') {
-    const member = await c.env.DB.prepare('SELECT * FROM members WHERE id = ?').bind(id).first();
+    const member = await c.env.DB.prepare(
+      `SELECT ${MEMBER_COLUMNS} FROM members WHERE id = ? AND deleted_at IS NULL`,
+    ).bind(id).first();
     if (!member) {
       return c.json({ success: false, message: 'Member not found.' }, 404);
     }

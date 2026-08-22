@@ -75,6 +75,12 @@ export async function handleBookings(c: AppContext) {
       return c.json({ success: false, message: 'Required fields: booker_name, booker_email, purpose, start_datetime, end_datetime' }, 400);
     }
 
+    // booker_email becomes a Resend recipient — validate before use
+    // (security-remediation-plan Phase 4f).
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(booker_email)) {
+      return c.json({ success: false, message: 'Enter a valid booker email address.' }, 400);
+    }
+
     const startDate = new Date(start_datetime);
     const endDate = new Date(end_datetime);
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
@@ -86,8 +92,9 @@ export async function handleBookings(c: AppContext) {
     if (startDate < new Date()) {
       return c.json({ success: false, message: 'Cannot book in the past.' }, 400);
     }
-    if (attendees < 1) {
-      return c.json({ success: false, message: 'Attendees must be at least 1.' }, 400);
+    // Number('abc') is NaN, and NaN < 1 is false — check explicitly.
+    if (!Number.isInteger(attendees) || attendees < 1) {
+      return c.json({ success: false, message: 'Attendees must be a whole number of at least 1.' }, 400);
     }
 
     const conflict = await c.env.DB.prepare(

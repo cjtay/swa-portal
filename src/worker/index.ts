@@ -28,12 +28,14 @@ import {
   handleMembershipApprove,
   handleMembershipReject,
 } from './api/membership-reg';
-import {
-  handleNamecardPage,
-  handleNamecardVcard,
-  handleNamecardCardSvg,
-  handlePublicNamecardPhoto,
-} from './api/namecard-public';
+// ── DISABLED 2026-08: public namecard surface hidden (security audit).
+// Restore by uncommenting + renaming _namecards.astro back. ──
+// import {
+//   handleNamecardPage,
+//   handleNamecardVcard,
+//   handleNamecardCardSvg,
+//   handlePublicNamecardPhoto,
+// } from './api/namecard-public';
 import {
   handleNamecards,
   handleNamecardsBulk,
@@ -48,19 +50,16 @@ const app = new Hono<AppEnv>();
 
 app.use('/api/*', authMiddleware);
 
-// ── Public namecard surface (/c/*) ─────────────────────────────────────────
-//
-// Registered BEFORE the auth-gated /api/* block. authMiddleware is scoped to
-// '/api/*' only, so /c/* is public by construction. The wrangler.jsonc
-// `run_worker_first` setting must include '/c/*' so these requests reach the
-// Worker rather than the static asset handler (docs/NAMECARD.md §11.2).
-app.get('/c/:slug', handleNamecardPage);
-app.get('/c/:slug/contact.vcf', handleNamecardVcard);
-app.get('/c/:slug/card.svg', handleNamecardCardSvg);
-// Photo stream — no extension. The Content-Type header (from R2 metadata)
-// governs the response; an extension would risk the static-assets handler
-// intercepting the request before Hono's router fires.
-app.get('/c/:slug/photo', handlePublicNamecardPhoto);
+// ── DISABLED 2026-08: public namecard surface hidden (security audit).
+// The /c/:slug pages exposed member email, mobile and home address
+// unauthenticated with guessable slugs. Hidden, not deleted — restore by
+// uncommenting this block + the import above, renaming _namecards.astro back
+// to namecards.astro, and re-adding '/c/*' to run_worker_first in
+// wrangler.jsonc. ──
+// app.get('/c/:slug', handleNamecardPage);
+// app.get('/c/:slug/contact.vcf', handleNamecardVcard);
+// app.get('/c/:slug/card.svg', handleNamecardCardSvg);
+// app.get('/c/:slug/photo', handlePublicNamecardPhoto);
 
 app.get('/api/health', (c) => {
   return c.json({ status: 'ok', service: 'swa-portal', timestamp: new Date().toISOString() });

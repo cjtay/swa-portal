@@ -1,3 +1,8 @@
+// ── DISABLED 2026-08: the public /c/* namecard surface is hidden (security
+// audit) — the routes are commented out in src/worker/index.ts, so these
+// tests would 404. The `.ts.disabled` suffix keeps vitest from picking the
+// file up. Restore by reversing the rename and re-enabling the routes. ──
+//
 // Integration tests for the public /c/* routes.
 //
 // Uses the canonical @cloudflare/vitest-pool-workers pattern: import the Hono

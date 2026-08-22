@@ -2,6 +2,7 @@ import type { Context } from 'hono';
 import type { Env, AppContext } from '../types';
 import { handleApiError } from '../lib/error-handler';
 import { logError } from '../lib/log-error';
+import { csvEscape } from '../lib/csv';
 import { buildMembershipNotificationEmail } from '../lib/email-membership-notification';
 import { buildMembershipReference } from '../lib/paynow-qr';
 import { isDevBypassActive } from './session';
@@ -853,14 +854,6 @@ function isRetryableD1Error(msg: string): boolean {
   );
 }
 
-function csvEscape(val: unknown): string {
-  const s = val === null || val === undefined ? '' : String(val);
-  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
-    return '"' + s.replace(/"/g, '""') + '"';
-  }
-  return s;
-}
-
 function formatSg(v: unknown): string {
   if (!v) return '';
   let s = String(v);
@@ -902,6 +895,19 @@ interface Validated {
   pdpaConsent: boolean;
 }
 
+// Allowlist for applicant names: Unicode letters (Chinese, Tamil, Malay and
+// romanised names all qualify), combining marks, spaces, full stops,
+// apostrophes and hyphens — the punctuation that appears in Singaporean
+// names. Everything else (markup characters, digits, control characters) is
+// rejected. Defence-in-depth for the admin screens that render member names
+// (security-remediation-plan.md Phase 3).
+const FULL_NAME_MAX_LENGTH = 100;
+const FULL_NAME_PATTERN = /^[\p{L}\p{M}][\p{L}\p{M} .'\-]*$/u;
+
+export function isValidFullName(name: string): boolean {
+  return name.length <= FULL_NAME_MAX_LENGTH && FULL_NAME_PATTERN.test(name);
+}
+
 function validateSubmission(b: Record<string, unknown>): { data: Validated; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
 
@@ -910,6 +916,8 @@ function validateSubmission(b: Record<string, unknown>): { data: Validated; erro
   const fullName = str(b, 'fullName');
   if (!fullName) errors.fullName = 'Full name is required.';
   else if (fullName.length < 2) errors.fullName = 'Please enter your full name.';
+  else if (!isValidFullName(fullName))
+    errors.fullName = 'Full name can only contain letters, spaces, hyphens, apostrophes and full stops (max 100 characters).';
 
   const email = str(b, 'email').toLowerCase();
   if (!email) errors.email = 'Email is required.';

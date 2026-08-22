@@ -2,8 +2,9 @@
 //
 // Verifies the §9.4 refactor: DELETE /api/members/:id runs a D1 batch that
 // flips BOTH members.deleted_at AND namecards.has_namecard in the same
-// transaction, so the public /c/:slug surface goes 404 the instant the
-// member is deleted.
+// transaction, so the public /c/:slug surface goes dark the instant the
+// member is deleted. (The /c/* routes themselves were hidden in the 2026-08
+// security audit, so this test asserts the D1 state directly.)
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { SELF, env } from 'cloudflare:test';
@@ -18,6 +19,13 @@ beforeAll(async () => {
 beforeEach(async () => {
   await env.DB.prepare('DELETE FROM namecards').run();
   await env.DB.prepare("DELETE FROM members WHERE email LIKE 'soft-delete-test-%'").run();
+  // Session revalidation (security-remediation-plan Phase 1) rejects cookies
+  // whose email has no live member row — seed the admin cookie's identity.
+  await seedMember(env.DB, {
+    name: 'Admin',
+    email: 'soft-delete-test-admin@example.com',
+    category: 'admin',
+  });
 });
 
 async function adminCookie(): Promise<string> {
@@ -46,8 +54,10 @@ describe('DELETE /api/members/:id — atomic namecard dark', () => {
     await seedNamecard(env.DB, memberId, { slug, has_namecard: 1 });
 
     // Sanity: the card is live before the delete.
-    const before = await SELF.fetch(`https://example.com/c/${slug}`);
-    expect(before.status).toBe(200);
+    const before = await env.DB.prepare('SELECT has_namecard FROM namecards WHERE member_id = ?')
+      .bind(memberId)
+      .first<{ has_namecard: number }>();
+    expect(before?.has_namecard).toBe(1);
 
     // Soft-delete the member.
     const del = await SELF.fetch(`https://example.com/api/members/${memberId}`, {
@@ -58,10 +68,6 @@ describe('DELETE /api/members/:id — atomic namecard dark', () => {
 
     // The card must be dark immediately — no cache window, no eventual
     // consistency, because the darkening happened in the same batch.
-    const after = await SELF.fetch(`https://example.com/c/${slug}`);
-    expect(after.status).toBe(404);
-
-    // And the namecard row's has_namecard column is 0 in D1.
     const row = await env.DB.prepare('SELECT has_namecard FROM namecards WHERE member_id = ?')
       .bind(memberId)
       .first<{ has_namecard: number }>();

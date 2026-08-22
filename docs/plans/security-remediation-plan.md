@@ -1,7 +1,8 @@
 # Security Remediation Plan — SWA Portal
 
 **Date:** 2026-08-21
-**Status:** Not started
+**Status:** Implemented 2026-08-22 (all phases P1–P4; P5 item 1 already done).
+Pending production deploy — owner-gated.
 **Source:** Full security audit (worker API + frontend) conducted 2026-08-21
 **Scope:** All Critical, High, and Medium findings. Low/informational items listed
 under "Out of scope".
@@ -153,6 +154,15 @@ Restrict `isDevBypassHost` to localhost/127.0.0.1 only — remove production
 custom domain and `*.workers.dev` matches so an accidental
 `DEV_BYPASS_AUTH=true` var leak fails closed instead of disabling auth.
 
+**Implementation note (2026-08-22):** the `*.workers.dev` wildcard was
+removed as planned, but the exact `SWA_ADMIN_DOMAIN` match had to stay:
+`wrangler dev` rewrites `c.req.url` against the configured custom-domain
+route even though the browser is on localhost (verified empirically via a
+temporary log line), so loopback-only broke the local dev-login picker.
+The exception is a single exact hostname, not a wildcard, and the other two
+trust anchors (flag only in `.dev.vars`, `local-dev-` SESSION_SECRET prefix)
+still fail closed in any real deployment.
+
 ### 4f. Bookings input validation
 File: `src/worker/api/bookings.ts:72-123`
 - Reject NaN attendees: `if (!Number.isInteger(attendees) || attendees < 1)`
@@ -194,3 +204,72 @@ Regression matrix:
 - OTP modulo bias (~0.04%, negligible given existing attempt caps)
 - Session revocation infrastructure beyond Phase 1 revalidation
 - Magic-link token returned in API response body (admin-only surface)
+
+---
+
+## Implementation Log — 2026-08-22
+
+All phases implemented and verified. Key file changes:
+
+**P1 (critical):**
+- New `src/worker/lib/session-cookie.ts` — shared cookie sign/header helpers.
+- New `src/worker/lib/session-revalidation.ts` — per-request D1 re-check:
+  non-IT-admin sessions must have a live `can_login=1`, non-deleted member
+  row; IT admins stay governed by `IT_ADMIN_EMAILS` (may lack a row). Role
+  mismatches re-sign the cookie via `resolveSessionRole`, preserving the
+  original expiry (revalidation never extends a session).
+- `src/worker/middleware.ts` — revalidation after HMAC verify; invalid →
+  401 + cleared cookie; changed roles → refreshed `Set-Cookie`.
+- `src/worker/api/session.ts` — `handleSession` applies the same
+  revalidation (`/api/session` is a public path the middleware skips).
+- `src/worker/api/verify-otp.ts` — refactored onto the shared cookie builder.
+- Tests: `src/worker/api/__tests__/session-revalidation.test.ts` (6 tests:
+  demotion + re-signed cookie, `/api/session` downgrade, soft-delete →
+  401+clear, `can_login=0` → 401+clear, ghost email → 401, IT admin with no
+  member row stays valid). Existing fixture tests updated to seed member
+  rows for their minted cookie identities.
+
+**P2 (high):**
+- `src/pages/namecards.astro` → `_namecards.astro` (Astro ignores `_`).
+- `/c/*` route registrations + import commented out in
+  `src/worker/index.ts` with restore markers.
+- `"/c/*"` removed from `run_worker_first` in `wrangler.jsonc`.
+- Nav link commented out in `src/layouts/AdminLayout.astro`.
+- `namecard-public.test.ts` parked as `.ts.disabled`;
+  `members-soft-delete.test.ts` switched its /c/* sanity checks to D1-level
+  assertions.
+
+**P3 (high):**
+- `src/pages/members.astro` — `escapeHtml` added; name/role/email/category/
+  fee_due_date escaped in the table render.
+- `src/worker/api/membership-reg.ts` — `isValidFullName` allowlist (Unicode
+  letters/marks, spaces, `.` `'` `-`; max 100) enforced at submission;
+  unit-tested in `membership-validation.test.ts`.
+- Secondary sinks escaped: `reg/volunteer/search.astro`,
+  `reg/admin/bookings.astro`, `reg/volunteer/add-walkin.astro` (new `esc`).
+
+**P4 (medium):**
+- 4a: `members.ts` — explicit `MEMBER_COLUMNS` list excluding `nric` on both
+  GETs; by-id GET also filters `deleted_at IS NULL`.
+- 4b: `rate-limit.ts` — per-endpoint limit map (`getEndpointLimit`) + keys
+  for magic-link (5/h), volunteer check-in writes (30/15min), namecard photo
+  (10/h), membership approve/reject (20/h).
+- 4c: new shared `src/worker/lib/csv.ts` — RFC-4180 quoting + formula
+  neutralisation (`'` prefix on `= + - @ \t \r` leaders); replaced the three
+  divergent copies (membership-reg, volunteer-reg, reg/admin-export).
+- 4d: `namecard-public.ts` — `jsonForLd` escapes `<` as `\u003c` in the
+  JSON-LD serializer.
+- 4e: see implementation note in §4e above.
+- 4f: `bookings.ts` — `Number.isInteger(attendees)` check + email format
+  validation before Resend use.
+
+**P5:** `prod-dump.sql` already absent from the repo — nothing to do.
+
+**Verification (2026-08-22):** `astro check` 0 errors · full vitest suite
+112/112 passing · production build 23 pages, no `/namecards` emitted ·
+localhost regression: `/namecards` and `/c/*` → 404, dev picker + dev login
++ `/api/session` revalidation live-verified, bookings email validation and
+membership fullName allowlist live-verified (both 400). NRIC-exclusion live
+check skipped — local D1 is pre-migration-005 (explicit column list made
+that staleness visible as a local-only 500); prod D1 has migration 005
+applied (19-07-2026), so production is unaffected.

@@ -3,6 +3,8 @@ import type { AppContext } from './types';
 import { getSession, getDevBypassSession } from './api/session';
 import { IT_ADMIN_EMAILS } from '../constants/portal';
 import { checkApiRateLimit, getEndpointKey } from './lib/rate-limit';
+import { revalidateSession } from './lib/session-revalidation';
+import { sessionCookieHeader, clearedSessionCookieHeader } from './lib/session-cookie';
 
 const PUBLIC_PATHS = new Set([
   '/api/health',
@@ -107,9 +109,28 @@ export async function authMiddleware(c: AppContext, next: Next) {
   // 4. Require authentication for all remaining API routes.
   // Real cookie wins over the dev-bypass injection — this lets
   // /api/dev/login switch identities even while the bypass flag is on.
-  const session = await getSession(c);
+  let session = await getSession(c);
 
   if (session) {
+    // 4b. Revalidate the session against D1 on every request. The cookie was
+    // minted at login; demotions, can_login lock-outs and soft-deletes since
+    // then must take effect immediately (security-remediation-plan.md Phase 1).
+    const revalidated = await revalidateSession(c.env.DB, c.env.SESSION_SECRET, session);
+    if (revalidated.status === 'invalid') {
+      c.header('Set-Cookie', clearedSessionCookieHeader(), { append: true });
+      return c.json(
+        { success: false, error_code: 'UNAUTHORIZED', message: 'Session no longer valid. Please log in again.' },
+        401,
+      );
+    }
+    session = revalidated.session;
+    if (revalidated.newCookie) {
+      c.header(
+        'Set-Cookie',
+        sessionCookieHeader(revalidated.newCookie.value, revalidated.newCookie.maxAgeSeconds),
+        { append: true },
+      );
+    }
     c.set('sessionEmail', session.email);
     c.set('sessionName', session.name);
     c.set('sessionRole', session.role);

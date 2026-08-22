@@ -27,7 +27,9 @@ type NavItem = {
 const navItems: NavItem[] = [
   { href: '/', label: 'Dashboard' },
   { href: '/members', label: 'Members', matchPrefix: ['/members'] },
-  { href: '/namecards', label: 'Namecards', matchPrefix: ['/namecards'] },
+  // ── DISABLED 2026-08: namecard surface hidden (security audit).
+  // Restore together with src/pages/_namecards.astro and the /c/* routes. ──
+  // { href: '/namecards', label: 'Namecards', matchPrefix: ['/namecards'] },
   { href: '/office-booking', label: 'Office Booking', matchPrefix: ['/office-booking'] },
   { href: '/admin/forms', label: 'Forms', matchPrefix: ['/admin/forms'] },
   {

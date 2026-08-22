@@ -1,4 +1,8 @@
 ---
+// ── DISABLED 2026-08: namecard admin page hidden (security audit).
+// Astro ignores `_`-prefixed files under src/pages, so no page is emitted at
+// build time. Restore by renaming back to `namecards.astro` (and re-enabling
+// the /c/* routes in src/worker/index.ts). ──
 import AdminLayout from '../layouts/AdminLayout.astro';
 ---
 

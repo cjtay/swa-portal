@@ -1,8 +1,9 @@
 import type { Context } from 'hono';
 import type { AppContext } from '../types';
-import { signHmac, timingSafeEqual, base64urlEncode } from '../lib/crypto';
+import { signHmac, timingSafeEqual } from '../lib/crypto';
 import { resolveSessionRole } from '../lib/session-role';
-import { SESSION_COOKIE_NAME, SESSION_DEFAULT_EXPIRY_MS, SESSION_EXTENDED_EXPIRY_MS, OTP_TTL_SECONDS, VERIFY_RATE_LIMIT_WINDOW_SECONDS, VERIFY_RATE_LIMIT_MAX_ATTEMPTS_IP, VERIFY_RATE_LIMIT_MAX_ATTEMPTS_EMAIL, VERIFY_MAX_FAILURES_PER_OTP } from '../../constants/portal';
+import { signSessionCookie, sessionCookieHeader } from '../lib/session-cookie';
+import { SESSION_DEFAULT_EXPIRY_MS, SESSION_EXTENDED_EXPIRY_MS, OTP_TTL_SECONDS, VERIFY_RATE_LIMIT_WINDOW_SECONDS, VERIFY_RATE_LIMIT_MAX_ATTEMPTS_IP, VERIFY_RATE_LIMIT_MAX_ATTEMPTS_EMAIL, VERIFY_MAX_FAILURES_PER_OTP } from '../../constants/portal';
 
 async function checkVerifyRateLimit(kv: KVNamespace, ip: string, email: string): Promise<{ allowed: boolean; message?: string }> {
   const ipKey = `swa:rl:verify:ip:${ip}`;
@@ -104,19 +105,17 @@ export async function handleVerifyOtp(c: AppContext) {
   const exp = remember
     ? Date.now() + SESSION_EXTENDED_EXPIRY_MS
     : Date.now() + SESSION_DEFAULT_EXPIRY_MS;
-  const payload = base64urlEncode(JSON.stringify({ email, name, role, regRole, exp }));
-  const signature = await signHmac(payload, env.SESSION_SECRET);
-  const cookieValue = `${payload}.${signature}`;
+  const cookieValue = await signSessionCookie({ email, name, role, regRole, exp }, env.SESSION_SECRET);
 
   const maxAge = remember
-    ? Math.max(0, Math.floor(SESSION_EXTENDED_EXPIRY_MS / 1000))
-    : Math.max(0, Math.floor(SESSION_DEFAULT_EXPIRY_MS / 1000));
+    ? Math.floor(SESSION_EXTENDED_EXPIRY_MS / 1000)
+    : Math.floor(SESSION_DEFAULT_EXPIRY_MS / 1000);
 
   return c.json(
     { success: true, email, name, role, regRole },
     200,
     {
-      'Set-Cookie': `${SESSION_COOKIE_NAME}=${cookieValue}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`,
+      'Set-Cookie': sessionCookieHeader(cookieValue, maxAge),
     },
   );
 }

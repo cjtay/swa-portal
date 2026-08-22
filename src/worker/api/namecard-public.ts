@@ -300,6 +300,14 @@ function sanitiseFilename(name: string): string {
   );
 }
 
+// JSON embedded in <script type="application/ld+json"> must not be able to
+// spell `</script>` — a name containing `</script><script>...` would break
+// out of the JSON island. `\u003c` is identical per the JSON spec but inert
+// to the HTML parser (security-remediation-plan Phase 4d).
+function jsonForLd(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
 /** Build a minimal branded HTML page for the public card. */
 function renderCardHtml(card: PublicNamecardRow, baseUrl: string): string {
   const safe = (s: string | null) =>
@@ -349,16 +357,16 @@ function renderCardHtml(card: PublicNamecardRow, baseUrl: string): string {
   {
     "@context": "https://schema.org",
     "@type": "Person",
-    "name": ${JSON.stringify(card.name)},
-    "jobTitle": ${JSON.stringify(card.job_title ?? '')},
+    "name": ${jsonForLd(card.name)},
+    "jobTitle": ${jsonForLd(card.job_title ?? '')},
     "worksFor": { "@type": "Organization", "name": "Singapore Women's Association", "url": "https://www.singaporewomenassociation.org" },
-    ${card.email ? `"email": ${JSON.stringify(card.email)},` : ''}
-    ${card.mobile ? `"telephone": ${JSON.stringify(card.mobile)},` : ''}
-    "url": ${JSON.stringify(cardUrl)},
-    "image": ${JSON.stringify(photoUrl)}
+    ${card.email ? `"email": ${jsonForLd(card.email)},` : ''}
+    ${card.mobile ? `"telephone": ${jsonForLd(card.mobile)},` : ''}
+    "url": ${jsonForLd(cardUrl)},
+    "image": ${jsonForLd(photoUrl)}
     ${
       socials.length
-        ? `,"sameAs": ${JSON.stringify(socials.map((s) => s.href))}`
+        ? `,"sameAs": ${jsonForLd(socials.map((s) => s.href))}`
         : ''
     }
   }

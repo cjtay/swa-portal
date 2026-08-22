@@ -160,6 +160,15 @@ import AdminLayout from '../layouts/AdminLayout.astro';
     return m ? `${m[3]}-${m[2]}-${m[1]}` : iso;
   }
 
+  // Member fields come from D1, which public forms can write to (membership
+  // approval flow) — treat them as untrusted and escape before interpolating
+  // into innerHTML (security-remediation-plan.md Phase 3).
+  function escapeHtml(s: string): string {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+
   async function loadMembers() {
     try {
       const res = await fetch('/api/members');
@@ -201,12 +210,12 @@ import AdminLayout from '../layouts/AdminLayout.astro';
           </div>`
         : '\u2014';
       return `<tr>
-        <td>${m.name}</td>
-        <td>${m.role || '\u2014'}</td>
-        <td>${m.email || '\u2014'}</td>
-        <td>${m.category}</td>
+        <td>${escapeHtml(m.name)}</td>
+        <td>${m.role ? escapeHtml(m.role) : '\u2014'}</td>
+        <td>${m.email ? escapeHtml(m.email) : '\u2014'}</td>
+        <td>${escapeHtml(m.category)}</td>
         <td>${statusBadge}</td>
-        <td>${feeDue}</td>
+        <td>${escapeHtml(feeDue)}</td>
         <td>${waived}</td>
         <td><span class="badge ${m.can_login ? 'badge-approved' : 'badge-cancelled'}">${m.can_login ? 'Yes' : 'No'}</span></td>
         <td>${actions}</td>

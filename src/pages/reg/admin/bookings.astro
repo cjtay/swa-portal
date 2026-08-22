@@ -177,8 +177,8 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     tableFilter.innerHTML = '<option value="">All tables</option>';
     tableSelect.innerHTML = '<option value="">Select table</option>';
     tables.forEach(t => {
-      tableFilter.innerHTML += `<option value="${t.id}">${t.label}${t.isVIP ? ' (VIP)' : ''}</option>`;
-      tableSelect.innerHTML += `<option value="${t.id}">${t.label}${t.isVIP ? ' (VIP)' : ''} — ${t.capacity} seats</option>`;
+      tableFilter.innerHTML += `<option value="${esc(String(t.id))}">${esc(t.label)}${t.isVIP ? ' (VIP)' : ''}</option>`;
+      tableSelect.innerHTML += `<option value="${esc(String(t.id))}">${esc(t.label)}${t.isVIP ? ' (VIP)' : ''} — ${esc(String(t.capacity))} seats</option>`;
     });
   }
 

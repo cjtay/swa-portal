@@ -28,6 +28,11 @@ beforeEach(async () => {
   // so slug collisions don't leak between tests in the shared isolate.
   await env.DB.prepare('DELETE FROM namecards').run();
   await env.DB.prepare("DELETE FROM members WHERE email LIKE 'admin-test-%'").run();
+  // Session revalidation (security-remediation-plan Phase 1) rejects cookies
+  // whose email has no live member row, so the minted cookie identities need
+  // matching rows with the same category the cookie claims.
+  await seedMember(env.DB, { name: 'Test Admin', email: 'admin-test-admin@example.com', category: 'admin' });
+  await seedMember(env.DB, { name: 'Test Committee', email: 'admin-test-committee@example.com', category: 'committee' });
 });
 
 /** Mint a signed session cookie for a non-admin (committee) role. */
@@ -369,14 +374,11 @@ describe('DELETE /api/namecards/:id — hard delete', () => {
 
 describe('GET /api/namecards/me — self-service', () => {
   it("returns the caller's own namecard row", async () => {
-    // Seed a member whose email matches the committee cookie email, with a
-    // namecard row attached.
-    const memberId = await seedMember(env.DB, {
-      name: 'Test Committee',
-      email: 'admin-test-committee@example.com',
-      job_title: 'Committee Member',
-    });
-    await seedNamecard(env.DB, memberId, { slug: 'test-committee' });
+    // Attach a namecard to the committee identity row seeded in beforeEach.
+    const identity = await env.DB.prepare(
+      "SELECT id FROM members WHERE email = 'admin-test-committee@example.com'",
+    ).first<{ id: number }>();
+    await seedNamecard(env.DB, identity!.id, { slug: 'test-committee' });
 
     const res = await SELF.fetch('https://example.com/api/namecards/me', {
       headers: { Cookie: await committeeCookie() },
@@ -388,7 +390,8 @@ describe('GET /api/namecards/me — self-service', () => {
   });
 
   it('returns success:true + namecard:null when the caller has no card', async () => {
-    // The admin-test-admin cookie email has no matching member row → no card.
+    // The admin identity row exists (revalidation requires it) but has no
+    // namecard attached → null, not an error.
     const res = await SELF.fetch('https://example.com/api/namecards/me', {
       headers: { Cookie: await adminCookie() },
     });

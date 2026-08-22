@@ -11,7 +11,64 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-22 — Security remediation plan fully implemented (pending deploy)
+
+Executed `docs/plans/security-remediation-plan.md` end-to-end (P1–P4). Full
+file list + verification record in that doc's "Implementation Log" section.
+
+### Highlights
+- **P1 critical fixed** — sessions are now revalidated against D1 on every
+  authenticated request (`session-revalidation.ts`). Demotions, `can_login=0`
+  lock-outs and soft-deletes kill the session immediately; role changes
+  re-sign the cookie without extending its expiry. 6 new integration tests.
+- **P2** — public namecard surface hidden: `/c/*` routes commented out,
+  `namecards.astro` → `_namecards.astro`, nav link removed, `run_worker_first`
+  tidied. Everything restorable via the DISABLED-2026-08 marker comments.
+- **P3** — stored XSS closed: members table render escapes all member fields;
+  `fullName` allowlist (letters/spaces/`.'`-`, max 100) enforced on the
+  public membership form; three secondary sinks escaped.
+- **P4** — NRIC removed from member API responses (`MEMBER_COLUMNS`), per-
+  endpoint rate limits (magic-link 5/h etc.), shared CSV-injection-safe
+  `csvEscape` (`lib/csv.ts`), JSON-LD `\u003c` escaping, bookings input
+  validation, dev-bypass host wildcard removed.
+
+### Gotchas found today
+- **4e deviation**: `wrangler dev` presents `c.req.url` as
+  `admin.singaporewomenassociation.org` (the configured route), NOT
+  localhost — verified via temp log line. Loopback-only host check broke the
+  dev-login picker; kept an exact `SWA_ADMIN_DOMAIN` exception alongside the
+  two prod fail-closed anchors. Details in remediation plan §4e note.
+- **Local D1 is stale** (pre-migration-005): `GET /api/members` now 500s
+  locally because the explicit column list names `membership_status` etc.
+  Prod is unaffected (migration 005 applied 19-07-2026). Fix locally when
+  convenient: `npm run db:setup` + apply migration 007 (user-invoked only).
+
+  **RESOLVED 2026-08-22 (additive path, data kept):** applied migrations
+  004 (+ the two commented-out ALTERs `members.nric`,
+  `memberships.application_id`), 005, 005_pdpa, 007, 008 to the local DB
+  via `node ./node_modules/wrangler/bin/wrangler.js d1 execute swa-portal
+  --local --file=...`. **006 was skipped locally** — the local table has
+  `slug TEXT UNIQUE` inline, and SQLite cannot drop an inline-UNIQUE column
+  without a table rebuild; the 11 columns are dead code anyway and vanish on
+  any future `db:setup`. Migration 006's statement order (drop columns
+  before the index) also fails on fresh local DBs — consider reordering if
+  it ever needs to run locally. Backup of the pre-migration sqlite file:
+  `...miniflare-D1DatabaseObject/373179...sqlite.backup-pre-migrations-20260822`.
+
+### Not done (by design)
+- **Production deploy** — owner-gated. Code is ready: tests 112/112, build
+  clean, `astro check` clean. Deploy with `npm run deploy` after confirming
+  migration 007 status on prod (namecards table — see 2026-07-25 entry).
+- Migration 007 backport into `schema.sql` still open (local-dev gotcha
+  from 2026-07-25 entry).
+
+---
+
 ## 2026-07-25 — Namecard feature (Phases 0–4 done, 1 bug outstanding)
+
+> **Update 2026-08-22:** the QR clipping bug below was fixed in commit
+> `117a31f` ("stop QR canvas being clipped on /c/:slug preview"). The
+> "OUTSTANDING BUG" section is historical.
 
 **Spec**: `docs/NAMECARD.md`. **Plan**: `docs/plans/Namecard-Implementation-Plan.md`.
 **Continued in opencode** (zcode session has no browser MCP — can't see the rendered canvas, which made the QR debugging cycle painful).

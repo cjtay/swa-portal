@@ -2,39 +2,38 @@ import type { Context } from 'hono';
 import type { Env, AppContext } from '../types';
 import { IT_ADMIN_EMAILS, SESSION_COOKIE_NAME, DEV_LOGOUT_COOKIE_NAME } from '../../constants/portal';
 import { verifyHmac, base64urlDecode } from '../lib/crypto';
+import { revalidateSession } from '../lib/session-revalidation';
+import { sessionCookieHeader, clearedSessionCookieHeader, type SessionPayload } from '../lib/session-cookie';
 
-interface SessionData {
-  email: string;
-  name: string;
-  role: string;
-  regRole: string | null;
-  exp: number;
-}
+type SessionData = SessionPayload;
 
 // --- Dev-only auth bypass -------------------------------------------------
 // See `DEV_BYPASS_AUTH` in `Env`. This block lets `npm run dev:worker` skip
 // OTP login by impersonating a fake IT-admin session. It is dead code in any
 // environment where `DEV_BYPASS_AUTH !== 'true'` (production never sets it).
 
-// Hosts on which the dev bypass may run. Anything else (tunnels, unknown
-// domains) is treated as a misconfiguration and aborted with a 500.
-// `SWA_ADMIN_DOMAIN` and *.workers.dev are included because `wrangler dev`
-// resolves `c.req.url` against the configured `routes` domain rather than the
-// localhost origin the browser actually used.
+// Hosts on which the dev bypass may run. Anything else (tunnels, arbitrary
+// workers.dev subdomains) is treated as a misconfiguration and aborted with
+// a 500. Tightened in the 2026-08 security audit (Phase 4e): the blanket
+// `*.workers.dev` wildcard is gone. The single SWA_ADMIN_DOMAIN exception
+// stays because `wrangler dev` rewrites c.req.url against the configured
+// custom-domain route even though the browser is on localhost (verified
+// empirically 2026-08-22). Combined with the .dev.vars-only flag and the
+// 'local-dev-' SESSION_SECRET anchor, this cannot enable the bypass in a
+// real deployment — prod's high-entropy secret never matches anchor 2.
 export const DEV_BYPASS_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 
 export function isDevBypassHost(host: string, adminDomain?: string): boolean {
   if (DEV_BYPASS_HOSTS.includes(host)) return true;
-  if (adminDomain && host === adminDomain) return true;
-  if (host.endsWith('.workers.dev')) return true;
-  return false;
+  return adminDomain !== undefined && host === adminDomain;
 }
 
 // Lightweight boolean check for non-auth dev-bypass uses (e.g. skipping
 // Turnstile in local dev). Returns true ONLY when all three guards pass:
 //   1. DEV_BYPASS_AUTH === 'true'  (only ever set in .dev.vars)
 //   2. SESSION_SECRET starts with 'local-dev-'  (prod's real secret never will)
-//   3. Request host is in the dev-bypass allowlist  (localhost / *.workers.dev / SWA_ADMIN_DOMAIN)
+//   3. Request host is loopback, or exactly SWA_ADMIN_DOMAIN (wrangler dev
+//      rewrites c.req.url to the custom-domain route — see DEV_BYPASS_HOSTS)
 // Takes `env` + `url` rather than the full Hono Context to avoid the Context
 // generic variance issue when called from `app.get` handlers (whose `c`
 // carries app-level Variables the bare `AppContext` doesn't).
@@ -152,14 +151,30 @@ export async function handleSession(c: AppContext) {
   // fires as a fallback when no cookie is present and no logout marker is set.
   const realSession = await getSession(c);
   if (realSession) {
+    // /api/session is a PUBLIC_PATH (the middleware never revalidates it), so
+    // revalidate here too — the client relies on this endpoint to reflect the
+    // caller's current role, and auth-gated pages branch on it.
+    const revalidated = await revalidateSession(c.env.DB, c.env.SESSION_SECRET, realSession);
+    if (revalidated.status === 'invalid') {
+      c.header('Set-Cookie', clearedSessionCookieHeader(), { append: true });
+      return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false });
+    }
+    if (revalidated.newCookie) {
+      c.header(
+        'Set-Cookie',
+        sessionCookieHeader(revalidated.newCookie.value, revalidated.newCookie.maxAgeSeconds),
+        { append: true },
+      );
+    }
+    const s = revalidated.session;
     return c.json({
       authenticated: true,
-      email: realSession.email,
-      name: realSession.name,
-      role: realSession.role,
-      regRole: realSession.regRole,
-      is_admin: realSession.role === 'admin',
-      is_it_admin: (IT_ADMIN_EMAILS as readonly string[]).includes(realSession.email),
+      email: s.email,
+      name: s.name,
+      role: s.role,
+      regRole: s.regRole,
+      is_admin: s.role === 'admin',
+      is_it_admin: (IT_ADMIN_EMAILS as readonly string[]).includes(s.email),
     });
   }
 

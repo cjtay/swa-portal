@@ -6,26 +6,54 @@ export interface RateLimitResult {
 const API_RATE_LIMIT_WINDOW_SECONDS = 15 * 60; // 15 minutes
 const API_RATE_LIMIT_MAX_REQUESTS = 10;
 
+export interface EndpointLimit {
+  windowSeconds: number;
+  maxRequests: number;
+}
+
+const DEFAULT_LIMIT: EndpointLimit = {
+  windowSeconds: API_RATE_LIMIT_WINDOW_SECONDS,
+  maxRequests: API_RATE_LIMIT_MAX_REQUESTS,
+};
+
+// Per-endpoint overrides (security-remediation-plan Phase 4b). Anything not
+// listed gets the default 10 requests / 15 minutes.
+const ENDPOINT_LIMITS: Record<string, EndpointLimit> = {
+  // Email send — expensive and externally visible; strict.
+  'reg:magic-link:post': { windowSeconds: 60 * 60, maxRequests: 5 },
+  // Volunteer check-in writes — bursty by nature (kiosk use), generous.
+  'reg:volunteer-write:post': { windowSeconds: 15 * 60, maxRequests: 30 },
+  // Namecard photo upload — R2 write + large body.
+  'namecards:photo:post': { windowSeconds: 60 * 60, maxRequests: 10 },
+  // Membership approve/reject — state transitions with email side effects.
+  'membership-review:post': { windowSeconds: 60 * 60, maxRequests: 20 },
+};
+
+export function getEndpointLimit(endpointKey: string): EndpointLimit {
+  return ENDPOINT_LIMITS[endpointKey] ?? DEFAULT_LIMIT;
+}
+
 export async function checkApiRateLimit(
   kv: KVNamespace,
   endpointKey: string,
   email: string,
 ): Promise<RateLimitResult> {
+  const { windowSeconds, maxRequests } = getEndpointLimit(endpointKey);
   const key = `swa:rl:api:${endpointKey}:${email.toLowerCase()}`;
   const now = Math.floor(Date.now() / 1000);
-  const windowStart = now - (now % API_RATE_LIMIT_WINDOW_SECONDS);
+  const windowStart = now - (now % windowSeconds);
 
   const raw = await kv.get(key);
   let records: number[] = raw ? JSON.parse(raw) : [];
   records = records.filter((t: number) => t > windowStart);
 
-  if (records.length >= API_RATE_LIMIT_MAX_REQUESTS) {
+  if (records.length >= maxRequests) {
     return { allowed: false, remaining: 0 };
   }
 
   records.push(now);
-  await kv.put(key, JSON.stringify(records), { expirationTtl: API_RATE_LIMIT_WINDOW_SECONDS + 60 });
-  return { allowed: true, remaining: API_RATE_LIMIT_MAX_REQUESTS - records.length };
+  await kv.put(key, JSON.stringify(records), { expirationTtl: windowSeconds + 60 });
+  return { allowed: true, remaining: maxRequests - records.length };
 }
 
 /**
@@ -39,6 +67,21 @@ export function getEndpointKey(path: string, method: string): string | null {
   // Only write operations are rate limited
   if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') {
     return null;
+  }
+
+  // Path-specific buckets first (basePath alone is too coarse for these).
+  if (m === 'POST') {
+    if (path.startsWith('/api/reg/admin/send-magic-link/')) return 'reg:magic-link:post';
+    if (
+      path === '/api/reg/volunteer/walkin' ||
+      /^\/api\/reg\/volunteer\/(arrive|guest)\/[^/]+$/.test(path)
+    ) {
+      return 'reg:volunteer-write:post';
+    }
+    if (/^\/api\/namecards\/[^/]+\/photo$/.test(path)) return 'namecards:photo:post';
+    if (/^\/api\/admin\/forms\/membership\/[^/]+\/(approve|reject)$/.test(path)) {
+      return 'membership-review:post';
+    }
   }
 
   switch (basePath) {

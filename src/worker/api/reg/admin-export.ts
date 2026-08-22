@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import type { AppContext } from "../../types";
 import { loadTablesConfig, getTable } from '../../lib/reg/tables';
+import { csvEscape } from '../../lib/csv';
 
 
 export async function handleAdminExport(c: AppContext) {
@@ -45,12 +46,4 @@ export async function handleAdminExport(c: AppContext) {
       'Content-Disposition': 'attachment; filename=guest-export.csv',
     },
   });
-}
-
-function csvEscape(value: string): string {
-  if (!value) return '';
-  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-    return '"' + value.replace(/"/g, '""') + '"';
-  }
-  return value;
 }
