@@ -21,6 +21,19 @@ if [ -z "$changes" ]; then
   exit 1
 fi
 
+# CSV guard: refuse private copies of the shared, formula-injection-guarded
+# csvEscape. Handlers must import from src/worker/lib/csv.ts instead.
+# Companion to src/worker/lib/__tests__/csv-guard.test.ts.
+violators=$(git grep --cached -l 'function csvEscape(' -- 'src/worker' 2>/dev/null | grep -v '^src/worker/lib/csv.ts$')
+if [ -n "$violators" ]; then
+  echo "${RED}${BOLD}PRIVATE csvEscape COPIES FOUND${NC}"
+  echo "These staged files define their own csvEscape instead of importing the"
+  echo "shared, formula-injection-guarded version from src/worker/lib/csv.ts:"
+  printf '  %s\n' "$violators"
+  echo "Fix: import { csvEscape } from '<path>/lib/csv'; and delete the local copy."
+  exit 1
+fi
+
 additions=()
 modifications=()
 deletions=()
