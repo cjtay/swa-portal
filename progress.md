@@ -3,11 +3,52 @@
 A running log of work completed each session, plus the immediate next steps.
 Append a new dated entry at the top; keep it short and skimmable.
 
-This file is gitignored — it's a private working scratchpad, not committed.
+This file is committed to git — it is the session memory that AI tools are
+told (via AGENTS.md) to read first. Keep entries factual and short.
 
 For the full phase tracker see `docs/plans/SWAPortal-Implementation-Plan.md`.
 For role access, API permissions, and feature specs see
 `docs/specs/SWAPortal-Functional-Specs.md`.
+
+---
+
+## 2026-08-23 — Remediation deployed; CSV-guard fix + anti-drift guardrails
+
+### Done
+- **Deployed** the security remediation (`02799aa`) to production — owner ran
+  `npm run deploy`. Tests 112/112 before deploy.
+- **Fixed laughter-yoga CSV drift** — `laughter-yoga-reg.ts` carried a
+  private, un-guarded `csvEscape` while volunteer/membership imported the
+  shared guarded one (P4c had missed the copy). Now imports `lib/csv.ts`.
+- **Corrected the architecture report** errata — remediation WAS committed
+  (02799aa); `prod-dump.sql` already deleted; 9 migration files not 8;
+  `NAMECARD.md` does carry a hidden-feature banner.
+- **Anti-drift guardrails** so the CSV miss cannot repeat: tripwire test
+  `src/worker/lib/__tests__/csv-guard.test.ts` (watches all 4 CSV exporters),
+  pre-commit hook blocks private `csvEscape` copies, and
+  `docs/how-to-add-a-form.md` checklist. Tests now 124/124.
+- Deleted stray untracked `namecard-full.png` from repo root.
+- AGENTS.md slimmed: Next Steps section removed, one pointer to this file.
+- Global AI rules updated (beginner-friendly output; explain permission
+  requests first) — outside this repo.
+
+### Production note
+Production D1 holds only the owner's login account — no member data yet, so
+the empty live Members page is expected.
+
+### Next steps (priority order)
+1. **Namecard decision (owner)** — restore or delete the hidden feature.
+   Recommend delete; git history keeps everything.
+2. **Migration tidy-up** — two files share number `005`; roll migration 007
+   (namecards) into `schema.sql` so fresh local DBs match prod.
+3. **Docs consolidation** — merge the two functional specs into one; add a
+   "never executed" banner to `docs/plans/astro-refactor-plan.md`.
+4. **Member directory pagination** — only when the member list grows.
+5. **Form engine + Astro refactor** — deferred until a 4th form is needed;
+   follow `docs/how-to-add-a-form.md` until then.
+6. Carried over from previous tracker: Phase 2B fee reminders (cron),
+   Phase 2C/3 (member self-service, CMS, MS Forms migration), domain
+   transfer for `admin.singaporewomenassociation.org`.
 
 ---
 
