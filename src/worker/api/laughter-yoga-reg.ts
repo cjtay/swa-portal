@@ -2,6 +2,7 @@ import type { Context } from 'hono';
 import type { Env, AppContext } from '../types';
 import { handleApiError } from '../lib/error-handler';
 import { logError } from '../lib/log-error';
+import { csvEscape } from '../lib/csv';
 import { buildLaughterYogaNotificationEmail } from '../lib/email-volunteer-notification';
 import { isDevBypassActive } from './session';
 import { LAUGHTER_YOGA_NOTIFY_EMAILS } from '../../constants/portal';
@@ -382,14 +383,6 @@ async function checkRateLimit(kv: KVNamespace, ip: string): Promise<{ allowed: b
 function str(b: Record<string, unknown>, k: string): string {
   const v = b[k];
   return typeof v === 'string' ? v.trim() : '';
-}
-
-function csvEscape(val: unknown): string {
-  const s = val === null || val === undefined ? '' : String(val);
-  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
-    return '"' + s.replace(/"/g, '""') + '"';
-  }
-  return s;
 }
 
 function formatSg(v: unknown): string {

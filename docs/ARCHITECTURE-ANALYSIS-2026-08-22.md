@@ -1,6 +1,6 @@
 # SWA Portal — Architecture Report
 
-> **Date:** 22 August 2026
+> **Date:** 22 August 2026 (errata applied 23 August 2026: remediation is committed, `prod-dump.sql` deleted, 9 migration files, `NAMECARD.md` carries a hidden-feature banner, laughter-yoga CSV guard fixed)
 > **Audience:** junior developers and people learning the codebase. Everything is explained from first principles — you do not need prior knowledge of Cloudflare, Workers, Hono, or Astro.
 > **Scope:** how the whole project fits together, what is good, what is flawed, which documents are out of date, and what to do about it.
 
@@ -46,7 +46,7 @@ Here are the headline numbers (so you have a mental size for the project):
 | Page files | 24 (23 live + 1 hidden) |
 | API routes | 69 |
 | Database tables | 13 (12 in `schema.sql` + the `namecards` table from migration 007) |
-| Migration files | 8 (two of them share the number `005`) |
+| Migration files | 9 (two of them share the number `005`) |
 | Automated tests | 112 |
 | Approximate source lines | ~18,000 (not counting generated type files) |
 | Feature areas | ~14 |
@@ -365,7 +365,7 @@ The worker handlers speak for themselves:
 | File | Lines |
 |---|---|
 | `src/worker/api/volunteer-reg.ts` | 666 |
-| `src/worker/api/laughter-yoga-reg.ts` | 563 |
+| `src/worker/api/laughter-yoga-reg.ts` | 555 (after the CSV-guard fix of 23-08-2026) |
 | `src/worker/api/membership-reg.ts` | 1105 |
 
 Copied verbatim between them (same code, sometimes different constants):
@@ -376,7 +376,7 @@ Copied verbatim between them (same code, sometimes different constants):
 - `formatSg()` — formatting times for Singapore
 - `str()` — safe string extraction from form data
 
-**And here is the proof that duplication hurts:** the "CSV formula-injection guard" (a security fix that stops a spreadsheet running a formula typed in a name field) was implemented in a shared file `src/worker/lib/csv.ts`. The volunteer and membership handlers import it. The laughter-yoga handler has its **own local copy without the guard** — exactly the kind of slow security drift duplication creates.
+**And here is the proof that duplication hurts:** the "CSV formula-injection guard" (a security fix that stops a spreadsheet running a formula typed in a name field) was implemented in a shared file `src/worker/lib/csv.ts`. The volunteer and membership handlers import it. The laughter-yoga handler had its **own local copy without the guard** — the drift was caught on 23 August 2026 and fixed the same day (the handler now imports the shared guard), but only after the unguarded copy had shipped. Exactly the kind of slow security drift duplication creates.
 
 **Why this matters for you as a learner:** if you are asked to add a *fourth* form, the "easy" path (copy again) is also the wrong path. This is the single most important thing to fix, and it is discussed in [section 12](#12-recommendations-in-priority-order).
 
@@ -463,8 +463,8 @@ Documentation has the same problem as code: it was written for the state of the 
 |---|---|---|
 | `docs/specs/SWAPortal-Functional-Specification.md` (v2.0) | 🔴 | A full duplicate of the spec below, listing Namecards as an active feature. Two competing specs (v1.0 and v2.0) both exist and both describe a feature set that has changed. **Two specs should be one.** |
 | `docs/specs/SWAPortal-Functional-Specs.md` (v1.0) | 🟡 | The other half of the duplicate. References website-sync and namecards as planned/removed inconsistently. Doesn't cover the public-intake forms or membership lifecycle. |
-| `docs/NAMECARD.md` | 🔴 | A 47-KB spec describing the public `/c/:slug` feature as **live**. It has been hidden since 22 Aug 2026. |
-| `docs/plans/Namecard-Implementation-Plan.md` | 🔴 | Describes go-live phases for the now-hidden feature. |
+| `docs/NAMECARD.md` | 🟢 | Opens with a prominent "FEATURE HIDDEN — 22-08-2026" banner explaining why and where the `DISABLED 2026-08` markers are. The body below documents the feature as built — an honest archive. |
+| `docs/plans/Namecard-Implementation-Plan.md` | 🔴 | Describes go-live phases for the now-hidden feature. Unlike `NAMECARD.md` it carries no hidden-feature banner, so it reads as if go-live is still ahead. |
 | `docs/specs/SWA-Digital-Infrastructure-Functional-Specification.md` | 🟡 | Introduces "Namecard Management" as one of the portal's six features. Feature is hidden. |
 | `docs/specs/SWA-Workers-Architecture-Assessment.md` | 🟡 | From 13 May, contains a whole section on cross-worker namecard data access that was **removed** on 19 Jul 2026. It has a "REMOVED" banner, so it's honest, but it's really an archive now. |
 | `docs/plans/astro-refactor-plan.md` | 🟡 | A good plan that was never executed. Keep it — but add a status note so readers know it's "proposed, not done". |
@@ -481,8 +481,8 @@ Documentation has the same problem as code: it was written for the state of the 
 
 These are not design flaws — they are **things that could bite us or are just untidy right now.**
 
-1. **🔴 The security remediation (P1–P4) is implemented but NOT committed or deployed.** The working tree has ~20 modified files plus 5 new untracked files — including the actual fixes for the critical session bug and the privacy bug. They are tested (112/112 pass) but they exist only in an uncommitted working copy. **This is the biggest single risk in the repo right now**: if that tree were lost or overwritten, the fixes would be too. It needs committing (and, when the owner is ready, deploying).
-2. **`prod-dump.sql` (152 KB) sits in the repo root.** It is a dump of the production database with real data. The remediation plan itself (P5) says to delete it. It should not live in `main`.
+1. **🔴 The security remediation (P1–P4) is committed but NOT deployed.** The fixes landed in commit `02799aa` on 22-08-2026 (docs follow-up `f7d8e8f`) and the full test suite passes, but production is still running the pre-fix code — including the critical session bug and the privacy bug. Until the owner runs `npm run deploy`, the live site keeps every bug the audit found. **This is the biggest single remaining risk in the repo.**
+2. **`prod-dump.sql` — resolved.** The production dump that sat in the repo root has been deleted. It was never tracked by git, so no history rewrite was needed. No action left.
 3. **Migration 007 (`namecards`) was never rolled into `schema.sql`.** So `npm run db:setup` (which builds a fresh local DB from `schema.sql`) does not create the `namecards` table — a documented local-dev gotcha, and a pending task.
 4. **Two `005_*` migrations** (as above) make the migration history ambiguous.
 5. **Members API has no pagination.** `GET /api/members` loads the whole table. Fine at ~14 seeded members; it will eventually be slow. The plan itself flags this as "will break at scale".
@@ -496,7 +496,7 @@ These are deliberately concrete and ordered by "cheapest now / most important la
 
 ### Short term (do this week — hygiene and safety)
 
-1. **Commit and deploy the security remediation.** Verify `npm test` (112/112) and `npm run build` pass, run migration 007 if needed on prod, then `npm run deploy`. This converts the single biggest risk into a shipped improvement.
+1. **Deploy the security remediation.** The fixes are already committed (`02799aa`, 22-08-2026). Verify `npm test` passes, run migration 007 if needed on prod, then `npm run deploy`. This converts the single biggest remaining risk into a shipped improvement.
 2. **Delete `prod-dump.sql`** from the repo root (after confirming a backup elsewhere, e.g. a `wrangler d1 export`).
 3. **Decide the namecard question.** Recommend: delete the hidden public half (`namecard-public.ts`, `namecard-lib/*`, `_namecards.astro`, its CSS/frontend assets and tests), keeping the admin half (the `/api/namecards` CRUD) if the admin card-manager is wanted later. Git history is the safety net, so "delete" is not forever. **Then mark the docs** (`NAMECARD.md`, the namecard plan) clearly "RETIRED".
 
