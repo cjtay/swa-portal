@@ -7,10 +7,6 @@ const baseMember: RenderCardSvgOptions['member'] = {
   mobile: '+65 9123 4567',
   job_title: 'Advisor / Immediate Past President',
   role: 'Advisor',
-  address_line1: '96 Waterloo Street',
-  address_line2: null,
-  address_postal_code: '187967',
-  address_country: 'Singapore',
 };
 
 const baseNamecard: RenderCardSvgOptions['namecard'] = {
