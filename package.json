@@ -24,7 +24,7 @@
     "db:seed": "node scripts/db-setup.mjs --seed-only",
     "db:clear:membership": "node scripts/db-clear-membership.mjs",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "node scripts/test-run.mjs"
   },
   "dependencies": {
     "astro": "^7",
