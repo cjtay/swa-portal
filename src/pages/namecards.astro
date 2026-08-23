@@ -1,16 +1,15 @@
 ---
-// ── DISABLED 2026-08: namecard admin page hidden (security audit).
-// Astro ignores `_`-prefixed files under src/pages, so no page is emitted at
-// build time. Restore by renaming back to `namecards.astro` (and re-enabling
-// the /c/* routes in src/worker/index.ts). ──
 import AdminLayout from '../layouts/AdminLayout.astro';
 ---
 
 <AdminLayout title="Namecards — SWA Admin Portal" currentPath="/namecards">
   <h1>Namecards</h1>
   <p style="color:var(--text-muted);margin-bottom:1.5rem;">
-    Manage digital namecards for the SWA team. Each card has a public link at
+    Digital namecards for the SWA board. Cards are auto-generated for
+    committee and advisor members, and each card has a public link at
     <code>/c/&lt;slug&gt;</code> that you can share or print as a QR code.
+    Every card shows the SWA office address, never a personal address, and
+    public card pages are blocked from search engines and AI crawlers.
   </p>
 
   <!-- Self-service panel: the logged-in user's own card. Visible to every
@@ -52,7 +51,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
         </select>
       </div>
       <div id="nc-admin-actions" style="display:none;gap:0.5rem;">
-        <button class="btn btn-secondary" id="nc-bulk-btn">Create for all members</button>
+        <button class="btn btn-secondary" id="nc-bulk-btn">Auto-generate board cards</button>
         <button class="btn btn-primary" id="nc-add-btn">Add namecard</button>
       </div>
     </div>
@@ -369,22 +368,38 @@ import AdminLayout from '../layouts/AdminLayout.astro';
   }
 
   async function bulkCreate() {
-    if (!confirm('Create a namecard for every member who does not yet have one?')) return;
+    if (!confirm('Auto-generate a namecard for every board member (committee/advisor) who does not have one yet?')) return;
+    let res: Response;
     try {
-      const res = await fetch('/api/namecards/bulk', {
-        method: 'POST',
-      });
-      const data = await res.json();
-      if (data.success) {
-        const msg = `Created ${data.created.length}. Skipped ${data.skipped.length}.`;
-        await loadNamecards();
-        alert(msg);
-      } else {
-        alert(data.message || 'Bulk create failed.');
-      }
+      res = await fetch('/api/namecards/bulk', { method: 'POST' });
     } catch {
-      alert('Network error.');
+      alert('Network error — the server could not be reached.');
+      return;
     }
+    // Read the body once as text: the API replies with JSON, but a crashed
+    // worker replies with a plain-text 500 page, which previously surfaced
+    // as a misleading "Network error."
+    const raw = await res.text();
+    let data: { success?: boolean; message?: string; created?: unknown[]; skipped?: unknown[] } = {};
+    if (raw) {
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        // Not JSON — keep the empty object and fall through.
+      }
+    }
+    if (data.success) {
+      const msg = `Created ${data.created?.length ?? 0}. Skipped ${data.skipped?.length ?? 0}.`;
+      await loadNamecards();
+      alert(msg);
+      return;
+    }
+    if (data.message) {
+      alert(data.message);
+      return;
+    }
+    const snippet = raw.trim().slice(0, 200) || '(empty body)';
+    alert(`Auto-generate failed (HTTP ${res.status}). ${snippet}`);
   }
 
   // ── Edit ─────────────────────────────────────────────────────────────────
