@@ -1,4 +1,4 @@
-import { IT_ADMIN_EMAILS } from '../../constants/portal';
+import { IT_ADMIN_EMAILS, IT_ADMIN_NAMES } from '../../constants/portal';
 
 // Subset of a D1 member row that resolveSessionRole needs. Kept loose so
 // callers can pass the raw `.first()` result without reshaping.
@@ -34,7 +34,7 @@ export function resolveSessionRole(email: string, member: MemberRoleInput | null
   const name =
     member && member.name
       ? (member.name as string)
-      : email.split('@')[0].replace(/[._-]/g, ' ');
+      : (IT_ADMIN_NAMES[lowerEmail] ?? email.split('@')[0].replace(/[._-]/g, ' '));
 
   let role: string;
   if (isItAdmin) {

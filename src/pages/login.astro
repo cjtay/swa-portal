@@ -192,7 +192,7 @@ import '../styles/admin.css';
 
     const roleLabel = (m: any): string => {
       if (m.is_it_admin) return 'IT Admin';
-      if (m.role === 'admin') return 'Admin';
+      if (m.role === 'admin') return 'Office Admin';
       if (m.role === 'volunteer') return 'Volunteer';
       if (m.role === 'committee') return 'Committee';
       return m.role || m.category || 'Member';

@@ -32,9 +32,10 @@ INSERT INTO members (name, role, email, mobile, job_title, category, can_login, 
 ('Khai Lim', 'Board member', 'testmember11@example.com', '+65 9323 1688', 'Board member', 'committee', 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', 11, 'active', '2027-01-31', 0),
 ('Lena Tan', 'Board member', 'testmember12@example.com', '+65 9323 1688', 'Board member', 'committee', 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', 12, 'active', '2027-01-31', 0);
 
--- Admin accounts (can_login = 1, fee_waived = 1). The first uses the project
--- owner's address so it matches the dev-bypass IT-admin identity
--- (IT_ADMIN_EMAILS[0] in src/constants/portal.ts).
+-- Office admin account (category='admin'). Its email is also first in
+-- IT_ADMIN_EMAILS (src/constants/portal.ts), so this identity holds BOTH
+-- office admin and IT admin powers. IT admins who need no directory row
+-- (e.g. system@singaporewomenassociation.org) are governed solely by the
+-- IT_ADMIN_EMAILS constant — send-otp lets them log in without a row.
 INSERT INTO members (name, role, email, category, can_login, sort_order, membership_status, fee_waived) VALUES
-('Test Admin', 'IT Admin', 'cjtay@singaporewomenassociation.org', 'admin', 1, 100, 'active', 1),
-('System Account', 'System', 'system@example.com', 'admin', 1, 101, 'active', 1);
+('Test Admin', 'Office Admin', 'cjtay@singaporewomenassociation.org', 'admin', 1, 100, 'active', 1);

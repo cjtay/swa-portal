@@ -4,6 +4,15 @@ export const IT_ADMIN_EMAILS = [
   'system@singaporewomenassociation.org',
 ] as const;
 
+// Display names for IT admins. Used when an IT-admin email holds no members
+// row (e.g. system@) — otherwise the topbar name falls back to the email
+// prefix. A members row, when present, always wins.
+export const IT_ADMIN_NAMES: Record<string, string> = {
+  'cjtay@singaporewomenassociation.org': 'C J Tay',
+  'angela.wong@singaporewomenassociation.org': 'Angela Wong',
+  'system@singaporewomenassociation.org': 'SWA System',
+};
+
 export const SESSION_COOKIE_NAME = 'swa_session';
 // Marker cookie set by `DELETE /api/session` when the dev bypass is active.
 // While present, `getDevBypassSession` returns null so the portal behaves as
@@ -59,8 +68,9 @@ export const MEMBERSHIP_NOTIFY_EMAILS = [
 // which checks membership in MEMBERSHIP_APPROVER_EMAILS OR IT_ADMIN_EMAILS.
 // Per 14-07-2026 SWA review: IT admins can also approve/reject.
 export const MEMBERSHIP_APPROVER_EMAILS = [
-  'angela.wong@singaporewomenassociation.org',
-  'roxanne.zhang@singaporewomenassociation.org',
+  // 'angela.wong@singaporewomenassociation.org',
+  // 'roxanne.zhang@singaporewomenassociation.org',
+    'cjtay@singaporewomenassociation.org',
 ] as const;
 
 /**

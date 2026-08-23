@@ -4,7 +4,7 @@ import { buildOtpEmail } from '../lib/email-otp';
 import { signHmac } from '../lib/crypto';
 import { handleApiError } from '../lib/error-handler';
 import { isDevBypassActive } from './session';
-import { OTP_TTL_SECONDS, OTP_RATE_LIMIT_WINDOW_SECONDS, OTP_RATE_LIMIT_MAX_REQUESTS } from '../../constants/portal';
+import { IT_ADMIN_EMAILS, OTP_TTL_SECONDS, OTP_RATE_LIMIT_WINDOW_SECONDS, OTP_RATE_LIMIT_MAX_REQUESTS } from '../../constants/portal';
 
 function generateOtp(): string {
   const bytes = new Uint8Array(3);
@@ -93,12 +93,18 @@ export async function handleSendOtp(c: AppContext) {
     return c.json({ success: false, message: 'Valid email address required.' }, 400);
   }
 
-  const member = await env.DB.prepare(
-    'SELECT id FROM members WHERE email = ? AND can_login = 1 AND deleted_at IS NULL'
-  ).bind(email).first();
+  // IT admins are governed by the hardcoded IT_ADMIN_EMAILS list, not the
+  // members table — they may hold no member row (e.g. system@). Everyone
+  // else must hold a live, login-eligible member row.
+  const isItAdmin = (IT_ADMIN_EMAILS as readonly string[]).includes(email);
+  if (!isItAdmin) {
+    const member = await env.DB.prepare(
+      'SELECT id FROM members WHERE email = ? AND can_login = 1 AND deleted_at IS NULL'
+    ).bind(email).first();
 
-  if (!member) {
-    return c.json({ success: true, message: 'If this email is registered, a code has been sent.' });
+    if (!member) {
+      return c.json({ success: true, message: 'If this email is registered, a code has been sent.' });
+    }
   }
 
   const otp = generateOtp();

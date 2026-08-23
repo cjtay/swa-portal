@@ -1,9 +1,14 @@
 import type { Context } from 'hono';
 import type { AppContext } from "../types";
+import { IT_ADMIN_EMAILS, IT_ADMIN_NAMES } from '../../constants/portal';
 
 
-const KNOWN_KEYS = ['swa:reg_tables_config'] as const;
+// 'swa:it_admins' is a read-only pseudo-key: it is served from the code
+// constant IT_ADMIN_EMAILS (not KV) and cannot be written via POST. This
+// powers the read-only IT Administrators panel on the Settings page.
+const KNOWN_KEYS = ['swa:reg_tables_config', 'swa:it_admins'] as const;
 type KnownKey = (typeof KNOWN_KEYS)[number];
+const READ_ONLY_KEYS = ['swa:it_admins'] as const;
 
 function validateRegTablesConfig(value: unknown): { valid: true; data: Record<string, unknown> } | { valid: false; errors: string[] } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -79,6 +84,15 @@ export async function handleAdminSettingsGet(c: AppContext) {
     return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: `Unknown settings key: ${key}` }, 400);
   }
 
+  // Read-only pseudo-key served from the code constant, never from KV.
+  if (key === 'swa:it_admins') {
+    const admins = (IT_ADMIN_EMAILS as readonly string[]).map((email) => ({
+      email,
+      name: IT_ADMIN_NAMES[email] ?? email.split('@')[0],
+    }));
+    return c.json({ success: true, key, value: admins });
+  }
+
   const raw = await c.env.SWA_CONFIG.get(key);
   if (!raw) {
     return c.json({ success: false, error_code: 'NOT_FOUND', message: `No configuration found for key: ${key}` }, 404);
@@ -107,6 +121,13 @@ export async function handleAdminSettingsPost(c: AppContext) {
 
   if (!(KNOWN_KEYS as readonly string[]).includes(key)) {
     return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: `Unknown settings key: ${key}` }, 400);
+  }
+
+  if ((READ_ONLY_KEYS as readonly string[]).includes(key)) {
+    return c.json(
+      { success: false, error_code: 'READ_ONLY', message: 'The IT Admin list is read-only. Edit IT_ADMIN_EMAILS in src/constants/portal.ts and deploy.' },
+      403,
+    );
   }
 
   if (body.value === undefined) {

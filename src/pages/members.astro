@@ -15,7 +15,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
           <option value="committee">Committee</option>
           <option value="member">Member</option>
           <option value="advisor">Advisor</option>
-          <option value="admin">Admin</option>
+                <option value="admin">Office Admin</option>
           <option value="volunteer">Volunteer</option>
         </select>
       </div>
@@ -62,7 +62,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
                 <option value="committee">Committee</option>
                 <option value="member">Member</option>
                 <option value="advisor">Advisor</option>
-                <option value="admin">Admin</option>
+          <option value="admin">Office Admin</option>
                 <option value="volunteer">Volunteer</option>
               </select>
           </div>
@@ -155,6 +155,9 @@ import AdminLayout from '../layouts/AdminLayout.astro';
   let allMembers: any[] = [];
   let isAdmin = false;
 
+  // Display labels for raw category values stored in D1.
+  const CATEGORY_LABELS: Record<string, string> = { admin: 'Office Admin' };
+
   function isoToSg(iso: string): string {
     const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     return m ? `${m[3]}-${m[2]}-${m[1]}` : iso;
@@ -213,7 +216,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
         <td>${escapeHtml(m.name)}</td>
         <td>${m.role ? escapeHtml(m.role) : '\u2014'}</td>
         <td>${m.email ? escapeHtml(m.email) : '\u2014'}</td>
-        <td>${escapeHtml(m.category)}</td>
+        <td>${escapeHtml(CATEGORY_LABELS[m.category] || m.category)}</td>
         <td>${statusBadge}</td>
         <td>${escapeHtml(feeDue)}</td>
         <td>${waived}</td>

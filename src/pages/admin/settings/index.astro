@@ -15,6 +15,28 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     </a>
   </div>
 
+  <div class="card" style="margin-top:1.5rem;">
+    <h2>IT Administrators</h2>
+    <p style="color:var(--text-muted);font-size:0.85rem;">
+      IT Admins hold full portal control, including Settings. The list is fixed in code
+      (<code>IT_ADMIN_EMAILS</code> in <code>src/constants/portal.ts</code>) so no portal session can change it.
+      To add or remove an IT Admin, edit that file and deploy. The same email may also exist in the member
+      directory without conflict — the directory row and the IT Admin list are independent.
+    </p>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Access</th>
+        </tr>
+      </thead>
+      <tbody id="it-admin-list">
+        <tr><td colspan="3" style="text-align:center;color:var(--text-muted);">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <div class="card steps-card" style="margin-top:1.5rem;">
     <h3 style="color:#16a34a;font-size:0.9rem;margin-bottom:0.5rem;">Where are the other settings?</h3>
     <p style="font-size:0.85rem;color:var(--text-muted);">
@@ -37,4 +59,26 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   import { requireItAdmin } from '../../../scripts/auth-gate';
 
   requireItAdmin(() => {});
+
+  async function loadItAdmins() {
+    const tbody = document.getElementById('it-admin-list');
+    if (!tbody) return;
+    try {
+      const res = await fetch('/api/admin/settings?key=swa:it_admins');
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Request failed');
+      const admins = data.value as { email: string; name: string }[];
+      tbody.innerHTML = admins.length
+        ? admins.map((a) => `<tr>
+            <td>${a.name}</td>
+            <td>${a.email}</td>
+            <td><span class="badge badge-approved">Full (read-only list)</span></td>
+          </tr>`).join('')
+        : '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);">No IT Admins configured.</td></tr>';
+    } catch {
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--danger);">Could not load the IT Admin list.</td></tr>';
+    }
+  }
+
+  loadItAdmins();
 </script>
