@@ -11,11 +11,16 @@ import type { Context } from 'hono';
 import type { Env, AppContext } from '../types';
 import {
   NAMECARD_PUBLIC_RATE_LIMIT_MAX_REQUESTS,
+  SWA_OFFICE_ADDRESS,
+  NAMECARD_BOARD_CATEGORIES,
 } from '../../constants/portal';
 import { checkNamecardIpRateLimit, clientIp } from '../lib/namecard-rate-limit';
 import { streamNamecardPhoto, readNamecardPhotoBytes } from '../lib/namecard-photo';
 import { buildVcard } from '../lib/namecard-vcard';
 import { renderCardSvg } from '../lib/namecard-svg';
+
+/** Board-only gate interpolated into the read queries. Compile-time const. */
+const BOARD_CATEGORY_SQL = NAMECARD_BOARD_CATEGORIES.map((c) => `'${c}'`).join(', ');
 
 
 /** The canonical read model: namecard row joined with member identity. */
@@ -25,10 +30,6 @@ export interface PublicNamecardRow {
   mobile: string | null;
   job_title: string | null;
   role: string | null;
-  address_line1: string | null;
-  address_line2: string | null;
-  address_postal_code: string | null;
-  address_country: string | null;
   slug: string;
   bio: string | null;
   name_family: string | null;
@@ -45,10 +46,13 @@ export interface PublicNamecardRow {
   updated_at: string | null;
 }
 
+// Board-only, read-time gate (2026-08-23 restore): only committee/advisor
+// members are served, and no personal address column is ever selected. The
+// public card always shows SWA_OFFICE_ADDRESS instead. A member demoted out
+// of the board 404s on the very next request — no cache of the role needed.
 const READ_QUERY = `
   SELECT
     m.name, m.email, m.mobile, m.job_title, m.role,
-    m.address_line1, m.address_line2, m.address_postal_code, m.address_country,
     n.slug, n.bio,
     n.name_family, n.name_given,
     n.whatsapp, n.website,
@@ -58,7 +62,8 @@ const READ_QUERY = `
   JOIN members m ON m.id = n.member_id
   WHERE n.slug = ?1
     AND n.has_namecard = 1
-    AND m.deleted_at IS NULL`;
+    AND m.deleted_at IS NULL
+    AND m.category IN (${BOARD_CATEGORY_SQL})`;
 
 async function readNamecard(env: Env, slug: string): Promise<PublicNamecardRow | null> {
   const row = await env.DB.prepare(READ_QUERY).bind(slug).first<PublicNamecardRow>();
@@ -87,6 +92,19 @@ function cardBaseUrl(c: AppContext): string {
 // ── GET /c/:slug — HTML card page ──────────────────────────────────────────
 export async function handleNamecardPage(c: AppContext): Promise<Response> {
   const slug = c.req.param('slug') ?? '';
+  const ip = clientIp(c.req.raw);
+  const rl = await checkNamecardIpRateLimit(c.env.SWA_SESSION, ip);
+  if (!rl.allowed) {
+    return new Response('Too Many Requests', {
+      status: 429,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Retry-After': '60',
+        'X-Robots-Tag': NO_ROBOTS_HEADER,
+      },
+    });
+  }
+
   const card = await readNamecard(c.env, slug);
   if (!card) return brandedNotFound(c);
 
@@ -97,10 +115,10 @@ export async function handleNamecardPage(c: AppContext): Promise<Response> {
       // Short browser TTL, longer edge TTL — edits appear within 5-10 min
       // (docs/NAMECARD.md §8.5).
       'Cache-Control': 'public, max-age=300, s-maxage=600',
-      // Defence-in-depth on top of the admin-domain robots.txt block —
-      // prevents indexing if the URL is discovered via an external link
-      // and robots.txt is ever weakened.
-      'X-Robots-Tag': 'noindex, nofollow',
+      // Defence-in-depth on top of the robots.txt block — prevents indexing
+      // and AI-bot fetching if the URL is discovered via an external link and
+      // robots.txt is ever weakened. noimageindex also covers the photo.
+      'X-Robots-Tag': NO_ROBOTS_HEADER,
     },
   });
 }
@@ -145,10 +163,6 @@ export async function handleNamecardVcard(c: AppContext): Promise<Response> {
       mobile: card.mobile,
       job_title: card.job_title,
       role: card.role,
-      address_line1: card.address_line1,
-      address_line2: card.address_line2,
-      address_postal_code: card.address_postal_code,
-      address_country: card.address_country,
     },
     namecard: {
       slug: card.slug,
@@ -214,10 +228,6 @@ export async function handleNamecardCardSvg(c: AppContext): Promise<Response> {
       mobile: card.mobile,
       job_title: card.job_title,
       role: card.role,
-      address_line1: card.address_line1,
-      address_line2: card.address_line2,
-      address_postal_code: card.address_postal_code,
-      address_country: card.address_country,
     },
     namecard: {
       slug: card.slug,
@@ -274,6 +284,11 @@ export async function handlePublicNamecardPhoto(c: AppContext): Promise<Response
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+// Applied to every /c/* response header (page + 404) and mirrored in the
+// HTML <meta name="robots"> tag.
+const NO_ROBOTS_HEADER =
+  'noindex, nofollow, noarchive, nosnippet, notranslate, noimageindex';
 
 function isAllowedPhotoMime(contentType: string): boolean {
   // SVGs are explicitly forbidden — embedding an SVG photo into the card SVG
@@ -339,7 +354,7 @@ function renderCardHtml(card: PublicNamecardRow, baseUrl: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="noindex, nofollow">
+  <meta name="robots" content="${NO_ROBOTS_HEADER}">
   <title>${safe(card.name)} — Digital Namecard | SWA</title>
   <meta name="description" content="Digital namecard for ${safe(card.name)}, ${safe(card.job_title)} at the Singapore Women's Association.">
   <link rel="canonical" href="${safe(cardUrl)}">
@@ -392,11 +407,7 @@ function renderCardHtml(card: PublicNamecardRow, baseUrl: string): string {
     <section class="nc-contact" aria-label="Contact details">
       ${card.mobile ? `<a class="nc-row" href="tel:${safe(card.mobile.replace(/[^\d+]/g, ''))}"><span class="nc-row-label">Mobile</span><span class="nc-row-value">${safe(card.mobile)}</span></a>` : ''}
       ${card.email ? `<a class="nc-row" href="mailto:${safe(card.email)}"><span class="nc-row-label">Email</span><span class="nc-row-value">${safe(card.email)}</span></a>` : ''}
-      ${
-        card.address_line1
-          ? `<address class="nc-row nc-row-address"><span class="nc-row-label">Address</span><span class="nc-row-value">${safe(card.address_line1)}${card.address_line2 ? '<br>' + safe(card.address_line2) : ''}<br>${safe(card.address_country)} ${safe(card.address_postal_code)}</span></address>`
-          : ''
-      }
+      <address class="nc-row nc-row-address"><span class="nc-row-label">SWA Office</span><span class="nc-row-value">${safe(SWA_OFFICE_ADDRESS.line1)}<br>${safe(SWA_OFFICE_ADDRESS.postal_code)}</span></address>
     </section>
 
     <section class="nc-actions" aria-label="Actions">
@@ -473,7 +484,7 @@ function brandedNotFound(c: AppContext): Response {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="noindex, nofollow">
+  <meta name="robots" content="${NO_ROBOTS_HEADER}">
   <title>Namecard not available | SWA</title>
   <link rel="stylesheet" href="/namecard-public.css">
 </head>
@@ -487,7 +498,7 @@ function brandedNotFound(c: AppContext): Response {
 </html>`;
   return new Response(html, {
     status: 404,
-    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60', 'X-Robots-Tag': 'noindex, nofollow' },
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60', 'X-Robots-Tag': NO_ROBOTS_HEADER },
   });
 }
 

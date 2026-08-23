@@ -19,6 +19,7 @@
 // See docs/NAMECARD.md §9.3 for the field-by-field spec.
 
 import { escapeVcard } from './namecard-sanitize';
+import { SWA_OFFICE_ADDRESS } from '../../constants/portal';
 
 /** Identity fields read from the members table at render time. */
 export interface VcardMemberInput {
@@ -27,10 +28,6 @@ export interface VcardMemberInput {
   mobile: string | null;
   job_title: string | null;
   role: string | null;
-  address_line1: string | null;
-  address_line2: string | null;
-  address_postal_code: string | null;
-  address_country: string | null;
 }
 
 /** Presentation fields read from the namecards table. */
@@ -89,21 +86,21 @@ export function buildVcard(opts: BuildVcardOptions): string {
   lines.push('ORG:Singapore Women\\\'s Association');
   if (member.mobile) lines.push(`TEL;TYPE=CELL:${escapeVcard(member.mobile)}`);
   if (member.email) lines.push(`EMAIL;TYPE=INTERNET:${escapeVcard(member.email)}`);
-  // ADR uses semicolons as field separators (PO box; extended; street; locality; region; postal; country).
+  // ADR is ALWAYS the SWA office address (2026-08-23) — personal member
+  // addresses are never exported to a vCard. ADR uses semicolons as field
+  // separators (PO box; extended; street; locality; region; postal; country).
   const adr = [
     '', // PO box
-    '', // extended address (apartment/suite)
-    member.address_line1 ?? '',
-    member.address_country ?? '', // locality — SWA stores country here
+    '', // extended address
+    SWA_OFFICE_ADDRESS.line1,
+    SWA_OFFICE_ADDRESS.country, // locality
     '', // region
-    member.address_postal_code ?? '',
-    member.address_country ?? '',
+    SWA_OFFICE_ADDRESS.postal_code,
+    SWA_OFFICE_ADDRESS.country,
   ]
     .map((p) => escapeVcard(p))
     .join(';');
-  if (member.address_line1 || member.address_postal_code) {
-    lines.push(`ADR;TYPE=WORK:${adr}`);
-  }
+  lines.push(`ADR;TYPE=WORK:${adr}`);
   lines.push(`URL:${cardUrl}`);
   if (orgUrl) lines.push(`URL:${orgUrl}`);
 

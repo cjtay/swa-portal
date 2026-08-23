@@ -1,4 +1,8 @@
+# All crawling is disallowed on the admin portal, including the public
+# namecard pages under /c/. The /c/ line is listed explicitly so it stays
+# blocked even if the blanket "/" rule is ever relaxed for specific paths.
 User-agent: *
+Disallow: /c/
 Disallow: /
 
 User-agent: Googlebot
@@ -107,4 +111,25 @@ User-agent: MJ12bot
 Disallow: /
 
 User-agent: DotBot
+Disallow: /
+
+# AI/bot crawlers added 2026-08-23 alongside the namecard restore — the
+# public /c/* pages must never be indexed, trained on, or summarised.
+
+User-agent: OAI-SearchBot
+Disallow: /
+
+User-agent: Perplexity-User
+Disallow: /
+
+User-agent: Meta-ExternalAgent
+Disallow: /
+
+User-agent: DuckAssistBot
+Disallow: /
+
+User-agent: TurnitinBot
+Disallow: /
+
+User-agent: GoogleOther
 Disallow: /

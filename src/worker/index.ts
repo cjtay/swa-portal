@@ -28,14 +28,12 @@ import {
   handleMembershipApprove,
   handleMembershipReject,
 } from './api/membership-reg';
-// ── DISABLED 2026-08: public namecard surface hidden (security audit).
-// Restore by uncommenting + renaming _namecards.astro back. ──
-// import {
-//   handleNamecardPage,
-//   handleNamecardVcard,
-//   handleNamecardCardSvg,
-//   handlePublicNamecardPhoto,
-// } from './api/namecard-public';
+import {
+  handleNamecardPage,
+  handleNamecardVcard,
+  handleNamecardCardSvg,
+  handlePublicNamecardPhoto,
+} from './api/namecard-public';
 import {
   handleNamecards,
   handleNamecardsBulk,
@@ -50,16 +48,15 @@ const app = new Hono<AppEnv>();
 
 app.use('/api/*', authMiddleware);
 
-// ── DISABLED 2026-08: public namecard surface hidden (security audit).
-// The /c/:slug pages exposed member email, mobile and home address
-// unauthenticated with guessable slugs. Hidden, not deleted — restore by
-// uncommenting this block + the import above, renaming _namecards.astro back
-// to namecards.astro, and re-adding '/c/*' to run_worker_first in
-// wrangler.jsonc. ──
-// app.get('/c/:slug', handleNamecardPage);
-// app.get('/c/:slug/contact.vcf', handleNamecardVcard);
-// app.get('/c/:slug/card.svg', handleNamecardCardSvg);
-// app.get('/c/:slug/photo', handlePublicNamecardPhoto);
+// Public namecard surface (/c/*) — restored 2026-08-23 with board-only
+// gating: namecard-public.ts serves only members whose category is
+// 'committee' or 'advisor', and every card shows the SWA office address
+// instead of personal addresses (read-time gate in the SQL, so a demoted
+// member's card 404s immediately).
+app.get('/c/:slug', handleNamecardPage);
+app.get('/c/:slug/contact.vcf', handleNamecardVcard);
+app.get('/c/:slug/card.svg', handleNamecardCardSvg);
+app.get('/c/:slug/photo', handlePublicNamecardPhoto);
 
 app.get('/api/health', (c) => {
   return c.json({ status: 'ok', service: 'swa-portal', timestamp: new Date().toISOString() });

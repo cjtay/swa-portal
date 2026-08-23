@@ -21,7 +21,7 @@
 
 import type { Context } from 'hono';
 import type { AppContext } from "../types";
-import { NAMECARD_PHOTO_MAX_BYTES } from '../../constants/portal';
+import { NAMECARD_PHOTO_MAX_BYTES, NAMECARD_BOARD_CATEGORIES } from '../../constants/portal';
 import { handleApiError } from '../lib/error-handler';
 import {
   deriveSlug,
@@ -29,6 +29,65 @@ import {
   suggestAlternatives,
 } from '../lib/namecard-slug';
 import { isSafeUrl, normaliseWhatsApp, WhatsAppNormalisationError } from '../lib/namecard-sanitize';
+
+const BOARD_CATEGORY_SQL = NAMECARD_BOARD_CATEGORIES.map((c) => `'${c}'`).join(', ');
+
+/**
+ * Auto-generation (2026-08-23): create a visible namecard row for every
+ * committee/advisor member who does not have one yet. Idempotent — members
+ * with existing rows (visible OR hidden) are untouched, so an admin's
+ * hidden card stays hidden. Returns created/skipped lists for the caller.
+ *
+ * Used by POST /api/namecards/bulk and by members.ts when a member is
+ * created or promoted into a board category.
+ */
+export async function ensureBoardNamecards(
+  db: D1Database,
+): Promise<{
+  created: Array<{ member_id: number; slug: string }>;
+  skipped: Array<{ member_id: number; name: string; reason: string }>;
+}> {
+  const members = await db
+    .prepare(
+      `SELECT m.id, m.name FROM members m
+         LEFT JOIN namecards n ON n.member_id = m.id
+        WHERE m.deleted_at IS NULL AND n.id IS NULL
+          AND m.category IN (${BOARD_CATEGORY_SQL})
+        ORDER BY m.name ASC`,
+    )
+    .all<{ id: number; name: string }>();
+
+  const slugRows = await db.prepare(`SELECT slug FROM namecards`).all<{ slug: string }>();
+  const taken = new Set(slugRows.results.map((r) => r.slug));
+
+  const created: Array<{ member_id: number; slug: string }> = [];
+  const skipped: Array<{ member_id: number; name: string; reason: string }> = [];
+
+  for (const m of members.results) {
+    const derived = deriveSlug(m.name);
+    if (!derived) {
+      skipped.push({ member_id: m.id, name: m.name, reason: 'No slug could be derived.' });
+      continue;
+    }
+    const slug = taken.has(derived) ? suggestAlternatives(derived, taken) : derived;
+    try {
+      await db
+        .prepare(`INSERT INTO namecards (member_id, slug) VALUES (?, ?)`)
+        .bind(m.id, slug)
+        .run();
+      created.push({ member_id: m.id, slug });
+      taken.add(slug);
+    } catch (err) {
+      skipped.push({
+        member_id: m.id,
+        name: m.name,
+        reason: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return { created, skipped };
+}
 
 
 /** Fields the admin may PATCH on a namecard row. */
@@ -115,13 +174,30 @@ export async function handleNamecards(c: AppContext): Promise<Response> {
       return c.json({ success: false, message: 'A valid member_id is required.' }, 400);
     }
 
-    // Confirm the member exists.
+    // Confirm the member exists and is board (committee/advisor). Cards are
+    // board-only since the 2026-08-23 restore — a card for any other
+    // category would 404 publicly anyway.
     const member = await c.env.DB.prepare(
-      'SELECT id, name FROM members WHERE id = ? AND deleted_at IS NULL',
+      `SELECT id, name FROM members WHERE id = ? AND deleted_at IS NULL
+         AND category IN (${BOARD_CATEGORY_SQL})`,
     )
       .bind(memberId)
       .first<{ id: number; name: string }>();
     if (!member) {
+      const anyMember = await c.env.DB.prepare(
+        'SELECT id FROM members WHERE id = ? AND deleted_at IS NULL',
+      )
+        .bind(memberId)
+        .first<{ id: number }>();
+      if (anyMember) {
+        return c.json(
+          {
+            success: false,
+            message: 'Namecards are for board members (committee/advisor) only.',
+          },
+          400,
+        );
+      }
       return c.json({ success: false, message: 'Member not found.' }, 404);
     }
 
@@ -180,6 +256,8 @@ export async function handleNamecards(c: AppContext): Promise<Response> {
 }
 
 // ── POST /api/namecards/bulk ───────────────────────────────────────────────
+// Auto-generate board cards: creates a card for every committee/advisor
+// member lacking one. Non-board members are never given cards.
 export async function handleNamecardsBulk(c: AppContext): Promise<Response> {
   if (c.req.method !== 'POST') {
     return c.json({ success: false, message: 'Method not allowed' }, 405);
@@ -187,47 +265,7 @@ export async function handleNamecardsBulk(c: AppContext): Promise<Response> {
   const forbidden = requireAdmin(c);
   if (forbidden) return forbidden;
 
-  // Members who don't yet have a namecard row, in name order. Skip
-  // soft-deleted members — they shouldn't get cards.
-  const members = await c.env.DB.prepare(
-    `SELECT m.id, m.name FROM members m
-       LEFT JOIN namecards n ON n.member_id = m.id
-      WHERE m.deleted_at IS NULL AND n.id IS NULL
-      ORDER BY m.name ASC`,
-  ).all<{ id: number; name: string }>();
-
-  // Pre-load all existing slugs once so collision-suggestion is O(1) per row.
-  const slugRows = await c.env.DB.prepare(`SELECT slug FROM namecards`).all<{ slug: string }>();
-  const taken = new Set(slugRows.results.map((r) => r.slug));
-
-  const created: Array<{ member_id: number; slug: string }> = [];
-  const skipped: Array<{ member_id: number; name: string; reason: string }> = [];
-
-  for (const m of members.results) {
-    const derived = deriveSlug(m.name);
-    if (!derived) {
-      skipped.push({ member_id: m.id, name: m.name, reason: 'No slug could be derived.' });
-      continue;
-    }
-    const slug = taken.has(derived) ? suggestAlternatives(derived, taken) : derived;
-    try {
-      const r = await c.env.DB.prepare(
-        `INSERT INTO namecards (member_id, slug) VALUES (?, ?)`,
-      )
-        .bind(m.id, slug)
-        .run();
-      created.push({ member_id: m.id, slug });
-      taken.add(slug);
-      void r;
-    } catch (err) {
-      skipped.push({
-        member_id: m.id,
-        name: m.name,
-        reason: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-
+  const { created, skipped } = await ensureBoardNamecards(c.env.DB);
   return c.json({ success: true, created, skipped });
 }
 

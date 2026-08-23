@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import type { Env, AppContext } from '../types';
 import { IT_ADMIN_EMAILS } from '../../constants/portal';
+import { ensureBoardNamecards } from './namecards';
 
 // Explicit column list instead of SELECT *: `nric` is not displayed anywhere
 // in the portal, so it must never leave the API (security-remediation-plan
@@ -78,6 +79,17 @@ export async function handleMembers(c: AppContext) {
       derivedWaived,
     ).run();
 
+    // Auto-generate a namecard for board members (2026-08-23). Soft-fail —
+    // a card problem must never block saving the member itself; the admin
+    // "Auto-generate board cards" button backfills anything missed.
+    if (category === 'committee' || category === 'advisor') {
+      try {
+        await ensureBoardNamecards(c.env.DB);
+      } catch (err) {
+        console.error('namecard auto-generate after member create failed', err);
+      }
+    }
+
     return c.json({ success: true, id: result.meta.last_row_id }, 201);
   }
 
@@ -124,6 +136,27 @@ export async function handleMemberById(c: AppContext) {
     values.push(id);
 
     await c.env.DB.prepare(`UPDATE members SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
+
+    // Namecard lifecycle follows the category (2026-08-23): a member moved
+    // into committee/advisor gets an auto-generated card; a member moved out
+    // has their card darkened immediately (the public /c/:slug route also
+    // enforces board-only at read time, so this is belt-and-braces plus an
+    // honest admin list). Soft-fail — never block the member edit itself.
+    if ('category' in body) {
+      const newCategory = String(body.category ?? '').trim();
+      try {
+        if (newCategory === 'committee' || newCategory === 'advisor') {
+          await ensureBoardNamecards(c.env.DB);
+        } else {
+          await c.env.DB.prepare(
+            "UPDATE namecards SET has_namecard = 0, updated_at = datetime('now') WHERE member_id = ? AND has_namecard = 1",
+          ).bind(id).run();
+        }
+      } catch (err) {
+        console.error('namecard sync after member category change failed', err);
+      }
+    }
+
     return c.json({ success: true, id: Number(id) });
   }
 

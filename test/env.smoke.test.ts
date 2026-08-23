@@ -25,7 +25,7 @@ describe('env bindings smoke', () => {
     expect(text).toBe('ok');
   });
 
-  it('applies schema + migration 007 cleanly (members + namecards tables present)', async () => {
+  it('applies the schema.sql baseline cleanly (members + namecards tables present)', async () => {
     await applyMigrations(env.DB);
     const r = await env.DB.prepare(
       `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('members', 'namecards') ORDER BY name`,
@@ -33,7 +33,7 @@ describe('env bindings smoke', () => {
     expect(r.results.map((row: { name: string }) => row.name)).toEqual(['members', 'namecards']);
   });
 
-  it('migration 007 enforces the namecards 1:1 relationship and slug uniqueness', async () => {
+  it('the namecards table enforces the 1:1 relationship and slug uniqueness', async () => {
     await applyMigrations(env.DB);
     // Insert a member to attach namecards to.
     const member = await env.DB.prepare(

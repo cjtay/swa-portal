@@ -292,3 +292,39 @@ CREATE INDEX IF NOT EXISTS idx_reg_tokens_booking ON reg_tokens(booking_id);
 -- ============================================================
 ALTER TABLE members ADD COLUMN deleted_at TEXT;
 CREATE INDEX IF NOT EXISTS idx_members_deleted_at ON members(deleted_at);
+
+-- ============================================================
+-- Namecards (backported from migration 007 so schema.sql is a complete
+-- baseline for fresh local databases — 2026-08-23 restore).
+--
+-- Digital namecard presentation data. 1:1 with members(id). Core identity
+-- (name, email, mobile, job_title) is NOT duplicated here; it is read from
+-- members at render time. Public surface: /c/:slug, board members only
+-- (members.category IN ('committee','advisor') — see NAMECARD_BOARD_CATEGORIES).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS namecards (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id       INTEGER NOT NULL UNIQUE REFERENCES members(id),
+  slug            TEXT NOT NULL UNIQUE,
+  has_namecard    INTEGER NOT NULL DEFAULT 1,
+  template        TEXT NOT NULL DEFAULT 'default',
+  photo_r2_key    TEXT,
+  photo_alt       TEXT,
+  bio             TEXT,
+  name_family     TEXT,
+  name_given      TEXT,
+  whatsapp        TEXT,
+  website         TEXT,
+  facebook        TEXT,
+  linkedin        TEXT,
+  instagram       TEXT,
+  tiktok          TEXT,
+  youtube         TEXT,
+  qr_variant      TEXT NOT NULL DEFAULT 'vcf',
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_namecards_slug      ON namecards(slug);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_namecards_member_id ON namecards(member_id);
+CREATE INDEX        IF NOT EXISTS idx_namecards_visible   ON namecards(has_namecard) WHERE has_namecard = 1;

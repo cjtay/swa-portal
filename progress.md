@@ -12,6 +12,54 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-23 (session 2) — Namecards restored as board-only, auto-generated
+
+Owner decision: restore (not delete). New rules, owner-confirmed:
+board = `committee` + `advisor`; auto-created cards live immediately;
+every card shows the SWA office address (409 Serangoon Central, #01-303,
+Singapore 550409 — from the public website footer), never personal addresses.
+
+### Done
+- **Un-hidden** the four `/c/*` routes, `namecards.astro`, nav item, and
+  `/c/*` in `run_worker_first` (all `DISABLED 2026-08` markers removed).
+- **Board-only gate** at read time: `category IN ('committee','advisor')`
+  in `namecard-public.ts` READ_QUERY + both queries in `namecard-photo.ts`.
+  A demoted member's card 404s on the next request.
+- **Office address only**: `SWA_OFFICE_ADDRESS` + `NAMECARD_BOARD_CATEGORIES`
+  in `portal.ts`; HTML page + vCard render the office address; personal
+  address columns removed from the public read query and `VcardMemberInput`.
+- **Auto-generation**: `ensureBoardNamecards()` in `namecards.ts`; single
+  create + bulk are board-only; members.ts auto-creates a card on member
+  POST/PATCH into a board category and darkens it on demotion. Soft-fail so
+  a card problem never blocks the member write.
+- **Indexing/AI block**: robots.txt gets an explicit `Disallow: /c/` plus
+  6 missing AI bots; `X-Robots-Tag` + meta robots extended to
+  `noindex, nofollow, noarchive, nosnippet, notranslate, noimageindex`;
+  HTML page route now IP-rate-limited like vcf/svg/photo.
+- **Schema tidy (old next-step 2)**: namecards table + indexes backported
+  into `schema.sql`; `db-helpers.ts` applies schema only; smoke test
+  wording updated. Duplicate `005` migration rename NOT done (deferred).
+- **Tests**: public tests restored + 6 new (category gates, office address,
+  robots headers); admin tests get board-only bulk + hidden-stays-hidden;
+  new `namecard-autogen.test.ts` (6 tests) covering member POST/PATCH
+  card lifecycle. `namecard-vcard.test.ts` expects the office ADR.
+- Docs: NAMECARD.md v2.2 restore banner, AGENTS.md status line.
+
+### Owner steps (after review + deploy)
+1. Prod already has the `namecards` table (migration 007 applied 2026-07-25)
+   — no remote migration needed. Optional count-only check:
+   `SELECT COUNT(*) FROM namecards`.
+2. `npm run deploy`.
+3. Admin → Namecards → "Auto-generate board cards" once to backfill the
+   current board.
+
+### Note
+Admin category 'member'/'volunteer' rows can no longer be given cards via
+the API (400 "board members only"). An admin who wants a non-board card
+must first set the member's category to committee/advisor.
+
+---
+
 ## 2026-08-23 — Remediation deployed; CSV-guard fix + anti-drift guardrails
 
 ### Done

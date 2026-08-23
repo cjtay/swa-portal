@@ -116,3 +116,19 @@ export const NAMECARD_PUBLIC_RATE_LIMIT_MAX_REQUESTS = 60;
 // regardless of what the client sends. See docs/NAMECARD.md §4.2.
 export const NAMECARD_PHOTO_MAX_BYTES = 2 * 1024 * 1024;
 
+// The SWA office address, shown on EVERY public namecard (HTML page, vCard,
+// card image) instead of any member's personal address. Source: the footer of
+// https://www.singaporewomenassociation.org (checked 2026-08-23). Personal
+// address fields on members are never rendered on /c/*.
+export const SWA_OFFICE_ADDRESS = {
+  line1: '409 Serangoon Central, #01-303',
+  line2: '',
+  postal_code: 'Singapore 550409',
+  country: 'Singapore',
+} as const;
+
+// Member categories that may have a public namecard. Cards are auto-generated
+// for these categories; the public /c/* routes serve only these categories
+// (read-time gate — a demoted member's card 404s immediately).
+export const NAMECARD_BOARD_CATEGORIES = ['committee', 'advisor'] as const;
+

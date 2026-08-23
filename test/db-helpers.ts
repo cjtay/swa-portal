@@ -13,14 +13,10 @@
 // (the isolate cannot reliably resolve `import.meta.url` to a real path).
 
 import schemaRaw from '../schema.sql?raw';
-import migration007 from '../migrations/007_namecards.sql?raw';
-// schema.sql is the rolled-up baseline: it already contains every column added
-// by migrations 001-006 (reg_role, deleted_at, membership lifecycle, PDPA, and
-// the website-columns drop). Applying those migrations on top would double-add
-// columns. Only migrations NOT yet rolled into schema.sql need to be applied
-// here. Today that is just 007_namecards.sql (the namecard feature has not yet
-// been backported into schema.sql — when it is, remove it from this list).
-const ALL_SQL = [schemaRaw, migration007];
+// schema.sql is the rolled-up baseline: it already contains every column and
+// table added by migrations 001-007 (including namecards, backported
+// 2026-08-23). Applying the migrations on top would double-add columns.
+const ALL_SQL = [schemaRaw];
 
 export async function applyMigrations(db: D1Database): Promise<void> {
   // Drop everything first so re-applying is safe (multiple tests in the same

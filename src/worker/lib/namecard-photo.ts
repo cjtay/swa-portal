@@ -12,6 +12,9 @@
 // See docs/NAMECARD.md §8.3, §9.1.
 
 import type { Env } from '../types';
+import { NAMECARD_BOARD_CATEGORIES } from '../../constants/portal';
+
+const BOARD_CATEGORY_SQL = NAMECARD_BOARD_CATEGORIES.map((c) => `'${c}'`).join(', ');
 
 export interface NamecardPhoto {
   body: ReadableStream;
@@ -26,6 +29,8 @@ export interface NamecardPhoto {
  *   - the slug does not exist
  *   - has_namecard = 0 (admin disabled the card)
  *   - the member is soft-deleted (deleted_at IS NOT NULL)
+ *   - the member's category is not committee/advisor (board-only gate,
+ *     2026-08-23 — matches READ_QUERY in namecard-public.ts)
  *   - no photo_r2_key on the row
  *   - the R2 object is missing
  *
@@ -42,7 +47,8 @@ export async function streamNamecardPhoto(
        JOIN members m ON m.id = n.member_id
       WHERE n.slug = ?1
         AND n.has_namecard = 1
-        AND m.deleted_at IS NULL`,
+        AND m.deleted_at IS NULL
+        AND m.category IN (${BOARD_CATEGORY_SQL})`,
   )
     .bind(slug)
     .first<{ key: string | null }>();
@@ -76,7 +82,8 @@ export async function readNamecardPhotoBytes(
        JOIN members m ON m.id = n.member_id
       WHERE n.slug = ?1
         AND n.has_namecard = 1
-        AND m.deleted_at IS NULL`,
+        AND m.deleted_at IS NULL
+        AND m.category IN (${BOARD_CATEGORY_SQL})`,
   )
     .bind(slug)
     .first<{ key: string | null }>();

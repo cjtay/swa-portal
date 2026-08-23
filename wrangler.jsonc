@@ -6,9 +6,7 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    // '/c/*' removed 2026-08: public namecard surface hidden (security audit).
-    // Re-add it when the /c/* routes in src/worker/index.ts are restored.
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/c/*"]
   },
   "routes": [
     { "pattern": "admin.singaporewomenassociation.org", "custom_domain": true }

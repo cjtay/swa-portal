@@ -169,15 +169,36 @@ describe('POST /api/namecards — create', () => {
     });
     expect(res.status).toBe(403);
   });
+
+  it('rejects a non-board member with 400 (board-only gate)', async () => {
+    const memberId = await seedMember(env.DB, {
+      name: 'Dana Ong',
+      email: 'admin-test-dana@example.com',
+      category: 'member',
+    });
+    const res = await SELF.fetch('https://example.com/api/namecards', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: await adminCookie() },
+      body: JSON.stringify({ member_id: memberId }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json<{ message: string }>();
+    expect(body.message).toContain('board members');
+  });
 });
 
-describe('POST /api/namecards/bulk — bulk create', () => {
-  it('creates namecards for every member lacking one, skipping members with cards', async () => {
-    // Alice has a card; Bob does not.
+describe('POST /api/namecards/bulk — auto-generate board cards', () => {
+  it('creates cards for board members lacking one, never for non-board members', async () => {
+    // Alice has a card; Bob (committee) does not; Erin (member) does not.
     await seedFixture(); // Alice
     const bobId = await seedMember(env.DB, {
       name: 'Bob Bulk',
       email: 'admin-test-bobbulk@example.com',
+    });
+    const erinId = await seedMember(env.DB, {
+      name: 'Erin Ordinary',
+      email: 'admin-test-erin@example.com',
+      category: 'member',
     });
 
     const res = await SELF.fetch('https://example.com/api/namecards/bulk', {
@@ -194,6 +215,27 @@ describe('POST /api/namecards/bulk — bulk create', () => {
     expect(body.created.some((c: { member_id: number }) => c.member_id === bobId)).toBe(true);
     // Alice already had a card — must not appear in `created`.
     expect(body.created.length).toBeGreaterThanOrEqual(1);
+    // Erin is an ordinary member — must never get a card.
+    expect(body.created.some((c: { member_id: number }) => c.member_id === erinId)).toBe(false);
+    const erinCard = await env.DB.prepare('SELECT id FROM namecards WHERE member_id = ?')
+      .bind(erinId)
+      .first();
+    expect(erinCard).toBeNull();
+  });
+
+  it('leaves an admin-hidden card hidden (idempotent, no re-show)', async () => {
+    const { namecardId } = await seedFixture(); // Alice, visible
+    await env.DB.prepare('UPDATE namecards SET has_namecard = 0 WHERE id = ?')
+      .bind(namecardId)
+      .run();
+    await SELF.fetch('https://example.com/api/namecards/bulk', {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+    });
+    const row = await env.DB.prepare('SELECT has_namecard FROM namecards WHERE id = ?')
+      .bind(namecardId)
+      .first<{ has_namecard: number }>();
+    expect(row?.has_namecard).toBe(0);
   });
 });
 

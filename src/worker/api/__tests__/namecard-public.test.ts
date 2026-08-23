@@ -1,8 +1,3 @@
-// ── DISABLED 2026-08: the public /c/* namecard surface is hidden (security
-// audit) — the routes are commented out in src/worker/index.ts, so these
-// tests would 404. The `.ts.disabled` suffix keeps vitest from picking the
-// file up. Restore by reversing the rename and re-enabling the routes. ──
-//
 // Integration tests for the public /c/* routes.
 //
 // Uses the canonical @cloudflare/vitest-pool-workers pattern: import the Hono
@@ -12,6 +7,10 @@
 // Each test seeds fixture rows via the shared helpers in test/db-helpers.ts
 // and asserts end-to-end behaviour. The photo round-trip test also exercises
 // the R2 binding.
+//
+// Board-only gate (2026-08-23 restore): cards serve committee/advisor members
+// only, and every card shows the SWA office address rather than any personal
+// address. These tests pin both rules.
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { SELF, env } from 'cloudflare:test';
@@ -88,6 +87,59 @@ describe('GET /c/:slug — public HTML card page', () => {
     const res = await SELF.fetch(`https://example.com/c/${slug}`);
     expect(res.status).toBe(404);
   });
+
+  it('returns a branded 404 for a non-board member (category gate)', async () => {
+    const { slug, memberId } = await seedFixtures();
+    await env.DB.prepare("UPDATE members SET category = 'member' WHERE id = ?")
+      .bind(memberId)
+      .run();
+    const res = await SELF.fetch(`https://example.com/c/${slug}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('returns a branded 404 for a volunteer-category member (category gate)', async () => {
+    const { slug, memberId } = await seedFixtures();
+    await env.DB.prepare("UPDATE members SET category = 'volunteer' WHERE id = ?")
+      .bind(memberId)
+      .run();
+    const res = await SELF.fetch(`https://example.com/c/${slug}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('serves an advisor member (advisor is a board category)', async () => {
+    const { slug, memberId } = await seedFixtures();
+    await env.DB.prepare("UPDATE members SET category = 'advisor' WHERE id = ?")
+      .bind(memberId)
+      .run();
+    const res = await SELF.fetch(`https://example.com/c/${slug}`);
+    expect(res.status).toBe(200);
+  });
+
+  it('shows the SWA office address, never the member personal address', async () => {
+    const { slug, memberId } = await seedFixtures();
+    await env.DB
+      .prepare(
+        "UPDATE members SET address_line1 = '12 Private Home Road', address_postal_code = '999999' WHERE id = ?",
+      )
+      .bind(memberId)
+      .run();
+    const res = await SELF.fetch(`https://example.com/c/${slug}`);
+    const html = await res.text();
+    expect(html).toContain('409 Serangoon Central, #01-303');
+    expect(html).toContain('Singapore 550409');
+    expect(html).not.toContain('12 Private Home Road');
+    expect(html).not.toContain('999999');
+  });
+
+  it('sends the hardened X-Robots-Tag + meta robots block', async () => {
+    const { slug } = await seedFixtures();
+    const res = await SELF.fetch(`https://example.com/c/${slug}`);
+    expect(res.headers.get('X-Robots-Tag')).toBe(
+      'noindex, nofollow, noarchive, nosnippet, notranslate, noimageindex',
+    );
+    const html = await res.text();
+    expect(html).toContain('<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, notranslate, noimageindex">');
+  });
 });
 
 describe('GET /c/:slug/contact.vcf — vCard download', () => {
@@ -103,12 +155,30 @@ describe('GET /c/:slug/contact.vcf — vCard download', () => {
     expect(vcf.startsWith('BEGIN:VCARD\r\n')).toBe(true);
     expect(vcf).toContain('FN:Sarah Chen\r\n');
     expect(vcf).toContain('TEL;TYPE=CELL:+65 9123 4567');
+    // Office ADR — comma is vCard-escaped and the line folds at 75 octets.
+    expect(vcf).toContain('ADR;TYPE=WORK:;;409 Serangoon Central\\, #01-303;Singapore;;Singapore 550409\r\n ;Singapore');
   });
 
   it('returns 404 for a hidden card (no leak that the row exists)', async () => {
     const { slug } = await seedFixtures();
     await env.DB.prepare('UPDATE namecards SET has_namecard = 0 WHERE slug = ?').bind(slug).run();
     const res = await SELF.fetch(`https://example.com/c/${slug}/contact.vcf`);
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 404 for a non-board member even with a photo attached (photo gate)', async () => {
+    const { slug, memberId } = await seedFixtures();
+    const r2Key = `namecards/${memberId}/photo.jpg`;
+    await env.R2_BUCKET.put(r2Key, TEST_PHOTO_BYTES, {
+      httpMetadata: { contentType: 'image/jpeg' },
+    });
+    await env.DB.prepare('UPDATE namecards SET photo_r2_key = ? WHERE slug = ?')
+      .bind(r2Key, slug)
+      .run();
+    await env.DB.prepare("UPDATE members SET category = 'member' WHERE id = ?")
+      .bind(memberId)
+      .run();
+    const res = await SELF.fetch(`https://example.com/c/${slug}/photo`);
     expect(res.status).toBe(404);
   });
 });

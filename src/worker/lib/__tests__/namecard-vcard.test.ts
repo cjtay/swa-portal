@@ -13,10 +13,6 @@ const baseMember: BuildVcardOptions['member'] = {
   mobile: '+65 9123 4567',
   job_title: 'Chief Innovation Officer',
   role: 'Committee',
-  address_line1: '96 Waterloo Street',
-  address_line2: null,
-  address_postal_code: '187967',
-  address_country: 'Singapore',
 };
 
 const baseNamecard: BuildVcardOptions['namecard'] = {
@@ -68,10 +64,14 @@ describe('buildVcard — structure', () => {
     expect(vcf).toContain('URL:https://admin.singaporewomenassociation.org/c/sarah-chen\r\n');
   });
 
-  it('emits ADR with the street address split correctly', () => {
+  it('always emits ADR with the SWA office address (never a personal one)', () => {
     const vcf = buildVcard(makeOpts());
-    // ADR fields: PO box; extended; street; locality; region; postal; country
-    expect(vcf).toContain('ADR;TYPE=WORK:;;96 Waterloo Street;Singapore;;187967;Singapore');
+    // ADR fields: PO box; extended; street; locality; region; postal; country.
+    // The comma in the street field is vCard-escaped and the line folds at
+    // 75 octets (continuation line starts with a single space).
+    expect(vcf).toContain(
+      'ADR;TYPE=WORK:;;409 Serangoon Central\\, #01-303;Singapore;;Singapore 550409\r\n ;Singapore',
+    );
   });
 
   it('includes a social line per populated platform', () => {

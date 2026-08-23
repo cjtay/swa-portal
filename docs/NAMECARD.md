@@ -1,18 +1,33 @@
 # SWA Digital Namecard System - Technical & Functional Specification
 
-> ⚠️ **FEATURE HIDDEN — 22-08-2026.** The public `/c/*` surface was disabled
-> by the security audit (unauthenticated exposure of member email, mobile and
-> home address via guessable slugs). The code is preserved, not deleted:
-> routes commented out in `src/worker/index.ts`, page renamed to
-> `src/pages/_namecards.astro`, nav link removed — search for the
-> `DISABLED 2026-08` markers to restore. See
-> `docs/plans/security-remediation-plan.md` (Phase 2). This spec below
-> describes the feature as built; treat the public surface as dormant until
-> the owner decides to restore or retire it.
+> ✅ **FEATURE RESTORED — 23-08-2026, board-only with guardrails.** The
+> public `/c/*` card pages are live again, changed as follows from the
+> original build:
+>
+> 1. **Board-only.** Cards are served only for members whose `category` is
+>    `committee` or `advisor` (`NAMECARD_BOARD_CATEGORIES` in
+>    `src/constants/portal.ts`). The gate is enforced at read time in the
+>    SQL, so demoting a member darkens their card instantly.
+> 2. **Auto-generated.** Saving a member into a board category (create or
+>    category change) creates their card automatically; the admin bulk
+>    button ("Auto-generate board cards") backfills the rest.
+> 3. **Office address only.** Every card (HTML page, vCard) shows the SWA
+>    office address (`SWA_OFFICE_ADDRESS`), never a member's personal
+>    address. Personal address columns are not even selected by the public
+>    read query.
+> 4. **Blocked from indexing and AI crawlers.** `robots.txt` disallows
+>    `/c/` explicitly for all listed bots (search + AI), and every `/c/*`
+>    response carries `X-Robots-Tag: noindex, nofollow, noarchive,
+>    nosnippet, notranslate, noimageindex` plus the matching meta tag.
+>
+> This spec below describes the feature as originally built; where it
+> mentions personal addresses or all-members cards, the four rules above
+> win. See `docs/plans/security-remediation-plan.md` (Phase 2) for the
+> 2026-08-22 hiding, and `progress.md` (2026-08-23) for the restore.
 
-> **Version**: 2.1 (rewrite, single-Worker)
-> **Date**: 2026-07-25
-> **Status**: Hidden (2026-08-22) — previously "Draft for review"
+> **Version**: 2.2 (restored board-only)
+> **Date**: 2026-08-23
+> **Status**: Live (board-only restore)
 > **Scope**: Full redesign of the digital namecard feature. Hosted inside the existing `swa-portal` Worker (no separate subdomain, no separate deployment). Shares auth, data plane, and bindings with the rest of the portal. Decoupled from the public marketing website (`swa2024`).
 
 ---
