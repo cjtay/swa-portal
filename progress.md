@@ -45,13 +45,24 @@ Singapore 550409 — from the public website footer), never personal addresses.
   card lifecycle. `namecard-vcard.test.ts` expects the office ADR.
 - Docs: NAMECARD.md v2.2 restore banner, AGENTS.md status line.
 
-### Owner steps (after review + deploy)
-1. Prod already has the `namecards` table (migration 007 applied 2026-07-25)
-   — no remote migration needed. Optional count-only check:
-   `SELECT COUNT(*) FROM namecards`.
-2. `npm run deploy`.
-3. Admin → Namecards → "Auto-generate board cards" once to backfill the
-   current board.
+### Verification + ship
+- Local smoke test passed after applying migration 007 to the local D1
+  (the table was missing — pre-tidy local rebuild; fixed via the documented
+  `--local` command, data kept).
+- Bulk button now reports real server errors (HTTP status + body snippet)
+  instead of a blanket "Network error." — plain-text 500 pages from a
+  crashed worker were previously indistinguishable from network failures.
+- Tests 148/148, build 24 pages, `astro check` clean.
+- Committed + pushed: `6590356` (restore) and `d2777d5` (button polish).
+  Local D1 now has the namecards table; 12 committee cards generated and
+  verified in the browser.
+
+### Owner steps remaining
+1. `npm run deploy` (not yet run at time of writing).
+2. Post-deploy checks: `/robots.txt` shows `Disallow: /c/`; any `/c/*`
+   shows the branded not-available page. Production has no board members
+   yet, so 0 cards is expected — they auto-generate as board members are
+   added.
 
 ### Note
 Admin category 'member'/'volunteer' rows can no longer be given cards via
