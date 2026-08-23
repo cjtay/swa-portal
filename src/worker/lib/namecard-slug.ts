@@ -1,7 +1,7 @@
 // Slug derivation, validation, and collision suggestion for namecards.
 //
 // A slug is the URL segment of a public namecard: admin.singaporewomenassociation.org/c/{slug}.
-// Rules (see docs/NAMECARD.md §4.1 and §17.1):
+// Rules (see docs/specs/features/namecards.md §4.1 and §17.1):
 //   - lowercase
 //   - kebab-case (words separated by single hyphens)
 //   - ASCII letters, digits, hyphens only

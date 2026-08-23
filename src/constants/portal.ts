@@ -118,13 +118,13 @@ export const MEMBERSHIP_MAX_FILE_BYTES = 10 * 1024 * 1024;
 // IP-keyed rate limit for the public namecard endpoints: /c/:slug and its
 // contact.vcf, card.svg and photo routes. The HTML page joined the limit on
 // the 2026-08-23 restore; at 60 requests per 60 seconds a genuine QR-scan
-// load never comes close. See docs/NAMECARD.md §5.4.
+// load never comes close. See docs/specs/features/namecards.md §5.4.
 export const NAMECARD_PUBLIC_RATE_LIMIT_WINDOW_SECONDS = 60;
 export const NAMECARD_PUBLIC_RATE_LIMIT_MAX_REQUESTS = 60;
 
 // Hard server-side cap on namecard photo uploads. The admin upload form
 // also resizes client-side to ~800×800, but the server enforces this
-// regardless of what the client sends. See docs/NAMECARD.md §4.2.
+// regardless of what the client sends. See docs/specs/features/namecards.md §4.2.
 export const NAMECARD_PHOTO_MAX_BYTES = 2 * 1024 * 1024;
 
 // The SWA office address, shown on EVERY public namecard (HTML page, vCard,

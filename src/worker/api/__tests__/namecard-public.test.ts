@@ -220,7 +220,7 @@ describe('GET /c/:slug/photo.:ext — raw photo stream from R2', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toBe('image/jpeg');
     // Public + immutable cache — DIFFERENT from the membership image's
-    // private/1h (docs/NAMECARD.md §8.3).
+    // private/1h (docs/specs/features/namecards.md §8.3).
     expect(res.headers.get('Cache-Control')).toBe('public, max-age=86400, s-maxage=2592000');
     const bytes = new Uint8Array(await res.arrayBuffer());
     expect(bytes).toEqual(TEST_PHOTO_BYTES);

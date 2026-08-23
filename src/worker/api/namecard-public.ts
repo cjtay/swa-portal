@@ -4,7 +4,7 @@
 // see src/worker/index.ts:36). They serve the public card page, the vCard
 // download, the SVG card image, and the photo stream.
 //
-// See docs/NAMECARD.md §6, §9.1, and the design spec in
+// See docs/specs/features/namecards.md §6, §9.1, and the design spec in
 // docs/plans/Namecard-Implementation-Plan.md §1.3.
 
 import type { Context } from 'hono';
@@ -83,7 +83,7 @@ async function readNamecard(env: Env, slug: string): Promise<PublicNamecardRow |
  * Deliberately NOT using SWA_ADMIN_DOMAIN here: that variable has the same
  * value in dev and prod (it's a vars entry in wrangler.jsonc, not a per-env
  * override), so it would force the dev request to bake in the prod hostname
- * and the canvas fetch would be cross-origin. See docs/NAMECARD.md §8.3.
+ * and the canvas fetch would be cross-origin. See docs/specs/features/namecards.md §8.3.
  */
 function cardBaseUrl(c: AppContext): string {
   return new URL(c.req.url).origin;
@@ -113,7 +113,7 @@ export async function handleNamecardPage(c: AppContext): Promise<Response> {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       // Short browser TTL, longer edge TTL — edits appear within 5-10 min
-      // (docs/NAMECARD.md §8.5).
+      // (docs/specs/features/namecards.md §8.5).
       'Cache-Control': 'public, max-age=300, s-maxage=600',
       // Defence-in-depth on top of the robots.txt block — prevents indexing
       // and AI-bot fetching if the URL is discovered via an external link and
@@ -188,7 +188,7 @@ export async function handleNamecardVcard(c: AppContext): Promise<Response> {
       'Content-Type': 'text/vcard; charset=utf-8',
       // attachment + filename triggers the "Add to contacts" flow on iOS and
       // Android. nosniff is MANDATORY — without it some iOS Safari versions
-      // render .vcf inline as plain text (docs/NAMECARD.md §9.1).
+      // render .vcf inline as plain text (docs/specs/features/namecards.md §9.1).
       'Content-Disposition': `attachment; filename="${safeName}_SWA.vcf"`,
       'Cache-Control': 'public, max-age=300, s-maxage=600',
       'X-Content-Type-Options': 'nosniff',
@@ -277,7 +277,7 @@ export async function handlePublicNamecardPhoto(c: AppContext): Promise<Response
     headers: {
       'Content-Type': photo.contentType,
       // Long immutable cache — bump by overwriting the R2 key
-      // (docs/NAMECARD.md §8.3, §8.5).
+      // (docs/specs/features/namecards.md §8.3, §8.5).
       'Cache-Control': 'public, max-age=86400, s-maxage=2592000',
     },
   });

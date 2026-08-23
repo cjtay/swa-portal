@@ -182,7 +182,7 @@ export async function handleMemberById(c: AppContext) {
 
     // Atomic transaction: soft-delete the member AND dark their namecard in a
     // single D1 batch so the public /c/:slug surface goes 404 the instant the
-    // member is deleted (docs/NAMECARD.md §9.4). D1 executes a `batch()` as a
+    // member is deleted (docs/specs/features/namecards.md §9.4). D1 executes a `batch()` as a
     // single transaction — either both UPDATEs land or neither does. The
     // namecards UPDATE is a no-op when the member has no card.
     await c.env.DB.batch([

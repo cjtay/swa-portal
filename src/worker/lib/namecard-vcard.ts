@@ -16,7 +16,7 @@
 //     contact on devices that honour REV
 //   - X-SOCIALPROFILE;TYPE=<platform>:<url> for each populated social field
 //
-// See docs/NAMECARD.md §9.3 for the field-by-field spec.
+// See docs/specs/features/namecards.md §9.3 for the field-by-field spec.
 
 import { escapeVcard } from './namecard-sanitize';
 import { SWA_OFFICE_ADDRESS } from '../../constants/portal';

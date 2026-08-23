@@ -10,7 +10,7 @@
 // self-cleans after the window closes. Same shape as checkApiRateLimit so the
 // behaviour is identical, just keyed differently.
 //
-// See docs/NAMECARD.md §5.4.
+// See docs/specs/features/namecards.md §5.4.
 
 import {
   NAMECARD_PUBLIC_RATE_LIMIT_MAX_REQUESTS,

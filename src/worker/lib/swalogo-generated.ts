@@ -4,7 +4,7 @@
 // The SWA logo as a base64 data URI, for embedding inside the server-rendered
 // namecard card SVG (/c/:slug/card.svg). The card SVG must be self-contained
 // (no external resource references) so the client-side canvas PNG export is
-// not tainted by a cross-origin load (docs/NAMECARD.md §8.2).
+// not tainted by a cross-origin load (docs/specs/features/namecards.md §8.2).
 //
 // Source asset: public/swa-logo.webp — the SAME logo used by the admin nav
 // (src/layouts/AdminLayout.astro:64) and the PayNow QR overlay

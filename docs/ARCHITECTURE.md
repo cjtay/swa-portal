@@ -396,7 +396,7 @@ Shared behaviour:
 ## 10. Namecards (board-only)
 
 The feature launched in July 2026, was hidden on 22-08-2026 after the security audit, and
-was restored on 23-08-2026 under strict rules. The spec is `docs/NAMECARD.md` v2.2.
+was restored on 23-08-2026 under strict rules. The spec is `docs/specs/features/namecards.md` v2.2.
 
 The rules:
 
@@ -472,6 +472,11 @@ Read in this order; each file teaches you the next one.
 10. `AGENTS.md` — the project's operating manual.
 
 ## 14. Keeping this document current
+
+This file describes **how the system is built**. What each feature must do,
+and who may use it, lives in the specs: `docs/specs/SWAPortal-Functional-Specs.md`
+(core: roles, access matrix, conventions) plus one file per feature under
+`docs/specs/features/`. Point-in-time plans and audits live in `docs/plans/`.
 
 Update this file in the same commit when a change adds or removes: routes, tables, roles,
 page groups, bindings, or rate limits. Refresh the counts in section 1 and the

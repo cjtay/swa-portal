@@ -3,6 +3,11 @@
 This is the rulebook for adding a fourth public form (after volunteer,
 membership and laughter-yoga). Read it fully before writing any code.
 
+> **Docs rule** (all features, not just forms): a new feature means one row
+> in the feature matrix in `docs/specs/SWAPortal-Functional-Specs.md` plus
+> one spec file in `docs/specs/features/` (template in that file's §5).
+> Update them in the same commit as the code.
+
 ## The one big rule
 
 **Never copy an existing form file and change the table name.** The three

@@ -1,5 +1,7 @@
 # SWA Digital Namecard System - Technical & Functional Specification
 
+> **This is the namecards feature spec** in the per-feature specs structure (moved from `docs/NAMECARD.md`, 2026-08-23). The portal-side `/namecards` admin page and self-service panel are covered in §9; the public `/c/*` surface in §5.
+>
 > ✅ **FEATURE RESTORED — 23-08-2026, board-only with guardrails.** The
 > public `/c/*` card pages are live again, changed as follows from the
 > original build:
@@ -650,7 +652,7 @@ Requirement 4 mandates removing all namecard code from `swa2024`. The following 
 - `src/content.config.ts`: remove namecard-only schema fields from the `members` collection: `hasNamecard`, `showOnWebsite` (if namecard-gated), `jobTitle`, `whatsapp`, `address`, and the social fields (`facebook`, `linkedIn`, `ig`, `tiktok`, `yt`), plus the `email`/`mobile` fields if they were namecard-only. Keep `name`, `role`, `description`, `sortOrder`, `photo`, `photoAlt` if still used by the public members listing.
 - Every `src/content/members/*.md`: strip the same frontmatter keys. (The body biography text can stay if it is still rendered on the public site; only the namecard-only keys go.)
 - `NameCardLayout.astro` imports and any references in other components/pages (grep `NameCard`, `namecard`).
-- `docs/NAMECARD.md` in swa2024: replace with a short pointer ("Digital namecards have moved to the `swa-portal` Worker. See `swa-portal/docs/NAMECARD.md`.") rather than deleting, so old links still resolve.
+- `docs/NAMECARD.md` in swa2024: replace with a short pointer ("Digital namecards have moved to the `swa-portal` Worker. See `swa-portal/docs/specs/features/namecards.md`.") rather than deleting, so old links still resolve.
 - Redirects: see §17.2.
 
 ### 14.3 Verification before delete

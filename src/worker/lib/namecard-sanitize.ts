@@ -1,6 +1,6 @@
 // URL scheme allow-list, WhatsApp normalisation, and vCard value escaping
 // for namecard fields. All validation happens server-side on write (see
-// docs/NAMECARD.md §6.5) — the client cannot be trusted.
+// docs/specs/features/namecards.md §6.5) — the client cannot be trusted.
 
 const SAFE_URL_SCHEMES = new Set(['http:', 'https:']);
 

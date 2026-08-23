@@ -5,11 +5,11 @@
 //      `has_namecard = 1` AND the member is NOT soft-deleted. The DB join
 //      enforces both in a single query.
 //   2. Cache headers: the public photo is edge-cached with long immutable
-//      directives — see docs/NAMECARD.md §8.3. This DIFFERS from the
+//      directives — see docs/specs/features/namecards.md §8.3. This DIFFERS from the
 //      authenticated membership-reg image handler (private, 1h) and the
 //      difference is deliberate.
 //
-// See docs/NAMECARD.md §8.3, §9.1.
+// See docs/specs/features/namecards.md §8.3, §9.1.
 
 import type { Env } from '../types';
 import { NAMECARD_BOARD_CATEGORIES } from '../../constants/portal';

@@ -3,7 +3,7 @@
 // POST/PATCH/DELETE admin-only; GET stays open to every authenticated role
 // so the self-service panel works for committee/volunteer/advisor).
 //
-// Endpoints (docs/NAMECARD.md §9.2):
+// Endpoints (docs/specs/features/namecards.md §9.2):
 //   GET    /api/namecards                  list (joined with member identity)
 //   GET    /api/namecards/:id              single row
 //   POST   /api/namecards                  create (auto-derives slug from name)
@@ -475,7 +475,7 @@ export async function handleNamecardPhoto(c: AppContext): Promise<Response> {
       return c.json({ success: false, message: 'No photo file uploaded.' }, 400);
     }
     // Server-side enforcement regardless of what the client sent
-    // (docs/NAMECARD.md §4.2).
+    // (docs/specs/features/namecards.md §4.2).
     if (file.size > NAMECARD_PHOTO_MAX_BYTES) {
       return c.json(
         { success: false, message: 'Photo must be 2 MB or smaller.' },

@@ -2,14 +2,14 @@
 //
 // Implements the design spec at docs/plans/Namecard-Implementation-Plan.md §1.3
 // (Lee Li Hua reference card). Where that spec conflicts with the older
-// generic sketch in docs/NAMECARD.md §8.1, the §1.3 design wins — see the
+// generic sketch in docs/specs/features/namecards.md §8.1, the §1.3 design wins — see the
 // conflicts table in the plan.
 //
 // ──────────────────────────────────────────────────────────────────────────
 // CRITICAL — every visual asset is INLINED
 // ──────────────────────────────────────────────────────────────────────────
 // The card SVG is converted to a PNG client-side via canvas + `toDataURL`
-// (docs/NAMECARD.md §8.2). Any external resource reference (`<img href>`,
+// (docs/specs/features/namecards.md §8.2). Any external resource reference (`<img href>`,
 // `@import`, `url(...)`) taints the canvas and silently breaks the export
 // with a SecurityError. Every asset — photo, logo badge, font — must be a
 // data URI or inline. The renderCardSvg output must contain zero `http://`,
@@ -75,7 +75,7 @@ const CONTACT_SIZE = 17;
  * The result is a single `<svg>` element, 1050×600, with every asset inlined
  * (no external URL references). Suitable for:
  *   - serving at GET /c/:slug/card.svg
- *   - client-side canvas → PNG export (docs/NAMECARD.md §8.2)
+ *   - client-side canvas → PNG export (docs/specs/features/namecards.md §8.2)
  */
 export function renderCardSvg(opts: RenderCardSvgOptions): string {
   const { member, namecard } = opts;

@@ -12,6 +12,44 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-23 (session 8) — Specs reorganisation: core + per-feature docs
+
+Owner decision: split the single 800-line functional spec. The docs folder
+had already fragmented ad hoc (membership-form/, volunteer-form/, NAMECARD.md)
+without a convention, and the big file carried stale v1.0 content plus a
+confusingly named duplicate.
+
+### Done
+- **New structure**: `docs/specs/SWAPortal-Functional-Specs.md` rewritten
+  as the v2.0 CORE (~230 lines: roles, permission groups, access
+  conventions, feature×role matrix with links, auth, doc conventions,
+  error codes). Per-feature specs in `docs/specs/features/`: approvals.md,
+  gala-registration.md, members.md, office-booking.md, public-forms.md,
+  namecards.md (+ the moved membership-form/ and volunteer-form/ folders).
+- **Moved**: `docs/NAMECARD.md` → `features/namecards.md` (content
+  unchanged + header pointer); the two form folders under features/ via
+  git mv; `docs/registration/` stays (point-in-time records, linked).
+- **Renamed**: `SWAPortal-Functional-Specification.md` →
+  `SWAPortal-Owner-Guide.md` with a disambiguation header.
+- **Stale content dropped in the rewrite**: old website-sync/namecard
+  sections, dropped members columns (slug, show_on_website, socials —
+  migration 006), the outdated "future features" tentative tables.
+- **Boundary stated** (ARCHITECTURE §14 + core §5): ARCHITECTURE = how
+  it's built; specs = what it must do + who may do it; plans = owner
+  decisions in time; Owner-Guide = non-technical narrative.
+- **New-feature rule** added to AGENTS.md + how-to-add-a-form.md: one
+  matrix row + one feature spec file, same commit as the code.
+- **References fixed**: ~20 `docs/NAMECARD.md` citations in src comments,
+  AGENTS, ARCHITECTURE, the namecard plan's relative links.
+  Point-in-time docs (ARCHITECTURE-ANALYSIS, old progress entries) keep
+  their historical paths.
+
+### Verification
+- Link sweep: no remaining references to old paths outside historical
+  records. Docs-only change — no tests needed; suite untouched.
+
+---
+
 ## 2026-08-23 (session 7) — Approval workflow Phase 5 (finish) + test-stall root cause
 
 Plan: `docs/plans/Approval-Workflow-Implementation-Plan.md` §14 Phase 5.
@@ -39,6 +77,11 @@ paid → export.
   designed.
 - Tests: +9 (paid happy/optional-ref/validation/409s/403, CSV gates +
   format incl. formula-cell neutralisation). 220 total.
+- Docs: ARCHITECTURE.md (82 routes, 26 pages, 220 tests, Phase 5
+  paragraph); functional specs updated to v1.1 with the full approvals
+  module (permission groups §2.3, API matrix §3.4, feature spec §5.11,
+  UI rules §6.10, tables §7.6–7.8, key files). Known stale v1.0 content
+  remains (Website Sync rows, dropped members columns) — separate task.
 
 ### Test-stall root cause (the session-6 note, investigated)
 - Symptom: `npm run test:run` sometimes hung forever AFTER tests finished

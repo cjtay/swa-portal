@@ -7,7 +7,7 @@
 // vCard text produces large QR payloads that scan poorly. A URL QR is small,
 // scans fast, and degrades gracefully (the visitor lands on a normal page).
 //
-// See docs/NAMECARD.md §7.1.
+// See docs/specs/features/namecards.md §7.1.
 
 export type QrVariant = 'vcf' | 'page';
 

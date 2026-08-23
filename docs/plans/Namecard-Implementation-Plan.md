@@ -3,10 +3,10 @@
 > **STATUS 23-08-2026: EXECUTED, THEN RESTORED UNDER NEW RULES.** All six phases shipped in
 > July 2026. The feature was hidden on 22-08-2026 after the security audit, then restored
 > on 23-08-2026 as board-only (committee + advisor), auto-generated, with the SWA office
-> address on every card. For how namecards work today read [`docs/NAMECARD.md`](../NAMECARD.md)
+> address on every card. For how namecards work today read [`docs/specs/features/namecards.md`](../specs/features/namecards.md)
 > v2.2; this plan is the historical build record and does not describe the current rules.
 
-> **Source spec**: [`docs/NAMECARD.md`](../NAMECARD.md) (v2.1, 2026-07-25)
+> **Source spec**: [`docs/specs/features/namecards.md`](../specs/features/namecards.md) (v2.1, 2026-07-25)
 > **Plan date**: 2026-07-25
 > **Author**: SWA digital infrastructure
 > **Status**: Approved, ready for execution
@@ -81,7 +81,7 @@ The SWA badge logo lives in a shared `src/worker/lib/swa-monogram.ts` constant (
 
 ### 1.3 Card design spec — `Lee Li Hua` reference card
 
-The visual contract for `namecard-svg.ts`. Source: Lee Li Hua namecard (Advisor / Immediate Past President). This **supersedes** the generic layout sketch in [`docs/NAMECARD.md` §8.1](../NAMECARD.md) — where the two conflict, this spec wins. Conflicts and gaps are called out at the end of this section.
+The visual contract for `namecard-svg.ts`. Source: Lee Li Hua namecard (Advisor / Immediate Past President). This **supersedes** the generic layout sketch in [`docs/specs/features/namecards.md` §8.1](../specs/features/namecards.md) — where the two conflict, this spec wins. Conflicts and gaps are called out at the end of this section.
 
 #### Canvas
 
@@ -158,7 +158,7 @@ Font: a geometric, rounded-terminal sans-serif (single-storey `a`, circular `o`/
 - Generous negative space, especially the gap between title and divider.
 - **No website URL appears on this card.**
 
-#### Conflicts with `docs/NAMECARD.md` §8.1 — this design spec wins
+#### Conflicts with `docs/specs/features/namecards.md` §8.1 — this design spec wins
 
 | Item                                     | Spec §8.1 (generic sketch)                                                                                           | This design (chosen)                                                                                                                                                                     |
 | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -301,7 +301,7 @@ Per spec §14.1: `NameCardLayout.astro`, `NameCardActions.astro`, `MemberBioModa
 - `src/content.config.ts`: strip namecard-only schema fields (`hasNamecard`, `jobTitle`, `whatsapp`, `address`, `facebook`, `linkedIn`, `ig`, `tiktok`, `yt`); keep `name`, `role`, `description`, `sortOrder`, `photo`, `photoAlt` if still used by the public members listing.
 - ~22 member markdown files under `src/content/members/*.md`: strip the same frontmatter keys (body biography text stays if still rendered).
 - Grep-clean any remaining `NameCard` / `namecard` references.
-- `swa2024/docs/NAMECARD.md`: replace with a short pointer to `swa-portal/docs/NAMECARD.md` so old links still resolve.
+- `swa2024/docs/NAMECARD.md`: replace with a short pointer to `swa-portal/docs/specs/features/namecards.md` so old links still resolve.
 - **Redirect decision (owner)**: 301 `/namecard/*` → `https://admin.singaporewomenassociation.org/c/:slug`, or let them 404? Spec §17.2 flags this as owner-decides.
 
 ### 5.4 Verification

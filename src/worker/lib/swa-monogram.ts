@@ -2,7 +2,7 @@
 //
 // The card SVG (/c/:slug/card.svg) must be self-contained — every visual
 // asset inlined — so the client-side canvas PNG export is not tainted by a
-// cross-origin load (docs/NAMECARD.md §8.2). The logo bytes are baked into
+// cross-origin load (docs/specs/features/namecards.md §8.2). The logo bytes are baked into
 // ./swalogo-generated.ts at build time from public/swa-logo.webp (the SAME
 // asset the admin nav and the PayNow QR overlay use).
 //

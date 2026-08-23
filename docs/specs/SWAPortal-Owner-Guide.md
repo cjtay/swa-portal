@@ -1,7 +1,7 @@
-# SWA Admin Portal — Functional Specification
+# SWA Admin Portal — Owner Guide
 
-> **Version**: 2.0
-> **Date**: 2026-05-22
+> **Version**: 2.0 (owner-facing narrative; last updated 2026-05-22 — predates the approval workflow)
+> **Renamed** 2026-08-23 from "SWAPortal-Functional-Specification.md" to avoid confusion with the technical specs. The up-to-date technical reference is `docs/specs/SWAPortal-Functional-Specs.md` (core) + `docs/specs/features/`.
 > **Purpose**: Comprehensive guide to everything the SWA Admin Portal does — who uses it, how it works, and how all the pieces fit together. Written for non-technical readers with technical detail included where needed.
 >
 > **Current feature set**: Dashboard, Office Booking, Member Directory, Namecard Management, Gala Dinner Registration, Admin Settings, Authentication
