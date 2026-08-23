@@ -44,10 +44,11 @@ Headline numbers, verified 23-08-2026:
 | Thing | Count |
 |---|---|
 | Production dependencies | 2 (`astro`, `hono`) |
-| Page files | 24 (all live) |
-| Worker routes | 69 |
-| Database tables | 16 (11 live, 2 dormant, 3 staged for the approval workflow) |
-| Migration files | 10 (two share the number `005`) |
+| Page files | 25 (all live) |
+| Worker routes | 73 |
+| Database tables | 16 (14 live, 2 dormant) |
+| Migration files | 11 (two share the number `005`) |
+| Automated tests | 168 |
 | Automated tests | 148 |
 | Source lines, including tests | ~22,000 |
 
@@ -224,8 +225,10 @@ path returns 404 in production. See AGENTS.md, "Local dev login".
   — IT admins are deliberately excluded so an IT account can never approve a payment
   voucher. Item creation is gated by `canRaiseApprovalItem()` (admin tier only today).
   Both flags reach the browser via `/api/session` (`is_purchase_approver`,
-  `is_finance_approver`). Handlers re-check the finer rule per action. The tables and
-  gates exist (Phase 1); the handlers and pages ship with later phases.
+  `is_finance_approver`), which drives the Approvals nav item and the board page's
+  role gate. Phase 2 ships list, create (multipart with documents), detail and the
+  attachment stream; approve/reject, voucher and paid arrive with later phases — see
+  `docs/plans/Approval-Workflow-Implementation-Plan.md`.
 
 Handlers sometimes double-check roles as well (defence in depth). For example,
 `api/members.ts` re-checks the session role before revealing a member's dependencies.
@@ -249,7 +252,7 @@ database from `schema.sql` alone.
 | `reg_bookings` / `reg_guests` / `reg_tokens` | Gala event table bookings, guest rows, magic-link tokens | Live |
 | `namecards` | Digital card data + photo reference per member | Live, board members only (see section 10) |
 | `error_log` | Logged server errors (endpoint, message, user, request body) | Live |
-| `approval_items`, `approval_attachments`, `approval_audit_log` | Two-stage payment approvals: requests with voucher fields, uploaded documents (R2 keys), insert-only action log | Staged (migration 009, Phase 1). Handlers and pages ship with the approval workflow phases — see `docs/plans/Approval-Workflow-Implementation-Plan.md` |
+| `approval_items`, `approval_attachments`, `approval_audit_log` | Two-stage payment approvals: requests with description + voucher fields, uploaded documents (R2 keys), insert-only action log | Live (Phase 2: create, list, detail, attachment stream; audit writes begin with `item_created`). Approve/reject and voucher stages ship with later phases |
 | `membership_types` | Old fee schedule | Dormant. Kept, no longer read. |
 | `memberships` | Old per-member subscription periods | Dormant. Kept, no longer read. |
 
@@ -272,8 +275,8 @@ database from `schema.sql` alone.
 Two files share the number `005` (`005_membership_lifecycle.sql` and
 `005_pdpa_consent.sql`), so the file order does not fully tell you the apply order. The
 `namecards` table was backported into `schema.sql` on 23-08-2026, so fresh local databases
-now match production. The three approval tables (migration `009`) followed the same
-backport convention the same day.
+now match production. The three approval tables (migration `009`) and the `description`
+column (migration `010`) followed the same backport convention the same day.
 
 ## 7. Folder map
 
@@ -285,11 +288,12 @@ src/
 ├── layouts/AdminLayout.astro    ← shared page shell + top navigation + logout
 ├── scripts/auth-gate.ts         ← browser-side "am I logged in?" helper
 ├── styles/                      ← admin.css, membership-form.css, volunteer-form.css
-├── pages/                       ← 24 page files, all live
+├── pages/                       ← 25 page files, all live
 │   ├── index.astro              ← dashboard
 │   ├── login.astro              ← standalone login (deliberately no AdminLayout)
 │   ├── members.astro            ← member directory
 │   ├── office-booking.astro     ← booking calendar
+│   ├── approvals.astro          ← approval board (tabs + drawer + create form)
 │   ├── events.astro             ← events landing
 │   ├── namecards.astro          ← namecard management + self-service panel
 │   ├── admin/forms/…            ← view, export, approve/reject public form submissions
@@ -342,8 +346,9 @@ All 69 routes registered in `src/worker/index.ts`, verified 23-08-2026.
 | `GET /api/admin/forms/laughter-yoga`, `GET …/export` (2) | Laughter-yoga submissions |
 | `GET /api/admin/forms/membership`, `GET …/export`, `GET …/image/:id/:kind`, `POST …/:id/approve`, `POST …/:id/reject` (5) | Membership submissions + approvals |
 | `GET/POST /api/namecards`, `POST /api/namecards/bulk`, `GET /api/namecards/me`, `GET/PATCH/DELETE /api/namecards/:id`, `PATCH …/:id/slug`, `PATCH …/:id/toggle`, `POST/DELETE …/:id/photo` (11) | Namecard admin + self-service |
+| `GET /api/approvals`, `POST /api/approvals`, `GET /api/approvals/:id`, `GET /api/approvals/:id/attachment/:attId` (4) | Approval workflow board: list with counts, multipart create with documents, detail, attachment stream |
 
-Totals: 19 public + 50 authenticated = 69.
+Totals: 19 public + 54 authenticated = 73.
 
 ## 9. Public registration forms
 
@@ -408,7 +413,7 @@ The rules:
 - **Two typechecks.** `npm run typecheck` runs `astro check` over the pages;
   `npm run typecheck:worker` runs `tsc` over the Worker with its own tsconfig.
 - **Tests hit a simulated Cloudflare, not mocks.** Vitest + Miniflare give the tests a real
-  fake D1/KV/R2. `npm run test:run` currently passes 148 tests. The test files share one D1
+  fake D1/KV/R2. `npm run test:run` currently passes 168 tests. The test files share one D1
   isolate, so `vitest.config.ts` runs them serially.
 - **Destructive local scripts are user-invoked only.** `db:setup`, `db:seed` and
   `db:clear:membership` never run autonomously.

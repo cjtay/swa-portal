@@ -21,6 +21,9 @@ type NavItem = {
   // If true, the item is shown only when ANY reg sub-feature is visible.
   // Used by the Events landing so it hides cleanly for users with no event role.
   eventsGroup?: boolean;
+  // If true, shown only to admins and purchase/finance approvers
+  // (approval workflow — plan §3).
+  approvalsGroup?: boolean;
   itAdminOnly?: boolean;
 };
 
@@ -30,6 +33,7 @@ const navItems: NavItem[] = [
   { href: '/namecards', label: 'Namecards', matchPrefix: ['/namecards'] },
   { href: '/office-booking', label: 'Office Booking', matchPrefix: ['/office-booking'] },
   { href: '/admin/forms', label: 'Forms', matchPrefix: ['/admin/forms'] },
+  { href: '/approvals', label: 'Approvals', matchPrefix: ['/approvals'], approvalsGroup: true },
   {
     href: '/events',
     label: 'Events',
@@ -72,6 +76,7 @@ function isCurrent(item: NavItem): boolean {
            aria-current={isCurrent(item) ? 'page' : undefined}
            data-reg-role={item.regRole ?? ''}
            data-events-group={item.eventsGroup ? 'true' : 'false'}
+           data-approvals-group={item.approvalsGroup ? 'true' : 'false'}
            data-it-admin-only={item.itAdminOnly ? 'true' : 'false'}>
           {item.label}
         </a>
@@ -101,6 +106,7 @@ function isCurrent(item: NavItem): boolean {
            aria-current={isCurrent(item) ? 'page' : undefined}
            data-reg-role={item.regRole ?? ''}
            data-events-group={item.eventsGroup ? 'true' : 'false'}
+           data-approvals-group={item.approvalsGroup ? 'true' : 'false'}
            data-it-admin-only={item.itAdminOnly ? 'true' : 'false'}>
           {item.label}
         </a>
@@ -136,6 +142,13 @@ function isCurrent(item: NavItem): boolean {
     return regRole === 'reg_admin' || regRole === 'reg_volunteer' || role === 'committee';
   }
 
+  // Approvals board — admin tier plus the purchase/finance approver lists
+  // (flags come from /api/session; plan §3). Ordinary committee members
+  // never see it: the board shows financial data.
+  function canSeeApprovals(data: SessionResponse): boolean {
+    return data.is_admin || data.is_purchase_approver || data.is_finance_approver;
+  }
+
   function updateNavVisibility(data: SessionResponse) {
     const containers = [document.getElementById('topbar-nav'), document.querySelector('.mobile-drawer nav')];
     containers.forEach((nav) => {
@@ -146,9 +159,11 @@ function isCurrent(item: NavItem): boolean {
         const itemRegRole = a.dataset.regRole || '';
         const itAdminOnly = a.dataset.itAdminOnly === 'true';
         const eventsGroup = a.dataset.eventsGroup === 'true';
+        const approvalsGroup = a.dataset.approvalsGroup === 'true';
 
         let visible = true;
         if (itAdminOnly) visible = data.is_it_admin;
+        else if (approvalsGroup) visible = canSeeApprovals(data);
         else if (eventsGroup) visible = canSeeEvents(data.role, data.regRole);
         else if (itemRegRole) visible = canSeeRegItem(itemRegRole, data.role, data.regRole);
 

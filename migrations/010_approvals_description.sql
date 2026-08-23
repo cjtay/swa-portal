@@ -1,0 +1,22 @@
+-- 010_approvals_description.sql
+--
+-- Date: 2026-08-23
+--
+-- Free-text description / justification field on approval items, so the
+-- requester can explain the purchase beyond the title and amount. Rendered
+-- in the board drawer; later phases include it (truncated) in approval
+-- emails. Owner decision 23-08-2026: optional, capped at 4000 characters
+-- (enforced in the handler, not the column).
+--
+-- Idempotent guard: D1 has no ADD COLUMN IF NOT EXISTS; the column is
+-- backported into schema.sql (009 convention), so fresh local databases
+-- never need this file. Re-applying on an already-patched database errors
+-- harmlessly.
+--
+-- Apply (OWNER, MANUAL, after a D1 backup):
+--   wrangler d1 execute swa-portal --remote --file=migrations/010_approvals_description.sql
+--
+-- Local dev:
+--   node ./node_modules/wrangler/bin/wrangler.js d1 execute swa-portal --local --file=migrations/010_approvals_description.sql
+
+ALTER TABLE approval_items ADD COLUMN description TEXT;

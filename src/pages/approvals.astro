@@ -1,0 +1,802 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+import { APPROVAL_CATEGORIES } from '../constants/portal';
+---
+
+<AdminLayout title="Approvals | SWA Admin Portal" currentPath="/approvals">
+  <h1>Approvals</h1>
+  <p style="color:var(--text-muted);margin-bottom:1.25rem;">
+    Purchase and payment approvals. The office admin raises a request with its documents;
+    purchase approvers decide first, then the finance pair checks the payment voucher.
+  </p>
+
+  <!-- Status tabs with counts (plan §11) -->
+  <div class="ap-tabs" id="ap-tabs" role="tablist" aria-label="Approval status">
+    <button type="button" class="ap-tab active" data-status="pending" role="tab" aria-selected="true">For approval <span class="ap-tab-count" data-count="pending">0</span></button>
+    <button type="button" class="ap-tab" data-status="purchase_approved" role="tab" aria-selected="false">Approved <span class="ap-tab-count" data-count="purchase_approved">0</span></button>
+    <button type="button" class="ap-tab" data-status="finance_check" role="tab" aria-selected="false">In finance check <span class="ap-tab-count" data-count="finance_check">0</span></button>
+    <button type="button" class="ap-tab" data-status="finance_approved" role="tab" aria-selected="false">Finance approved <span class="ap-tab-count" data-count="finance_approved">0</span></button>
+    <button type="button" class="ap-tab" data-status="rejected" role="tab" aria-selected="false">Rejected <span class="ap-tab-count" data-count="rejected">0</span></button>
+    <button type="button" class="ap-tab" data-status="paid" role="tab" aria-selected="false">Paid <span class="ap-tab-count" data-count="paid">0</span></button>
+    <button type="button" class="ap-tab" data-status="all" role="tab" aria-selected="false">All <span class="ap-tab-count" data-count="all">0</span></button>
+  </div>
+
+  <!-- New request (office admin only; hidden until the session confirms) -->
+  <div class="card" id="ap-create-card" style="margin-bottom:1.5rem;display:none;">
+    <h2 style="font-size:1.1rem;margin-top:0;">New request</h2>
+    <form id="ap-create-form" enctype="multipart/form-data">
+      <div class="ap-form-grid">
+        <label class="ap-field">
+          <span>Category</span>
+          <select id="ap-category" class="form-input" required>
+            {APPROVAL_CATEGORIES.map((cat) => (
+              <option value={cat.key} data-requires-approval={cat.requiresApproval ? 'true' : 'false'}>{cat.label}</option>
+            ))}
+          </select>
+        </label>
+        <label class="ap-field">
+          <span>Title</span>
+          <input type="text" id="ap-title" class="form-input" maxlength="300" placeholder="e.g. 49th SWA Charity Gala Dinner 2026" required />
+        </label>
+        <label class="ap-field">
+          <span>Payable to</span>
+          <input type="text" id="ap-payee" class="form-input" maxlength="300" placeholder="Vendor or payee name" />
+        </label>
+        <label class="ap-field">
+          <span>Requested amount (S$, optional)</span>
+          <input type="number" id="ap-amount" class="form-input" min="0" max="10000000" step="0.01" placeholder="0.00" />
+        </label>
+      </div>
+
+      <label class="ap-field" style="display:block;margin-top:0.75rem;">
+        <span>Description / justification (optional, shown to approvers)</span>
+        <textarea id="ap-description" class="form-input" rows="4" maxlength="4000" placeholder="Why this purchase is needed, context for approvers, breakdown of the amount…"></textarea>
+      </label>
+
+      <label class="ap-check">
+        <input type="checkbox" id="ap-approval-required" checked />
+        <span>Approval required (purchase approvers decide before the voucher)</span>
+      </label>
+
+      <label class="ap-field" style="display:block;margin-top:0.75rem;">
+        <span>Documents — add one at a time or several at once (PDF or photos, up to 10 files, 10 MB each)</span>
+        <input type="file" id="ap-files" class="form-input" multiple accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" />
+      </label>
+      <div id="ap-files-list" aria-live="polite"></div>
+      <p id="ap-files-msg" style="margin:0.25rem 0 0;font-size:0.8rem;color:#b3261e;" hidden></p>
+
+      <!-- Comparison opt-in: appears only when files are chosen. A single
+           quotation may span several uploads (PDF + photos of the same
+           quote), so the comparison rows require an explicit tick. -->
+      <label class="ap-check" id="ap-comparison-toggle-wrap" hidden>
+        <input type="checkbox" id="ap-comparison-toggle" />
+        <span>I have multiple quotations to compare</span>
+      </label>
+
+      <!-- Comparison builder: one row per chosen file (plan §6) -->
+      <div id="ap-comparison-builder" hidden>
+        <p style="margin:0.75rem 0 0.25rem;font-weight:600;">Comparison table</p>
+        <p style="margin:0 0 0.5rem;color:var(--text-muted);font-size:0.85rem;">
+          Tick the quotations you want in the comparison and describe each one.
+          Each row links to that document for the finance check.
+        </p>
+        <div id="ap-comparison-rows"></div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:0.75rem;margin-top:1rem;flex-wrap:wrap;">
+        <button type="submit" class="btn btn-primary" id="ap-create-submit">Raise request</button>
+        <span id="ap-create-msg" style="font-size:0.85rem;color:var(--text-muted);"></span>
+      </div>
+    </form>
+  </div>
+
+  <!-- Board table -->
+  <div class="card">
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Voucher No</th>
+            <th>Date</th>
+            <th>Title</th>
+            <th>Payee</th>
+            <th>Category</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Created (SG)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="ap-list"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Detail drawer -->
+  <div class="drawer-overlay" id="ap-drawer-overlay" hidden>
+    <aside class="drawer" id="ap-drawer" role="dialog" aria-modal="true" aria-labelledby="ap-drawer-title">
+      <header class="drawer-header">
+        <h2 id="ap-drawer-title">Approval item</h2>
+        <button type="button" class="drawer-close" id="ap-drawer-close" aria-label="Close">&times;</button>
+      </header>
+      <div class="drawer-body" id="ap-drawer-body"></div>
+    </aside>
+  </div>
+</AdminLayout>
+
+<style is:global>
+  .admin-main { max-width: 1600px; }
+
+  .ap-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .ap-tab {
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text-muted);
+    border-radius: 9999px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .ap-tab:hover { border-color: var(--swa-3); color: var(--swa-2); }
+  .ap-tab.active { background: var(--swa-1); border-color: var(--swa-1); color: #fff; }
+  .ap-tab-count {
+    background: var(--swa-4);
+    color: var(--swa-2);
+    border-radius: 9999px;
+    padding: 0 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    min-width: 1.3rem;
+    text-align: center;
+  }
+  .ap-tab.active .ap-tab-count { background: rgba(255, 255, 255, 0.25); color: #fff; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 0.4rem; }
+
+  .ap-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+  .ap-field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
+  .ap-check { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+  /* display:flex would override the hidden attribute (same class of bug as
+     the 2026-07-05 drawer fix) — restore it explicitly. */
+  .ap-check[hidden] { display: none; }
+
+  .ap-comp-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .ap-comp-row:last-child { border-bottom: none; }
+  .ap-comp-name { font-size: 0.85rem; min-width: 180px; word-break: break-all; }
+
+  .ap-file-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .ap-file-row:last-of-type { border-bottom: none; }
+  .ap-file-row .ap-comp-name { min-width: 0; flex: 1; }
+  .ap-file-remove {
+    padding: 0.15rem 0.55rem;
+    font-size: 0.75rem;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: #b3261e;
+    border-radius: 0.3rem;
+    cursor: pointer;
+  }
+  .ap-file-remove:hover { border-color: #b3261e; }
+
+  .ap-chip {
+    display: inline-block;
+    padding: 0.15rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .ap-chip-pending { background: #fff3d6; color: #7a5c00; }
+  .ap-chip-purchase_approved { background: #e8f5e9; color: #1b7f3b; }
+  .ap-chip-finance_check { background: #e8f0fe; color: #1a4fa0; }
+  .ap-chip-finance_approved { background: #dff2e6; color: #0d6b3f; }
+  .ap-chip-rejected { background: #fdecea; color: #b3261e; }
+  .ap-chip-paid { background: #eceff1; color: #37474f; }
+
+  .row-view-btn {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.78rem;
+    border: 1px solid var(--swa-3);
+    background: var(--bg);
+    color: var(--swa-2);
+    border-radius: 0.3rem;
+    cursor: pointer;
+  }
+  .row-view-btn:hover { background: #f5f0f8; }
+
+  .drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 50;
+    display: flex;
+    justify-content: flex-end;
+  }
+  .drawer-overlay[hidden] { display: none; }
+  .drawer {
+    width: min(760px, 100%);
+    background: var(--bg);
+    height: 100%;
+    overflow-y: auto;
+    box-shadow: -10px 0 30px -10px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+  }
+  .drawer-header {
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 1.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 2;
+  }
+  .drawer-header h2 { margin: 0; font-size: 1.15rem; color: var(--swa-2); }
+  .drawer-close {
+    background: none;
+    border: none;
+    font-size: 1.6rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+  .drawer-body { padding: 1.25rem; display: flex; flex-direction: column; gap: 1.25rem; }
+
+  .ap-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.6rem 1.25rem;
+  }
+  .ap-detail-item { font-size: 0.85rem; }
+  .ap-detail-item dt { color: var(--text-muted); margin: 0 0 0.15rem; }
+  .ap-detail-item dd { margin: 0; font-weight: 500; word-break: break-word; }
+
+  .ap-note {
+    border-left: 3px solid #b3261e;
+    background: #fdecea;
+    padding: 0.6rem 0.8rem;
+    border-radius: 0 0.3rem 0.3rem 0;
+    font-size: 0.85rem;
+  }
+
+  .ap-attachment {
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .ap-attachment-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+  }
+  .ap-attachment-name { font-size: 0.85rem; font-weight: 600; word-break: break-all; }
+  .ap-attachment-actions { display: flex; gap: 0.5rem; align-items: center; }
+  .ap-attachment-actions a {
+    font-size: 0.78rem;
+    color: var(--swa-2);
+  }
+  .ap-attachment-preview img { max-width: 100%; height: auto; border-radius: 0.3rem; }
+  .ap-attachment-preview iframe { width: 100%; height: 560px; border: 1px solid var(--border); border-radius: 0.3rem; }
+
+  .ap-comparison-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .ap-comparison-table th, .ap-comparison-table td {
+    border: 1px solid var(--border);
+    padding: 0.4rem 0.6rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  .ap-comparison-table th { background: #f5f0f8; color: var(--swa-2); }
+</style>
+
+<script>
+  import { requireAuth, type SessionResponse } from '../scripts/auth-gate';
+
+  interface ApprovalItem {
+    id: number;
+    category: string;
+    title: string;
+    payee: string | null;
+    description: string | null;
+    requested_amount: number | null;
+    approval_required: number;
+    status: string;
+    rejected_stage: string | null;
+    rejection_reason: string | null;
+    finance_rejection_reason: string | null;
+    voucher_no: string | null;
+    voucher_date: string | null;
+    created_by: string;
+    created_at: string;
+    updated_at: string;
+    comparison?: Array<{ attachmentId: number; description: string }> | null;
+  }
+
+  interface ApprovalAttachment {
+    id: number;
+    filename: string;
+    mime_type: string;
+    size: number;
+    created_at: string;
+  }
+
+  const STATUS_LABELS: Record<string, string> = {
+    pending: 'For approval',
+    purchase_approved: 'Approved',
+    finance_check: 'In finance check',
+    finance_approved: 'Finance approved',
+    rejected: 'Rejected',
+    paid: 'Paid',
+  };
+
+  // Category labels are read from the <select> options rather than an inline
+  // JSON tag: Astro treats content inside <script> tags as raw text, so an
+  // {expression} there ships unevaluated and breaks JSON.parse.
+  const CATEGORY_LABELS: Record<string, string> = (() => {
+    const out: Record<string, string> = {};
+    document.querySelectorAll<HTMLSelectElement>('#ap-category option').forEach((opt) => {
+      out[opt.value] = opt.textContent?.trim() || opt.value;
+    });
+    return out;
+  })();
+
+  let allItems: ApprovalItem[] = [];
+  let counts: Record<string, number> = {};
+  let currentTab = 'pending';
+
+  function esc(value: unknown): string {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function fmtMoney(value: number | null): string {
+    if (value === null || value === undefined) return '';
+    return 'S$' + Number(value).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function fmtDateSg(sqlite: string | null): string {
+    if (!sqlite) return '';
+    const date = new Date(sqlite.replace(' ', 'T') + 'Z');
+    if (Number.isNaN(date.getTime())) return sqlite;
+    return date.toLocaleString('en-GB', {
+      timeZone: 'Asia/Singapore',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  function fmtSize(bytes: number): string {
+    if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return Math.max(1, Math.round(bytes / 1024)) + ' KB';
+  }
+
+  function chip(status: string): string {
+    const label = STATUS_LABELS[status] || status;
+    return `<span class="ap-chip ap-chip-${esc(status)}">${esc(label)}</span>`;
+  }
+
+  // ---- Board ----------------------------------------------------------
+
+  async function loadList(): Promise<void> {
+    const res = await fetch('/api/approvals');
+    if (!res.ok) return;
+    const body = (await res.json()) as { items: ApprovalItem[]; counts: Record<string, number> };
+    allItems = body.items || [];
+    counts = body.counts || {};
+    renderCounts();
+    renderTable();
+  }
+
+  function renderCounts(): void {
+    document.querySelectorAll<HTMLSpanElement>('.ap-tab-count').forEach((el) => {
+      const key = el.dataset.count || '';
+      el.textContent = String(counts[key] ?? 0);
+    });
+  }
+
+  function renderTable(): void {
+    const tbody = document.getElementById('ap-list');
+    if (!tbody) return;
+    const items = currentTab === 'all' ? allItems : allItems.filter((i) => i.status === currentTab);
+    if (items.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:1.5rem;">No items in this view.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = items
+      .map(
+        (item) => `<tr>
+          <td>${esc(item.voucher_no || '')}</td>
+          <td>${esc(item.voucher_date || '')}</td>
+          <td>${esc(item.title)}</td>
+          <td>${esc(item.payee || '')}</td>
+          <td>${esc(CATEGORY_LABELS[item.category] || item.category)}</td>
+          <td>${esc(fmtMoney(item.requested_amount))}</td>
+          <td>${chip(item.status)}</td>
+          <td>${esc(fmtDateSg(item.created_at))}</td>
+          <td><button type="button" class="row-view-btn" data-id="${item.id}">View</button></td>
+        </tr>`,
+      )
+      .join('');
+
+    tbody.querySelectorAll<HTMLButtonElement>('.row-view-btn').forEach((btn) => {
+      btn.addEventListener('click', () => openDrawer(Number(btn.dataset.id)));
+    });
+  }
+
+  document.querySelectorAll<HTMLButtonElement>('.ap-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      currentTab = btn.dataset.status || 'all';
+      document.querySelectorAll('.ap-tab').forEach((el) => {
+        el.classList.toggle('active', el === btn);
+        el.setAttribute('aria-selected', el === btn ? 'true' : 'false');
+      });
+      renderTable();
+    });
+  });
+
+  // ---- Drawer ---------------------------------------------------------
+
+  async function openDrawer(id: number): Promise<void> {
+    const overlay = document.getElementById('ap-drawer-overlay');
+    const body = document.getElementById('ap-drawer-body');
+    const title = document.getElementById('ap-drawer-title');
+    if (!overlay || !body || !title) return;
+    body.innerHTML = '<p style="color:var(--text-muted);">Loading…</p>';
+    overlay.removeAttribute('hidden');
+    document.body.style.overflow = 'hidden';
+
+    const res = await fetch(`/api/approvals/${id}`);
+    if (!res.ok) {
+      body.innerHTML = '<p>Could not load this item.</p>';
+      return;
+    }
+    const data = (await res.json()) as { item: ApprovalItem; attachments: ApprovalAttachment[] };
+    const item = data.item;
+    const attachments = data.attachments || [];
+    title.textContent = item.title;
+
+    const detailRows: Array<[string, string]> = [
+      ['Status', chip(item.status)],
+      ['Category', esc(CATEGORY_LABELS[item.category] || item.category)],
+      ['Approval required', item.approval_required === 1 ? 'Yes' : 'No'],
+      ['Payable to', esc(item.payee || '')],
+      ['Requested amount', esc(fmtMoney(item.requested_amount))],
+      ['Voucher No', esc(item.voucher_no || '')],
+      ['Voucher date', esc(item.voucher_date || '')],
+      ['Raised by', esc(item.created_by)],
+      ['Raised at (SG)', esc(fmtDateSg(item.created_at))],
+    ];
+
+    let notesHtml = '';
+    if (item.status === 'rejected' && item.rejected_stage === 'purchase' && item.rejection_reason) {
+      notesHtml += `<div class="ap-note"><strong>Rejected at purchase stage:</strong> ${esc(item.rejection_reason)}</div>`;
+    }
+    if (item.rejected_stage === 'finance' && item.finance_rejection_reason) {
+      notesHtml += `<div class="ap-note"><strong>Rejected at finance stage:</strong> ${esc(item.finance_rejection_reason)}</div>`;
+    }
+
+    const attachmentsHtml =
+      attachments.length === 0
+        ? '<p style="color:var(--text-muted);font-size:0.85rem;">No documents attached.</p>'
+        : attachments
+            .map((att) => {
+              const url = `/api/approvals/${item.id}/attachment/${att.id}`;
+              const isImage = att.mime_type.startsWith('image/');
+              const preview = isImage
+                ? `<img src="${url}" alt="${esc(att.filename)}" loading="lazy" />`
+                : `<iframe src="${url}" title="${esc(att.filename)}" loading="lazy"></iframe>`;
+              return `<div class="ap-attachment">
+                <div class="ap-attachment-head">
+                  <span class="ap-attachment-name">${esc(att.filename)}</span>
+                  <span class="ap-attachment-actions">
+                    <span style="color:var(--text-muted);font-size:0.78rem;">${esc(fmtSize(att.size))}</span>
+                    <a href="${url}" target="_blank" rel="noopener noreferrer">Open</a>
+                    <a href="${url}?download=1">Download</a>
+                  </span>
+                </div>
+                <div class="ap-attachment-preview">${preview}</div>
+              </div>`;
+            })
+            .join('');
+
+    const comparisonRows = Array.isArray(item.comparison) ? item.comparison : [];
+    const comparisonHtml =
+      comparisonRows.length === 0
+        ? ''
+        : `<div>
+            <h3 style="font-size:1rem;margin:0 0 0.5rem;">Comparison table</h3>
+            <table class="ap-comparison-table">
+              <thead><tr><th>Quotation</th><th>Document</th></tr></thead>
+              <tbody>
+                ${comparisonRows
+                  .map((row) => {
+                    const att = attachments.find((a) => a.id === row.attachmentId);
+                    const link = att
+                      ? `<a href="/api/approvals/${item.id}/attachment/${att.id}" target="_blank" rel="noopener noreferrer">${esc(att.filename)}</a>`
+                      : '<span style="color:var(--text-muted);">Document unavailable</span>';
+                    return `<tr><td>${esc(row.description)}</td><td>${link}</td></tr>`;
+                  })
+                  .join('')}
+              </tbody>
+            </table>
+          </div>`;
+
+    body.innerHTML = `
+      ${notesHtml}
+      <dl class="ap-detail-grid">
+        ${detailRows.map(([label, value]) => `<div class="ap-detail-item"><dt>${label}</dt><dd>${value || '—'}</dd></div>`).join('')}
+      </dl>
+      ${item.description ? `<div><h3 style="font-size:1rem;margin:0 0 0.5rem;">Description</h3><p style="margin:0;font-size:0.9rem;white-space:pre-wrap;word-break:break-word;">${esc(item.description)}</p></div>` : ''}
+      <div>
+        <h3 style="font-size:1rem;margin:0 0 0.5rem;">Documents</h3>
+        ${attachmentsHtml}
+      </div>
+      ${comparisonHtml}
+    `;
+  }
+
+  function closeDrawer(): void {
+    const overlay = document.getElementById('ap-drawer-overlay');
+    if (overlay) overlay.setAttribute('hidden', '');
+    document.body.style.overflow = '';
+  }
+
+  document.getElementById('ap-drawer-close')?.addEventListener('click', closeDrawer);
+  document.getElementById('ap-drawer-overlay')?.addEventListener('click', (event) => {
+    if (event.target === document.getElementById('ap-drawer-overlay')) closeDrawer();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeDrawer();
+  });
+
+  // ---- Create form ------------------------------------------------------
+
+  const categorySelect = document.getElementById('ap-category') as HTMLSelectElement | null;
+  const approvalCheck = document.getElementById('ap-approval-required') as HTMLInputElement | null;
+  const fileInput = document.getElementById('ap-files') as HTMLInputElement | null;
+  const comparisonToggleWrap = document.getElementById('ap-comparison-toggle-wrap');
+  const comparisonToggle = document.getElementById('ap-comparison-toggle') as HTMLInputElement | null;
+  const comparisonRows = document.getElementById('ap-comparison-rows');
+  const comparisonBuilder = document.getElementById('ap-comparison-builder');
+
+  // ---- Chosen-files list ------------------------------------------------
+  // The native file picker replaces its selection on every visit, which
+  // forces users to grab everything in one go. Instead, every pick is
+  // APPENDED to this list (dupes and cap breaches rejected inline) and the
+  // input is cleared so the same file can be re-picked deliberately.
+  const MAX_FILES = 10; // must match APPROVAL_MAX_FILES_PER_ITEM (portal.ts)
+  const MAX_FILE_BYTES = 10 * 1024 * 1024; // must match APPROVAL_MAX_FILE_BYTES
+  let chosenFiles: File[] = [];
+  // Typed comparison text and tick states survive file list changes,
+  // keyed by name|size so adding or removing a file keeps the others' text.
+  const comparisonDraft = new Map<string, { include: boolean; desc: string }>();
+
+  function keyOf(file: File): string {
+    return `${file.name}|${file.size}`;
+  }
+
+  function showFilesMsg(text: string): void {
+    const el = document.getElementById('ap-files-msg');
+    if (!el) return;
+    el.textContent = text;
+    el.hidden = !text;
+  }
+
+  function renderFilesList(): void {
+    const list = document.getElementById('ap-files-list');
+    if (!list) return;
+    if (chosenFiles.length === 0) {
+      list.innerHTML = '';
+      return;
+    }
+    list.innerHTML =
+      chosenFiles
+        .map(
+          (file, index) => `<div class="ap-file-row">
+            <span class="ap-comp-name">${esc(file.name)} (${esc(fmtSize(file.size))})</span>
+            <button type="button" class="ap-file-remove" data-index="${index}" aria-label="Remove ${esc(file.name)}">Remove</button>
+          </div>`,
+        )
+        .join('') +
+      `<p style="margin:0.25rem 0 0;color:var(--text-muted);font-size:0.78rem;">${chosenFiles.length} of ${MAX_FILES} files</p>`;
+    list.querySelectorAll<HTMLButtonElement>('.ap-file-remove').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const index = Number(btn.dataset.index);
+        const [removed] = chosenFiles.splice(index, 1);
+        if (removed) comparisonDraft.delete(keyOf(removed));
+        showFilesMsg('');
+        renderFilesList();
+        renderComparisonBuilder();
+      });
+    });
+  }
+
+  fileInput?.addEventListener('change', () => {
+    if (!fileInput) return;
+    const picked = Array.from(fileInput.files || []);
+    fileInput.value = '';
+    for (const file of picked) {
+      if (chosenFiles.some((f) => keyOf(f) === keyOf(file))) {
+        showFilesMsg(`"${file.name}" is already in the list.`);
+        continue;
+      }
+      if (file.size > MAX_FILE_BYTES) {
+        showFilesMsg(`"${file.name}" is larger than 10 MB and was not added.`);
+        continue;
+      }
+      if (chosenFiles.length >= MAX_FILES) {
+        showFilesMsg(`At most ${MAX_FILES} files per item.`);
+        break;
+      }
+      chosenFiles.push(file);
+    }
+    renderFilesList();
+    renderComparisonBuilder();
+  });
+
+  function syncApprovalDefault(): void {
+    if (!categorySelect || !approvalCheck) return;
+    const option = categorySelect.selectedOptions[0];
+    approvalCheck.checked = option?.dataset.requiresApproval !== 'false';
+  }
+
+  categorySelect?.addEventListener('change', syncApprovalDefault);
+
+  function renderComparisonBuilder(): void {
+    if (!comparisonRows || !comparisonBuilder || !comparisonToggleWrap || !comparisonToggle) return;
+    if (chosenFiles.length === 0) {
+      // No files: hide everything comparison-related and clear the toggle.
+      comparisonToggleWrap.hidden = true;
+      comparisonToggle.checked = false;
+      comparisonBuilder.hidden = true;
+      comparisonRows.innerHTML = '';
+      return;
+    }
+    comparisonToggleWrap.hidden = false;
+    if (!comparisonToggle.checked) {
+      comparisonBuilder.hidden = true;
+      comparisonRows.innerHTML = '';
+      return;
+    }
+    comparisonBuilder.hidden = false;
+    comparisonRows.innerHTML = chosenFiles
+      .map((file, index) => {
+        const draft = comparisonDraft.get(keyOf(file));
+        const include = draft ? draft.include : true;
+        const desc = draft ? draft.desc : '';
+        return `<div class="ap-comp-row">
+          <input type="checkbox" id="ap-comp-include-${index}" data-key="${esc(keyOf(file))}" ${include ? 'checked' : ''} />
+          <label for="ap-comp-include-${index}" class="ap-comp-name">${esc(file.name)} (${esc(fmtSize(file.size))})</label>
+          <input type="text" class="form-input" data-desc="${index}" data-key="${esc(keyOf(file))}" style="flex:1;min-width:200px;" maxlength="500" value="${esc(desc)}" placeholder="e.g. Grand Copthorne — S$1,350/table, 25 tables" />
+        </div>`;
+      })
+      .join('');
+
+    // Persist edits into the drafts so the next re-render (a file added or
+    // removed) restores what was typed.
+    comparisonRows.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((box) => {
+      box.addEventListener('change', () => {
+        const key = box.dataset.key || '';
+        const draft = comparisonDraft.get(key) || { include: true, desc: '' };
+        draft.include = box.checked;
+        comparisonDraft.set(key, draft);
+      });
+    });
+    comparisonRows.querySelectorAll<HTMLInputElement>('input[data-desc]').forEach((inp) => {
+      inp.addEventListener('input', () => {
+        const key = inp.dataset.key || '';
+        const draft = comparisonDraft.get(key) || { include: true, desc: '' };
+        draft.desc = inp.value;
+        comparisonDraft.set(key, draft);
+      });
+    });
+  }
+
+  comparisonToggle?.addEventListener('change', renderComparisonBuilder);
+
+  document.getElementById('ap-create-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const msg = document.getElementById('ap-create-msg');
+    const submit = document.getElementById('ap-create-submit') as HTMLButtonElement | null;
+    if (!msg || !submit) return;
+    msg.textContent = '';
+    msg.style.color = 'var(--text-muted)';
+
+    const form = new FormData();
+    if (categorySelect) form.append('category', categorySelect.value);
+    form.append('title', (document.getElementById('ap-title') as HTMLInputElement).value.trim());
+    form.append('payee', (document.getElementById('ap-payee') as HTMLInputElement).value.trim());
+    form.append('requestedAmount', (document.getElementById('ap-amount') as HTMLInputElement).value.trim());
+    const descriptionEl = document.getElementById('ap-description') as HTMLTextAreaElement | null;
+    if (descriptionEl) form.append('description', descriptionEl.value.trim());
+    if (approvalCheck) form.append('approvalRequired', approvalCheck.checked ? 'true' : 'false');
+
+    for (const file of chosenFiles) form.append('files', file);
+
+    const comparison: Array<{ file: string; description: string }> = [];
+    if (comparisonToggle?.checked) {
+      comparisonRows?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((box) => {
+        if (!box.checked) return;
+        const key = box.dataset.key || '';
+        const file = chosenFiles.find((f) => keyOf(f) === key);
+        if (!file) return;
+        const row = box.closest('.ap-comp-row');
+        const desc = row?.querySelector<HTMLInputElement>('input[data-desc]')?.value.trim() || '';
+        if (desc) comparison.push({ file: file.name, description: desc });
+      });
+    }
+    if (comparison.length > 0) form.append('comparison', JSON.stringify(comparison));
+
+    submit.disabled = true;
+    try {
+      const res = await fetch('/api/approvals', { method: 'POST', body: form });
+      const body = (await res.json()) as { success: boolean; message?: string };
+      if (res.ok && body.success) {
+        msg.style.color = '#1b7f3b';
+        msg.textContent = 'Request raised.';
+        (document.getElementById('ap-create-form') as HTMLFormElement).reset();
+        chosenFiles = [];
+        comparisonDraft.clear();
+        showFilesMsg('');
+        renderFilesList();
+        renderComparisonBuilder();
+        syncApprovalDefault();
+        await loadList();
+      } else {
+        msg.style.color = '#b3261e';
+        msg.textContent = body.message || 'Could not raise the request.';
+      }
+    } catch {
+      msg.style.color = '#b3261e';
+      msg.textContent = 'Network error. Please try again.';
+    } finally {
+      submit.disabled = false;
+    }
+  });
+
+  // ---- Boot -------------------------------------------------------------
+
+  requireAuth({
+    onAuthenticated(data: SessionResponse) {
+      const createCard = document.getElementById('ap-create-card');
+      if (createCard) createCard.style.display = data.is_admin ? '' : 'none';
+      syncApprovalDefault();
+      void loadList();
+    },
+  });
+</script>

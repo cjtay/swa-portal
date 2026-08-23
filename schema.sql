@@ -330,8 +330,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_namecards_member_id ON namecards(member_id
 CREATE INDEX        IF NOT EXISTS idx_namecards_visible   ON namecards(has_namecard) WHERE has_namecard = 1;
 
 -- ============================================================
--- Approval workflow (backported from migration 009 so schema.sql is a
--- complete baseline for fresh local databases — Phase 1, 2026-08-23).
+-- Approval workflow (backported from migrations 009 + 010 so
+-- schema.sql is a complete baseline for fresh local databases —
+-- Phase 1, 2026-08-23; description column added same day).
 --
 -- Two-stage payment approvals: purchase (Roxanne/Angela), then finance
 -- (YS/Joyce). Spec: docs/plans/Approval-Workflow-Implementation-Plan.md.
@@ -363,6 +364,7 @@ CREATE TABLE IF NOT EXISTS approval_items (
   payment_method            TEXT,
   payment_reference         TEXT,
   created_by                TEXT NOT NULL,
+  description               TEXT,
   comparison                TEXT,
   created_at                TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at                TEXT NOT NULL DEFAULT (datetime('now'))

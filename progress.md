@@ -12,6 +12,78 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-23 (session 4) — Approval workflow Phase 2 (items and the board)
+
+Plan: `docs/plans/Approval-Workflow-Implementation-Plan.md` §14 Phase 2.
+
+### Done
+- **`src/worker/api/approvals.ts`** (new): `GET /api/approvals?status=` (board
+  list + per-status counts), `POST /api/approvals` (multipart create: fields,
+  up to 10 files, comparison rows), `GET /api/approvals/:id` (detail with
+  parsed comparison), `GET /api/approvals/:id/attachment/:attId` (R2 stream,
+  `?download=1`, nosniff + sanitised Content-Disposition).
+- **Create flow**: INSERT item → R2 uploads under `approvals/<id>/` → one
+  D1 batch of attachment rows + the `item_created` audit row (plan §8:
+  audit lands with the state change) → comparison stored with real
+  attachment ids per §6. Recurring categories start at `purchase_approved`;
+  `approvalRequired` flips the per-item default.
+- **File safety** (plan §9): allowlist PDF/JPG/PNG/WebP/HEIC/HEIF
+  (+ `image/jpg` alias, membership precedent), HTML and SVG always
+  rejected, 10 MB per file, 10 files per item. Filenames are
+  percent-decoded before sanitising (browsers encode `"` as %22).
+- **`src/pages/approvals.astro`** (new): board with seven count-badged
+  tabs, item table, read-only drawer (images inline, PDFs in iframes,
+  comparison table with links), create form with per-file comparison
+  builder. Admin-only create card; page gate redirects non-approvers.
+- **AdminLayout**: "Approvals" nav item, visible to admin or either
+  approver flag (the Phase 1 deferral).
+- **Tests**: `approvals.test.ts` — 20 tests: role gates (plain committee
+  403, both approvers read, finance cannot create), create validation
+  (category defaults, override, HTML/SVG/oversize/11-file rejection,
+  comparison mapping + phantom-file rejection), counts + status filter,
+  detail, attachment stream headers (inline vs download, sanitised
+  filename, cross-item 404). Admin identities rotate to stay under the
+  approvals:write rate limit.
+- Docs: ARCHITECTURE.md (73 routes, 25 pages, 16 tables live, 168 tests).
+
+### Not done (by design — later phases)
+- Phase 3: approve/reject, edit + resubmit, emails, remind button.
+- Phase 4: voucher form, numbering, finance stage. Phase 5: paid step,
+  voucher export page, audit CSV.
+
+### Session 4 addendum — form improvements + two fixes (same day)
+
+- **Description field**: optional textarea (4,000-char cap) on the create
+  form — requester writes justification/context for approvers; stored on
+  `approval_items.description` (migration 010, backported into
+  `schema.sql`), rendered in the drawer, included in the detail API.
+  Phase 3 should include it (truncated) in approval emails.
+- **Comparison table is now opt-in**: a new "I have multiple quotations to
+  compare" checkbox appears only when files are chosen; the per-file
+  description rows appear only when it is ticked (a single quotation may
+  span several uploads). Unticking clears the rows. Server still accepts
+  comparison rows for any category (gate is UI-only).
+- **CSP fix**: `public/_headers` `frame-src` gained `'self'` — the drawer's
+  PDF iframe was blocked by the CSP (images were fine via img-src).
+- **Page-script fix**: category labels are read from the `<select>` options
+  instead of an inline JSON tag (Astro ships `{expression}` inside
+  `<script>` unevaluated, which killed the whole page script).
+- **Upload UX**: files now accumulate across multiple picker visits (the
+  native input replaces its selection each time); chosen files render as a
+  removable list with an "n of 10" counter, 10-file/10-MB caps enforced
+  inline with messages, and typed comparison text + tick states survive
+  adding/removing files (drafts keyed by name|size). Submit sends the
+  accumulated list; server behaviour unchanged.
+- Tests: +3 (description round-trip, 4000-char cap, files-without-
+  comparison regression).
+
+### Verification
+- `npm run test:run` 168 passed; `npm run typecheck` 0 errors;
+  `npm run typecheck:worker` clean. Manual smoke in `npm run dev:worker`
+  still owed (log in as Jolene, raise an item, check the board).
+
+---
+
 ## 2026-08-23 (session 3) — Approval workflow Phase 1 (foundation)
 
 Plan: `docs/plans/Approval-Workflow-Implementation-Plan.md` (v2). Phase 1 is

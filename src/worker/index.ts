@@ -43,6 +43,12 @@ import {
   handleNamecardToggle,
   handleNamecardMe,
 } from './api/namecards';
+import {
+  handleApprovalsList,
+  handleApprovalsCreate,
+  handleApprovalDetail,
+  handleApprovalAttachment,
+} from './api/approvals';
 
 const app = new Hono<AppEnv>();
 
@@ -180,5 +186,16 @@ app.patch('/api/namecards/:id/slug', handleNamecardSlug);
 app.patch('/api/namecards/:id/toggle', handleNamecardToggle);
 app.post('/api/namecards/:id/photo', handleNamecardPhoto);
 app.delete('/api/namecards/:id/photo', handleNamecardPhoto);
+
+// ── Approval workflow (two-stage payment approvals) ────────────────────────
+//
+// Entry gated by middleware gate 7c: admin, purchase approver, or finance
+// approver for all methods. Handlers enforce the finer rules.
+// NOTE: when the Phase 5 audit export (GET /api/approvals/audit/export)
+// lands, register it BEFORE the /:id routes — Hono matches in order.
+app.get('/api/approvals', handleApprovalsList);
+app.post('/api/approvals', handleApprovalsCreate);
+app.get('/api/approvals/:id', handleApprovalDetail);
+app.get('/api/approvals/:id/attachment/:attId', handleApprovalAttachment);
 
 export default app;
