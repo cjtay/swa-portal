@@ -1,6 +1,7 @@
 # SWA Portal — AI Agent Guide
 
 ## Quick Start
+
 ```bash
 npm install              # Install dependencies
 npm run dev              # Astro dev server at localhost:4321
@@ -24,6 +25,7 @@ See `docs/plans/SWAPortal-Implementation-Plan.md` for full progress tracker.
 See `docs/specs/SWAPortal-Functional-Specs.md` for role access matrix, API permissions, and feature specifications.
 
 ## Core Rules
+
 - **British English** spelling (organise, programme, colour)
 - **SWA brand colours** — purple palette: `swa-1 #70308c`, `swa-2 #450a5e`, `swa-3 #874ba1`, `swa-4 #f3d2ff`, `swa-5` (see `src/styles/admin.css`)
 - **Auth system** — OTP via email, HMAC-signed sessions in cookies (`swa_session`)
@@ -43,15 +45,16 @@ See `docs/specs/SWAPortal-Functional-Specs.md` for role access matrix, API permi
 
 Three tiers. See `docs/specs/SWAPortal-Functional-Specs.md` for the full access matrix.
 
-| Role | How determined | What they can do |
-|------|---------------|------------------|
-| **IT Admin** | Email in `IT_ADMIN_EMAILS` (hardcoded) | Everything admin can do + infrastructure features |
-| **Admin** | D1 `members.category = 'admin'` with `can_login=1` | Full CRUD on members, can cancel any booking |
-| **Committee** | D1 `members.category = 'committee'` (or `'advisor'`) with `can_login=1` | Read members, create/cancel own bookings |
+| Role          | How determined                                                          | What they can do                                  |
+| ------------- | ----------------------------------------------------------------------- | ------------------------------------------------- |
+| **IT Admin**  | Email in `IT_ADMIN_EMAILS` (hardcoded)                                  | Everything admin can do + infrastructure features |
+| **Admin**     | D1 `members.category = 'admin'` with `can_login=1`                      | Full CRUD on members, can cancel any booking      |
+| **Committee** | D1 `members.category = 'committee'` (or `'advisor'`) with `can_login=1` | Read members, create/cancel own bookings          |
 
 **Login eligibility**: `can_login = 1` in D1 members table. Email domain does not matter.
 
 ## Architecture
+
 - **Astro static build** for pages, **Hono worker** for API routes
 - **Cloudflare Workers** deployment with D1 (database), KV (sessions/OTP), R2 (uploads)
 - Auth files ported from GTW project — see `src/worker/` and `src/scripts/auth-gate.ts`
@@ -66,37 +69,39 @@ Three tiers. See `docs/specs/SWAPortal-Functional-Specs.md` for the full access 
 
 ## Cloudflare Resources
 
-| Resource | Name | ID |
-|---|---|---|
-| D1 database | `swa-portal` | `b8ca063c-6767-445c-a42e-d092daf80fc4` |
-| KV namespace | `SWA_SESSION` | `ddb93996417c4476ac0f90ddf1eb332d` |
-| KV namespace | `SWA_CONFIG` | `663295deb2f94800986e3dfe6f8ea230` |
-| R2 bucket | `swa-portal-uploads` | — |
-| Worker | `swa-portal` | — |
+| Resource     | Name                 | ID                                     |
+| ------------ | -------------------- | -------------------------------------- |
+| D1 database  | `swa-portal`         | `b8ca063c-6767-445c-a42e-d092daf80fc4` |
+| KV namespace | `SWA_SESSION`        | `ddb93996417c4476ac0f90ddf1eb332d`     |
+| KV namespace | `SWA_CONFIG`         | `663295deb2f94800986e3dfe6f8ea230`     |
+| R2 bucket    | `swa-portal-uploads` | —                                      |
+| Worker       | `swa-portal`         | —                                      |
 
 Secrets: `OTP_SECRET`, `SESSION_SECRET`, `RESEND_API_KEY` (set interactively via `wrangler secret put`)
 
 ## Key Files
 
-| File | Purpose |
-|---|---|
-| `src/worker/index.ts` | Hono app entry, route registration |
-| `src/worker/middleware.ts` | Auth middleware (admin/committee tiers) |
-| `src/worker/api/send-otp.ts` | Generate + email OTP (D1 can_login check) |
-| `src/worker/api/verify-otp.ts` | Verify OTP + create session cookie (D1 name lookup) |
-| `src/worker/api/session.ts` | Read current session from `swa_session` cookie |
-| `src/worker/api/members.ts` | Member CRUD API (includes `can_login`, membership lifecycle fields) |
-| `src/worker/api/bookings.ts` | Office booking CRUD API |
-| `src/worker/lib/rate-limit.ts` | General-purpose authenticated endpoint rate limiting |
+| File                             | Purpose                                                                                                                                  |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `docs/ARCHITECTURE.md`           | Living architecture reference (stack, auth, roles, tables, routes). Update it in the same commit as any structural change.               |
+| `src/worker/index.ts`            | Hono app entry, route registration                                                                                                       |
+| `src/worker/middleware.ts`       | Auth middleware (admin/committee tiers)                                                                                                  |
+| `src/worker/api/send-otp.ts`     | Generate + email OTP (D1 can_login check)                                                                                                |
+| `src/worker/api/verify-otp.ts`   | Verify OTP + create session cookie (D1 name lookup)                                                                                      |
+| `src/worker/api/session.ts`      | Read current session from `swa_session` cookie                                                                                           |
+| `src/worker/api/members.ts`      | Member CRUD API (includes `can_login`, membership lifecycle fields)                                                                      |
+| `src/worker/api/bookings.ts`     | Office booking CRUD API                                                                                                                  |
+| `src/worker/lib/rate-limit.ts`   | General-purpose authenticated endpoint rate limiting                                                                                     |
 | `src/worker/lib/session-role.ts` | Shared `resolveSessionRole` — single source of truth for the IT-admin/admin/volunteer/committee mapping (used by verify-otp + dev-login) |
-| `src/constants/portal.ts` | `IT_ADMIN_EMAILS`, session config, OTP TTL, rate limit constants, `DEV_LOGOUT_COOKIE_NAME` |
-| `src/pages/login.astro` | Standalone login (NO AdminLayout — avoids redirect loop). Renders the dev role-picker when `/api/dev/members` succeeds |
-| `src/worker/api/dev-login.ts` | Dev-only role picker: `GET /api/dev/members` + `POST /api/dev/login`. Both 404 in prod (guarded by `isDevBypassActive`) |
-| `src/layouts/AdminLayout.astro` | Topbar nav with auth gate |
-| `schema.sql` | D1 schema with `can_login`, `membership_status`, `fee_due_date`, `fee_waived`, `error_log` |
-| `seed-members.sql` | 14 dummy members (12 board + 2 admin) for local dev only |
+| `src/constants/portal.ts`        | `IT_ADMIN_EMAILS`, session config, OTP TTL, rate limit constants, `DEV_LOGOUT_COOKIE_NAME`                                               |
+| `src/pages/login.astro`          | Standalone login (NO AdminLayout — avoids redirect loop). Renders the dev role-picker when `/api/dev/members` succeeds                   |
+| `src/worker/api/dev-login.ts`    | Dev-only role picker: `GET /api/dev/members` + `POST /api/dev/login`. Both 404 in prod (guarded by `isDevBypassActive`)                  |
+| `src/layouts/AdminLayout.astro`  | Topbar nav with auth gate                                                                                                                |
+| `schema.sql`                     | D1 schema with `can_login`, `membership_status`, `fee_due_date`, `fee_waived`, `error_log`                                               |
+| `seed-members.sql`               | 14 dummy members (12 board + 2 admin) for local dev only                                                                                 |
 
 ## Deployment
+
 - **Platform**: Cloudflare Workers + Hono
 - **Deploy**: `npm run deploy`
 - **Dev URL**: `swa-portal.cjtay-4e0.workers.dev`
@@ -104,6 +109,7 @@ Secrets: `OTP_SECRET`, `SESSION_SECRET`, `RESEND_API_KEY` (set interactively via
 - **Secrets**: `npx wrangler secret put OTP_SECRET --name swa-portal`, `SESSION_SECRET`, and `RESEND_API_KEY`
 
 ## Critical Gotchas
+
 1. **`workers_dev: true`** must be in `wrangler.jsonc` — without it, workers.dev returns error 1042
 2. **Login page must NOT use AdminLayout** — causes infinite redirect loop
 3. **D1 `ALTER TABLE ADD COLUMN`** doesn't support `UNIQUE` — add column first, then `CREATE UNIQUE INDEX`
@@ -113,6 +119,7 @@ Secrets: `OTP_SECRET`, `SESSION_SECRET`, `RESEND_API_KEY` (set interactively via
 7. **Astro 7 stricter HTML** — the Rust compiler throws hard errors on unclosed tags (the old Go compiler silently auto-closed them). `AdminLayout.astro` previously omitted `</body></html>` and had to be fixed on upgrade. Always close all non-void elements. Also, `compressHTML` defaults to `'jsx'` (strips whitespace between adjacent inline elements) — rely on flex/grid `gap` or explicit `{' '}` for inline spacing.
 
 ## Response Style
+
 - Be concise — no preamble or postamble
 - Output code directly when implementing changes
 - Explain only when asked or when decisions are non-obvious

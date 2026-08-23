@@ -1,5 +1,11 @@
 # Digital Namecard — Implementation Plan
 
+> **STATUS 23-08-2026: EXECUTED, THEN RESTORED UNDER NEW RULES.** All six phases shipped in
+> July 2026. The feature was hidden on 22-08-2026 after the security audit, then restored
+> on 23-08-2026 as board-only (committee + advisor), auto-generated, with the SWA office
+> address on every card. For how namecards work today read [`docs/NAMECARD.md`](../NAMECARD.md)
+> v2.2; this plan is the historical build record and does not describe the current rules.
+
 > **Source spec**: [`docs/NAMECARD.md`](../NAMECARD.md) (v2.1, 2026-07-25)
 > **Plan date**: 2026-07-25
 > **Author**: SWA digital infrastructure
@@ -14,15 +20,15 @@ The design adds **zero** new Cloudflare resources (no new D1/KV/R2/Worker/DNS). 
 
 ## Phases at a glance
 
-| Phase | Scope | Outcome |
-|---|---|---|
-| 0 | Test harness | `npm test` works; Miniflare bindings wired |
-| 1 | Migration + pure libs (no UI) | `namecards` table + tested slug/sanitize/vcard/svg/qr helpers |
-| 2 | Public `/c/*` routes | Public surface live but empty |
-| 3 | Admin `/api/namecards/*` + `pages/namecards.astro` + nav | Admins can populate cards |
-| 4 | Atomic member soft-delete → card dark | Transaction enforced |
-| 5 | `swa2024` cleanup PR | Old namecard code removed |
-| 6 | Owner-run go-live + manual smoke | Cards visible in production |
+| Phase | Scope                                                    | Outcome                                                       |
+| ----- | -------------------------------------------------------- | ------------------------------------------------------------- |
+| 0     | Test harness                                             | `npm test` works; Miniflare bindings wired                    |
+| 1     | Migration + pure libs (no UI)                            | `namecards` table + tested slug/sanitize/vcard/svg/qr helpers |
+| 2     | Public `/c/*` routes                                     | Public surface live but empty                                 |
+| 3     | Admin `/api/namecards/*` + `pages/namecards.astro` + nav | Admins can populate cards                                     |
+| 4     | Atomic member soft-delete → card dark                    | Transaction enforced                                          |
+| 5     | `swa2024` cleanup PR                                     | Old namecard code removed                                     |
+| 6     | Owner-run go-live + manual smoke                         | Cards visible in production                                   |
 
 ---
 
@@ -61,13 +67,13 @@ The repo has no test framework today (verified at planning time: zero `*.test.*`
 
 Each file is one cohesive unit, fully unit-tested:
 
-| File | Responsibility | Key tests |
-|---|---|---|
-| `namecard-slug.ts` | `deriveSlug(name)` (lowercase, kebab-case, ASCII-fold accents), `validateSlug(slug)` (regex), `suggestAlternatives(slug, taken)` (`slug-2`, `-3`, …) | Multi-word names; mononyms; non-ASCII; collisions produce next-free suggestion |
-| `namecard-sanitize.ts` | `isSafeUrl(url)` (scheme ∈ `http:`,`https:` only; rejects `javascript:`/`data:`/`vbscript:`/`file:`); `normalizeWhatsApp(input)`; `escapeVcard(value)` (RFC 2426 escaping) | Each rejected scheme; WhatsApp variants (`+65 9123 4567`, `65-9123-4567`, `+6591234567`) normalise identically; escape round-trips |
-| `namecard-vcard.ts` | `buildVcard({member, namecard, photoBytes?})` — vCard 3.0, CRLF line endings, 75-octet folding, `N:` from overrides else last-whitespace split, folded `PHOTO;ENCODING=b`, `REV:` from `updated_at`, `X-SOCIALPROFILE` per social | Round-trip vs fixture; comma/semicolon/newline names don't break structure; base64 folds at 75 octets; CRLF confirmed by byte inspection |
-| `namecard-svg.ts` | `renderCardSvg({member, namecard, photoDataUri?})` — 1050×600 template per the §1.3 design spec, inlined SWA badge logo (inline `<svg>` paths, **no `<img>`**), all resources inlined (required for untainted canvas export per §7.3/§8.2) | Snapshot/stable-string test on a fixture; assert no external refs in output; valid SVG |
-| `namecard-qr.ts` | `qrPayload(host, slug, variant)` — `vcf` or `page` URL per `namecards.qr_variant` | Both variants; respects `host` (dev vs prod) |
+| File                   | Responsibility                                                                                                                                                                                                                             | Key tests                                                                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `namecard-slug.ts`     | `deriveSlug(name)` (lowercase, kebab-case, ASCII-fold accents), `validateSlug(slug)` (regex), `suggestAlternatives(slug, taken)` (`slug-2`, `-3`, …)                                                                                       | Multi-word names; mononyms; non-ASCII; collisions produce next-free suggestion                                                           |
+| `namecard-sanitize.ts` | `isSafeUrl(url)` (scheme ∈ `http:`,`https:` only; rejects `javascript:`/`data:`/`vbscript:`/`file:`); `normalizeWhatsApp(input)`; `escapeVcard(value)` (RFC 2426 escaping)                                                                 | Each rejected scheme; WhatsApp variants (`+65 9123 4567`, `65-9123-4567`, `+6591234567`) normalise identically; escape round-trips       |
+| `namecard-vcard.ts`    | `buildVcard({member, namecard, photoBytes?})` — vCard 3.0, CRLF line endings, 75-octet folding, `N:` from overrides else last-whitespace split, folded `PHOTO;ENCODING=b`, `REV:` from `updated_at`, `X-SOCIALPROFILE` per social          | Round-trip vs fixture; comma/semicolon/newline names don't break structure; base64 folds at 75 octets; CRLF confirmed by byte inspection |
+| `namecard-svg.ts`      | `renderCardSvg({member, namecard, photoDataUri?})` — 1050×600 template per the §1.3 design spec, inlined SWA badge logo (inline `<svg>` paths, **no `<img>`**), all resources inlined (required for untainted canvas export per §7.3/§8.2) | Snapshot/stable-string test on a fixture; assert no external refs in output; valid SVG                                                   |
+| `namecard-qr.ts`       | `qrPayload(host, slug, variant)` — `vcf` or `page` URL per `namecards.qr_variant`                                                                                                                                                          | Both variants; respects `host` (dev vs prod)                                                                                             |
 
 The SWA badge logo lives in a shared `src/worker/lib/swa-monogram.ts` constant (inline `<svg>` paths / data URI), used by both the SVG card renderer and the client QR overlay — **never** loaded from `/swa-logo.webp`. The badge is more detailed than a simple monogram (see §1.3 "Asset gap").
 
@@ -86,11 +92,16 @@ The visual contract for `namecard-svg.ts`. Source: Lee Li Hua namecard (Advisor 
 
 ```css
 :root {
-  --bg-purple: #7A0381;      /* solid background, entire card */
-  --text-white: #FFFFFF;     /* name, title, phone, email */
-  --divider: rgba(255, 255, 255, 0.8); /* renders as pale pink-lilac over the purple */
-  --logo-bg: #FFFFFF;        /* logo badge circle */
-  --logo-ink: #6B196E;       /* purple line-art/text inside logo badge */
+	--bg-purple: #7a0381; /* solid background, entire card */
+	--text-white: #ffffff; /* name, title, phone, email */
+	--divider: rgba(
+		255,
+		255,
+		255,
+		0.8
+	); /* renders as pale pink-lilac over the purple */
+	--logo-bg: #ffffff; /* logo badge circle */
+	--logo-ink: #6b196e; /* purple line-art/text inside logo badge */
 }
 ```
 
@@ -116,12 +127,12 @@ The visual contract for `namecard-svg.ts`. Source: Lee Li Hua namecard (Advisor 
 
 Left margin for all text block content: ~94–97 px (aligned with the photo's left edge).
 
-| Element | Weight | Approx size | Colour | Notes |
-|---|---|---|---|---|
-| Name | Bold | ~40 px | white | large, first line under photo |
-| Title (e.g. "Advisor / Immediate Past President") | Regular/Light | ~20–22 px | white | sits with a noticeably large gap below the name (not tight leading) |
-| Phone | Regular | ~16–18 px | white | directly below divider |
-| Email | Regular | ~16–18 px | white | directly below phone |
+| Element                                           | Weight        | Approx size | Colour | Notes                                                               |
+| ------------------------------------------------- | ------------- | ----------- | ------ | ------------------------------------------------------------------- |
+| Name                                              | Bold          | ~40 px      | white  | large, first line under photo                                       |
+| Title (e.g. "Advisor / Immediate Past President") | Regular/Light | ~20–22 px   | white  | sits with a noticeably large gap below the name (not tight leading) |
+| Phone                                             | Regular       | ~16–18 px   | white  | directly below divider                                              |
+| Email                                             | Regular       | ~16–18 px   | white  | directly below phone                                                |
 
 Font: a geometric, rounded-terminal sans-serif (single-storey `a`, circular `o`/`e`). Best visual match: **Poppins** (Bold for name; Regular/Light for title, phone, email). Acceptable alternates: Quicksand, Nunito Sans, Comfortaa.
 
@@ -149,13 +160,13 @@ Font: a geometric, rounded-terminal sans-serif (single-storey `a`, circular `o`/
 
 #### Conflicts with `docs/NAMECARD.md` §8.1 — this design spec wins
 
-| Item | Spec §8.1 (generic sketch) | This design (chosen) |
-|---|---|---|
-| Card URL footer | "Footer: card URL `admin.singaporewomenassociation.org/c/{slug}` and a small SWA logo (inline)" | **No URL on the card.** The footer is dropped. The URL is conveyed by the QR code, the public `/c/:slug` HTML page, and the vCard — never the card image itself. |
-| Social icon strip | "Social icon strip: filled glyphs for each populated platform (inline SVG), with the platform handle or URL beneath" | **Not on the card.** Socials live on the public HTML page and the vCard `X-SOCIALPROFILE` fields, not on the card image. The card carries only name, title, phone, email. |
-| Header band | "SWA gradient header band (`#70308c` -> `#450a5e`)" | Solid `--bg-purple #7A0381` fill, no gradient, no separate header band. |
-| Logo | "SWA monogram top-left, inlined as `<svg>` paths (not `<img>`)" | The badge logo is top-right (see §1.3 "Logo badge"), not top-left, and is the full circular SWA badge with ring text + central motif + `S W A` ribbon — more detailed than a "monogram". |
-| "Singapore Women's Association" subtitle | "Name (large) ... `job_title` (medium purple), 'Singapore Women's Association' (muted)" | No standalone "Singapore Women's Association" subtitle on the card — the org name appears inside the logo badge ring. The card body shows only name + title + phone + email. |
+| Item                                     | Spec §8.1 (generic sketch)                                                                                           | This design (chosen)                                                                                                                                                                     |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Card URL footer                          | "Footer: card URL `admin.singaporewomenassociation.org/c/{slug}` and a small SWA logo (inline)"                      | **No URL on the card.** The footer is dropped. The URL is conveyed by the QR code, the public `/c/:slug` HTML page, and the vCard — never the card image itself.                         |
+| Social icon strip                        | "Social icon strip: filled glyphs for each populated platform (inline SVG), with the platform handle or URL beneath" | **Not on the card.** Socials live on the public HTML page and the vCard `X-SOCIALPROFILE` fields, not on the card image. The card carries only name, title, phone, email.                |
+| Header band                              | "SWA gradient header band (`#70308c` -> `#450a5e`)"                                                                  | Solid `--bg-purple #7A0381` fill, no gradient, no separate header band.                                                                                                                  |
+| Logo                                     | "SWA monogram top-left, inlined as `<svg>` paths (not `<img>`)"                                                      | The badge logo is top-right (see §1.3 "Logo badge"), not top-left, and is the full circular SWA badge with ring text + central motif + `S W A` ribbon — more detailed than a "monogram". |
+| "Singapore Women's Association" subtitle | "Name (large) ... `job_title` (medium purple), 'Singapore Women's Association' (muted)"                              | No standalone "Singapore Women's Association" subtitle on the card — the org name appears inside the logo badge ring. The card body shows only name + title + phone + email.             |
 
 #### Implementation notes for `namecard-svg.ts`
 
@@ -165,7 +176,7 @@ Three points must be resolved during Phase 1 implementation; flagged now so they
 
 2. **Font inlining.** Poppins (or whichever approved alternate) is not a Workers runtime asset and is not embedded in any OS by default. SVG text rendered with a missing font falls back to the platform default, breaking the design. Three options to evaluate in Phase 1:
    - **Embed the font as a base64 data URI inside `<style>@font-face { … }</style>` within the SVG** — fully self-contained, preserves the canvas-untainted guarantee, but adds ~30–60 KB per weight to every card SVG (3 weights ⇒ ~150 KB). Licence check required: Poppins is OFL, embeddable.
-   - Use a system-safe fallback stack (`Poppins, 'Segoe UI', Roboto, sans-serif`) — smallest payload, but design degrades off-platform (Linux servers, older Android), and `toDataURL` rasterisation happens on the client's browser, so the *viewer's* installed fonts are what matters, not the server's. Acceptable for the PNG export only if the member downloading is on a mainstream OS; risky for screen-reader/edge cases.
+   - Use a system-safe fallback stack (`Poppins, 'Segoe UI', Roboto, sans-serif`) — smallest payload, but design degrades off-platform (Linux servers, older Android), and `toDataURL` rasterisation happens on the client's browser, so the _viewer's_ installed fonts are what matters, not the server's. Acceptable for the PNG export only if the member downloading is on a mainstream OS; risky for screen-reader/edge cases.
    - Draw the title text as a path outline (pre-converted) — exact, but non-editable and heavier than option 1 for long names.
 
    **Recommended**: option 1 (base64-embed Poppins Bold + Regular). Revisit if SVG payload becomes a concern. Licence (SIL OFL 1.1) permits embedding.
@@ -265,7 +276,7 @@ Routes register on `app` without auth middleware — `authMiddleware` is scoped 
 
 Spec §9.4. `DELETE /api/members/:id` (`src/worker/api/members.ts:124-154`) currently issues a single `.run()` UPDATE. Refactor to `c.env.DB.batch([...])` so the member soft-delete and the `namecards.has_namecard = 0` update land in one transaction (D1 executes `batch()` as a single transaction). Pre-existing `DB.batch` precedent at `members.ts:245-254`.
 
-- The existing pre-checks (member exists, can't delete self, IT-admin emails protected) and the post-batch KV OTP-kill (`c.env.SWA_SESSION.delete(\`swa:otp:${email}\`)` at `:150`) stay as-is.
+- The existing pre-checks (member exists, can't delete self, IT-admin emails protected) and the post-batch KV OTP-kill (`c.env.SWA_SESSION.delete(\`swa:otp:${email}\`)`at`:150`) stay as-is.
 - Tests: soft-deleting a member with a namecard row atomically sets both `members.deleted_at` and `namecards.has_namecard = 0`; the public `/c/{slug}` route immediately returns the branded 404; a member without a namecard row still soft-deletes cleanly (the second UPDATE is a no-op).
 
 ---
@@ -316,15 +327,15 @@ All production steps are **owner-run, manual** per spec §0. No automation, no a
 
 ## Testing strategy summary
 
-| Layer | Tool | Coverage |
-|---|---|---|
-| Pure libs (slug, sanitize, vcard, svg, qr payload) | Vitest unit | Exhaustive — every branch and edge case |
-| Rate limiter (IP-keyed) | Vitest + Miniflare KV | Window math, sliding eviction, 60/min boundary |
-| Public `/c/*` routes | Vitest + Miniflare (D1 + R2) | HTML render, branded 404, vcf headers, svg no-external-refs, photo stream cache headers, 429 on rate limit |
-| Admin `/api/namecards/*` | Vitest + Miniflare (D1 + R2 + auth) | CRUD happy path, middleware 403 gate, slug collision 409, photo size/type rejection, `/me` scoping |
-| Soft-delete atomicity | Vitest + Miniflare D1 batch | Both rows flip together; public route immediately darks |
-| Cross-device vCard/QR import | Manual (spec §16) | iOS Safari, Android Chrome — cannot be automated |
-| Lighthouse mobile ≥ 90 | Manual | `/c/:slug` |
+| Layer                                              | Tool                                | Coverage                                                                                                   |
+| -------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Pure libs (slug, sanitize, vcard, svg, qr payload) | Vitest unit                         | Exhaustive — every branch and edge case                                                                    |
+| Rate limiter (IP-keyed)                            | Vitest + Miniflare KV               | Window math, sliding eviction, 60/min boundary                                                             |
+| Public `/c/*` routes                               | Vitest + Miniflare (D1 + R2)        | HTML render, branded 404, vcf headers, svg no-external-refs, photo stream cache headers, 429 on rate limit |
+| Admin `/api/namecards/*`                           | Vitest + Miniflare (D1 + R2 + auth) | CRUD happy path, middleware 403 gate, slug collision 409, photo size/type rejection, `/me` scoping         |
+| Soft-delete atomicity                              | Vitest + Miniflare D1 batch         | Both rows flip together; public route immediately darks                                                    |
+| Cross-device vCard/QR import                       | Manual (spec §16)                   | iOS Safari, Android Chrome — cannot be automated                                                           |
+| Lighthouse mobile ≥ 90                             | Manual                              | `/c/:slug`                                                                                                 |
 
 Test files live alongside source under `src/worker/lib/__tests__/` and `src/worker/api/__tests__/`, matching the conventional Vitest layout.
 
@@ -344,10 +355,10 @@ Test files live alongside source under `src/worker/lib/__tests__/` and `src/work
 
 ## Rollback (spec §13.2, every step owner-reversible)
 
-| Change | Rollback |
-|---|---|
-| Bad namecard code | Revert + redeploy `swa-portal`; cards go dark, admin data untouched |
-| Bad migration | `DROP TABLE namecards` (no inbound FKs from other tables) |
+| Change                        | Rollback                                                                   |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| Bad namecard code             | Revert + redeploy `swa-portal`; cards go dark, admin data untouched        |
+| Bad migration                 | `DROP TABLE namecards` (no inbound FKs from other tables)                  |
 | `run_worker_first` regression | Remove `/c/*` from array + redeploy; `/c/*` returns 404 from asset handler |
 
 ---

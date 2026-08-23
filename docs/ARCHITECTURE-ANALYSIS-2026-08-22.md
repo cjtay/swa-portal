@@ -1,5 +1,15 @@
 # SWA Portal — Architecture Report
 
+> **UPDATE 23-08-2026 (session 2): this report is a historical snapshot.** For the current
+> architecture, read [`docs/ARCHITECTURE.md`](./ARCHITECTURE.md) instead. Since this report
+> was written: namecards were restored as board-only with auto-generation and the office
+> address on every card (`6590356`); IT admins became a code list that needs no members row
+> (`bdacf49`); the security remediation was deployed to production; and tests grew from 112
+> to 148. As a result, parts of sections 9 (Flaw 3), 10, 11 and 12 are now wrong: the
+> namecard code is live again (not dead), migration 007 is backported into `schema.sql`,
+> the namecard decision is made (restore), and the deploy risk is resolved. Read those
+> passages as "true on 22-08-2026".
+
 > **Date:** 22 August 2026 (errata applied 23 August 2026: remediation is committed, `prod-dump.sql` deleted, 9 migration files, `NAMECARD.md` carries a hidden-feature banner, laughter-yoga CSV guard fixed)
 > **Audience:** junior developers and people learning the codebase. Everything is explained from first principles — you do not need prior knowledge of Cloudflare, Workers, Hono, or Astro.
 > **Scope:** how the whole project fits together, what is good, what is flawed, which documents are out of date, and what to do about it.
@@ -40,16 +50,16 @@ In plain English: it replaces a stack of paper forms, spreadsheets and Microsoft
 
 Here are the headline numbers (so you have a mental size for the project):
 
-| Thing | Count |
-|---|---|
-| Production dependencies | 2 (`astro`, `hono`) |
-| Page files | 24 (23 live + 1 hidden) |
-| API routes | 69 |
-| Database tables | 13 (12 in `schema.sql` + the `namecards` table from migration 007) |
-| Migration files | 9 (two of them share the number `005`) |
-| Automated tests | 112 |
-| Approximate source lines | ~18,000 (not counting generated type files) |
-| Feature areas | ~14 |
+| Thing                    | Count                                                              |
+| ------------------------ | ------------------------------------------------------------------ |
+| Production dependencies  | 2 (`astro`, `hono`)                                                |
+| Page files               | 24 (23 live + 1 hidden)                                            |
+| API routes               | 69                                                                 |
+| Database tables          | 13 (12 in `schema.sql` + the `namecards` table from migration 007) |
+| Migration files          | 9 (two of them share the number `005`)                             |
+| Automated tests          | 112                                                                |
+| Approximate source lines | ~18,000 (not counting generated type files)                        |
+| Feature areas            | ~14                                                                |
 
 The important number is the **2 production dependencies**. This project deliberately uses almost nothing external — everything is built with two small libraries plus Cloudflare's built-in services. That is a strong point, discussed in [section 8](#8-what-is-genuinely-good).
 
@@ -63,7 +73,7 @@ If you already know these terms, skip to [section 3](#3-the-big-picture-how-a-re
 
 A normal website runs on a **server**: one computer (or a few) that you rent, that sits somewhere and answers requests. A **Cloudflare Worker** is different:
 
-> **Analogy:** a normal server is a single checkout till. A Worker is a script that Cloudflare copies onto hundreds of tills around the world (actually, onto its CDN edge). When a request arrives, the *nearest* till runs your script and answers instantly.
+> **Analogy:** a normal server is a single checkout till. A Worker is a script that Cloudflare copies onto hundreds of tills around the world (actually, onto its CDN edge). When a request arrives, the _nearest_ till runs your script and answers instantly.
 
 You write a Worker in JavaScript/TypeScript. Cloudflare runs it (using V8, the same engine inside Chrome), scales it automatically, and you pay almost nothing until you get lots of traffic. The Worker for this project is in `src/worker/`.
 
@@ -75,15 +85,15 @@ You write a Worker in JavaScript/TypeScript. Cloudflare runs it (using V8, the s
 
 ### The services the Worker talks to (all via `c.env`)
 
-| Binding | What it is | Analogy | Used for |
-|---|---|---|---|
-| `DB` (D1) | A **database** — Cloudflare's version of SQLite, with tables, rows, SQL queries, indexes, and transactions | A filing cabinet with labelled drawers | All persistent data: members, bookings, forms, registrations |
-| `SWA_SESSION` (KV) | **Key-value storage** — a fast dictionary you set/get with string keys | A coat-check counter where you hand in a ticket and get a coat back | OTP codes, rate-limit counters, session expiry |
-| `SWA_CONFIG` (KV) | The same key-value store, different namespace | A second coat-check counter | Event configuration (table layouts, form settings) |
-| `R2_BUCKET` (R2) | **File storage** — Cloudflare's version of S3 | A warehouse for big boxes | Uploaded images: PayNow screenshots, signatures, card photos |
-| `ASSETS` | The **static build output** served by Cloudflare | A pre-printed poster stand | The finished HTML/CSS/JS pages |
+| Binding            | What it is                                                                                                 | Analogy                                                             | Used for                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `DB` (D1)          | A **database** — Cloudflare's version of SQLite, with tables, rows, SQL queries, indexes, and transactions | A filing cabinet with labelled drawers                              | All persistent data: members, bookings, forms, registrations |
+| `SWA_SESSION` (KV) | **Key-value storage** — a fast dictionary you set/get with string keys                                     | A coat-check counter where you hand in a ticket and get a coat back | OTP codes, rate-limit counters, session expiry               |
+| `SWA_CONFIG` (KV)  | The same key-value store, different namespace                                                              | A second coat-check counter                                         | Event configuration (table layouts, form settings)           |
+| `R2_BUCKET` (R2)   | **File storage** — Cloudflare's version of S3                                                              | A warehouse for big boxes                                           | Uploaded images: PayNow screenshots, signatures, card photos |
+| `ASSETS`           | The **static build output** served by Cloudflare                                                           | A pre-printed poster stand                                          | The finished HTML/CSS/JS pages                               |
 
-> **Key difference — D1 vs KV:** D1 is a *real* database: you can query, join tables, search, count. KV is just `key → value`. You use D1 when data is relational (members relate to bookings relate to payments). You use KV when you just need to store something small and fast (a code, a counter, a config blob). KV is "eventually consistent" — a write might take a moment to be visible everywhere — which is fine for codes and counters but not for accounting.
+> **Key difference — D1 vs KV:** D1 is a _real_ database: you can query, join tables, search, count. KV is just `key → value`. You use D1 when data is relational (members relate to bookings relate to payments). You use KV when you just need to store something small and fast (a code, a counter, a config blob). KV is "eventually consistent" — a write might take a moment to be visible everywhere — which is fine for codes and counters but not for accounting.
 
 ### The frameworks
 
@@ -93,7 +103,7 @@ You write a Worker in JavaScript/TypeScript. Cloudflare runs it (using V8, the s
 ### Authentication ingredients
 
 - **OTP** — One-Time Password. A 6-digit code emailed to you, valid for 5 minutes, used instead of a password.
-- **HMAC** — a way to *sign* data with a secret so nobody can tamper with it. The session cookie's contents are signed with a secret. If someone edits the cookie, the signature no longer matches and the login is rejected.
+- **HMAC** — a way to _sign_ data with a secret so nobody can tamper with it. The session cookie's contents are signed with a secret. If someone edits the cookie, the signature no longer matches and the login is rejected.
 - **Session** — a record of "this browser is logged in as this person". It lives inside a cookie named `swa_session`.
 - **Turnstile** — Cloudflare's anti-bot check (their privacy-friendly alternative to CAPTCHA). Public forms make the user tick a box to prove they are human.
 
@@ -110,7 +120,7 @@ You write a Worker in JavaScript/TypeScript. Cloudflare runs it (using V8, the s
 ### Tooling
 
 - **`wrangler`** — the command-line tool for running (`wrangler dev`), deploying (`wrangler deploy`), and managing Cloudflare resources.
-- **Vitest + Miniflare** — the test runner. Tests run against a *simulated* Cloudflare environment (fake D1, KV, R2), so they are fast and safe. Config in `vitest.config.ts`.
+- **Vitest + Miniflare** — the test runner. Tests run against a _simulated_ Cloudflare environment (fake D1, KV, R2), so they are fast and safe. Config in `vitest.config.ts`.
 
 ---
 
@@ -183,7 +193,7 @@ Two takeaways to really absorb:
 
 Astro files (`.astro`) are a mix of:
 
-- a **frontmatter block** (`---` at the top) — code that runs *at build time*,
+- a **frontmatter block** (`---` at the top) — code that runs _at build time_,
 - **HTML** with `{expr}` slots, and
 - a `<script>` block — this is bundled and shipped to the browser.
 
@@ -196,19 +206,19 @@ For this project the frontmatter is nearly empty (just `import AdminLayout`). Th
 </script>
 ```
 
-So each page is basically: *blank page + one script that talks to the Worker*. That is a deliberate "SPA-lite" pattern and it is fine — but the scripts repeat a lot of code (see the duplication flaw).
+So each page is basically: _blank page + one script that talks to the Worker_. That is a deliberate "SPA-lite" pattern and it is fine — but the scripts repeat a lot of code (see the duplication flaw).
 
-**The login page is special:** `src/pages/login.astro` intentionally does *not* use the shared layout, because layout code redirects already-logged-in users... which would make the login page bounce you in a loop. This is a documented trap in `AGENTS.md`.
+**The login page is special:** `src/pages/login.astro` intentionally does _not_ use the shared layout, because layout code redirects already-logged-in users... which would make the login page bounce you in a loop. This is a documented trap in `AGENTS.md`.
 
 ### Half 2 — the Worker (`src/worker/`)
 
-| Location | Purpose |
-|---|---|
-| `index.ts` | Creates the Hono app, registers **all 69 routes**, applies `authMiddleware` to everything under `/api/*` |
-| `middleware.ts` | The gatekeeper: session check, role checks, rate limiting (see [section 5](#5-how-logins-and-permissions-work)) |
-| `api/` | One file per **feature area**. Each file exports handler functions: booked-able — `members.ts`, `bookings.ts`, `membership-reg.ts`, `volunteer-reg.ts`, `laughter-yoga-reg.ts`, the `reg/` folder (gala event) |
-| `lib/` | **Shared helpers** used by handlers: sending emails, rate limiting, crypto, session signing, CSV building, and the `reg/` subfolder for gala-event logic |
-| `types.ts` | TypeScript types for the Worker's environment (`Env`), so `c.env.DB` etc. are typed |
+| Location        | Purpose                                                                                                                                                                                                        |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts`      | Creates the Hono app, registers **all 69 routes**, applies `authMiddleware` to everything under `/api/*`                                                                                                       |
+| `middleware.ts` | The gatekeeper: session check, role checks, rate limiting (see [section 5](#5-how-logins-and-permissions-work))                                                                                                |
+| `api/`          | One file per **feature area**. Each file exports handler functions: booked-able — `members.ts`, `bookings.ts`, `membership-reg.ts`, `volunteer-reg.ts`, `laughter-yoga-reg.ts`, the `reg/` folder (gala event) |
+| `lib/`          | **Shared helpers** used by handlers: sending emails, rate limiting, crypto, session signing, CSV building, and the `reg/` subfolder for gala-event logic                                                       |
+| `types.ts`      | TypeScript types for the Worker's environment (`Env`), so `c.env.DB` etc. are typed                                                                                                                            |
 
 There is one rule that keeps this tidy, repeated in `AGENTS.md`: **no Node.js APIs inside the Worker** — it must only use web-standard APIs plus `c.env` bindings.
 
@@ -240,20 +250,20 @@ This is the most carefully built part of the project, and it was recently harden
 1. User visits `/login` and types their email.
 2. Browser calls `POST /api/send-otp` (`api/send-otp.ts`). The Worker checks the `members` table: does this email exist **and** have `can_login = 1`? If yes, it emails a 6-digit code (valid 5 minutes). If no, it still answers "if that email is registered, a code has been sent" — so you can't tell which emails exist.
 3. User types the code. `POST /api/verify-otp` checks it (the code is signed with a secret so it can't be forged), then creates a **session**.
-4. The session is put in the `swa_session` cookie, HMAC-signed. The cookie says who you are and what role you had *at login time*.
+4. The session is put in the `swa_session` cookie, HMAC-signed. The cookie says who you are and what role you had _at login time_.
 5. Every later request, the middleware **re-checks** the live member row in D1 (this step is called "revalidation") — so if an admin demotes you or disables your login while you are still logged in, you lose access immediately rather than keeping it for up to 30 days. That fix was the **critical** finding in the security audit.
 
 The browser-side part is `src/scripts/auth-gate.ts` — a tiny helper called `requireAuth()` that pages run before doing anything, which redirects to `/login` if not logged in.
 
 ### The roles
 
-There are three base roles, decided by the `members.category` column *plus* a hardcoded list:
+There are three base roles, decided by the `members.category` column _plus_ a hardcoded list:
 
-| Role | Who gets it | What they can do |
-|---|---|---|
-| **IT Admin** | Emails hardcoded in `src/constants/portal.ts` (`IT_ADMIN_EMAILS`) | Everything, including infra settings |
-| **Admin** | `members.category = 'admin'` + `can_login = 1` | Full member CRUD, cancel any booking |
-| **Committee** | `category = 'committee'` or `'advisor'` + `can_login = 1` | View members, manage own bookings |
+| Role          | Who gets it                                                       | What they can do                     |
+| ------------- | ----------------------------------------------------------------- | ------------------------------------ |
+| **IT Admin**  | Emails hardcoded in `src/constants/portal.ts` (`IT_ADMIN_EMAILS`) | Everything, including infra settings |
+| **Admin**     | `members.category = 'admin'` + `can_login = 1`                    | Full member CRUD, cancel any booking |
+| **Committee** | `category = 'committee'` or `'advisor'` + `can_login = 1`         | View members, manage own bookings    |
 
 There are extra **registration roles** for events (`reg_role` column): `reg_admin` (manage event bookings/exports) and `reg_volunteer` (search guests, check people in). A committee member can also tick guests in.
 
@@ -276,19 +286,19 @@ There are extra **registration roles** for events (`reg_role` column): `reg_admi
 
 The source of truth for the schema is `schema.sql`, plus migration files for newer additions. Full table list:
 
-| Table | Stores | Built-in purpose | Status |
-|---|---|---|---|
-| `members` | People (name, email, mobile, addresses, `category`, `can_login`, membership/fee fields, `reg_role`) | The core directory + login identity | **Live** |
-| `office_bookings` | Office room bookings (who, when, purpose, status) | The booking module | **Live** |
-| `membership_payments` | One row per payment received (member_id, amount, date, method) | Fee tracking — the real source of truth for fees | **Live** |
-| `membership_applications` | Public membership-application form answers + proof-of-payment image keys + approval status | The membership intake workflow | **Live** |
-| `volunteer_registrations` | Public volunteer sign-up form answers | The volunteer intake | **Live** |
-| `laughter_yoga_registrations` | Public CLYL-training sign-up answers | The laughter-yoga intake | **Live** |
-| `reg_bookings` / `reg_guests` / `reg_tokens` | Gala-event table bookings, guest rows/arrivals, magic-link tokens | The gala registration module | **Live** |
-| `error_log` | Logged server errors (endpoint, type, message, user, request body) | Debugging/forensics | **Live** |
-| `membership_types` | A fee-schedule table (First Year, Renewal) | Was the old fee model | **Dormant — kept but no longer read** |
-| `memberships` | Per-member subscription periods | Was the old fee model | **Dormant — kept but no longer read** |
-| `namecards` (from migration 007) | Digital card data + photo reference for each member | The namecard system | **Present but feature is hidden (dead-ish)** |
+| Table                                        | Stores                                                                                              | Built-in purpose                                 | Status                                       |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------ | -------------------------------------------- |
+| `members`                                    | People (name, email, mobile, addresses, `category`, `can_login`, membership/fee fields, `reg_role`) | The core directory + login identity              | **Live**                                     |
+| `office_bookings`                            | Office room bookings (who, when, purpose, status)                                                   | The booking module                               | **Live**                                     |
+| `membership_payments`                        | One row per payment received (member_id, amount, date, method)                                      | Fee tracking — the real source of truth for fees | **Live**                                     |
+| `membership_applications`                    | Public membership-application form answers + proof-of-payment image keys + approval status          | The membership intake workflow                   | **Live**                                     |
+| `volunteer_registrations`                    | Public volunteer sign-up form answers                                                               | The volunteer intake                             | **Live**                                     |
+| `laughter_yoga_registrations`                | Public CLYL-training sign-up answers                                                                | The laughter-yoga intake                         | **Live**                                     |
+| `reg_bookings` / `reg_guests` / `reg_tokens` | Gala-event table bookings, guest rows/arrivals, magic-link tokens                                   | The gala registration module                     | **Live**                                     |
+| `error_log`                                  | Logged server errors (endpoint, type, message, user, request body)                                  | Debugging/forensics                              | **Live**                                     |
+| `membership_types`                           | A fee-schedule table (First Year, Renewal)                                                          | Was the old fee model                            | **Dormant — kept but no longer read**        |
+| `memberships`                                | Per-member subscription periods                                                                     | Was the old fee model                            | **Dormant — kept but no longer read**        |
+| `namecards` (from migration 007)             | Digital card data + photo reference for each member                                                 | The namecard system                              | **Present but feature is hidden (dead-ish)** |
 
 Two patterns worth noticing:
 
@@ -333,7 +343,7 @@ src/
     └── tsconfig.json                ← its own TS config (worker-side typecheck)
 ```
 
-The two files worth reading *first* are `src/constants/portal.ts` (all the configuration) and `src/worker/index.ts` (the whole route map — it reads like a menu of "what this site can do").
+The two files worth reading _first_ are `src/constants/portal.ts` (all the configuration) and `src/worker/index.ts` (the whole route map — it reads like a menu of "what this site can do").
 
 ---
 
@@ -345,7 +355,7 @@ Before the criticising, credit where it's due. These are real strengths, and a r
 2. **Security is taken seriously and improving.** HMAC-signed sessions, per-request role revalidation, Turnstile on public forms, rate limits, an allow-list on a full-name field to block XSS, NRIC never returned by the API, CSV formula-injection guard, explicit column lists on SQL `SELECT`s. After the 2026-08 audit the team fixed a critical privilege-escalation bug, a privacy bug, and an XSS bug — that is good practice.
 3. **Atomic, safe database writes.** Uses `DB.batch()` so related writes all-or-nothing; uses `UPDATE ... WHERE status='pending'` for race-safe approve/reject; detects and handles duplicate-submit idempotently.
 4. **Tests with a real simulated environment.** 112 tests run against Miniflare (simulated D1/KV/R2), not mocks. `npm test` catches database-query mistakes.
-5. **Good documentation discipline at the file level.** Explicit column lists with comments explaining *why*; the dormant tables are clearly labelled; gotchas are written down (`AGENTS.md`); there is a decision log and honestly written progress notes (including "over-engineering I added that the user pushed back on").
+5. **Good documentation discipline at the file level.** Explicit column lists with comments explaining _why_; the dormant tables are clearly labelled; gotchas are written down (`AGENTS.md`); there is a decision log and honestly written progress notes (including "over-engineering I added that the user pushed back on").
 6. **Consistent style.** British English, no emoji, the SWA purple palette everywhere, one shared CSS file for admins.
 
 None of the flaws below mean "the code is bad" — they mean "the code was written fast, by a small team, one feature at a time, and nobody has done the consolidation pass yet."
@@ -362,11 +372,11 @@ The volunteer form, the laughter-yoga form, and the membership application form 
 
 The worker handlers speak for themselves:
 
-| File | Lines |
-|---|---|
-| `src/worker/api/volunteer-reg.ts` | 666 |
+| File                                  | Lines                                       |
+| ------------------------------------- | ------------------------------------------- |
+| `src/worker/api/volunteer-reg.ts`     | 666                                         |
 | `src/worker/api/laughter-yoga-reg.ts` | 555 (after the CSV-guard fix of 23-08-2026) |
-| `src/worker/api/membership-reg.ts` | 1105 |
+| `src/worker/api/membership-reg.ts`    | 1105                                        |
 
 Copied verbatim between them (same code, sometimes different constants):
 
@@ -378,7 +388,7 @@ Copied verbatim between them (same code, sometimes different constants):
 
 **And here is the proof that duplication hurts:** the "CSV formula-injection guard" (a security fix that stops a spreadsheet running a formula typed in a name field) was implemented in a shared file `src/worker/lib/csv.ts`. The volunteer and membership handlers import it. The laughter-yoga handler had its **own local copy without the guard** — the drift was caught on 23 August 2026 and fixed the same day (the handler now imports the shared guard), but only after the unguarded copy had shipped. Exactly the kind of slow security drift duplication creates.
 
-**Why this matters for you as a learner:** if you are asked to add a *fourth* form, the "easy" path (copy again) is also the wrong path. This is the single most important thing to fix, and it is discussed in [section 12](#12-recommendations-in-priority-order).
+**Why this matters for you as a learner:** if you are asked to add a _fourth_ form, the "easy" path (copy again) is also the wrong path. This is the single most important thing to fix, and it is discussed in [section 12](#12-recommendations-in-priority-order).
 
 ### Flaw 2 — The pages carry a lot of repeated inline code
 
@@ -391,13 +401,13 @@ Remember that pages are thin HTML shells + a `<script>`. Unfortunately each page
 
 Some page files are huge as a result:
 
-| Page | Lines |
-|---|---|
-| `src/pages/reg/membership/register.astro` | 864 |
-| `src/pages/reg/volunteer/register.astro` | 640 |
-| `src/pages/reg/volunteer/checkin.astro` | 568 |
-| `src/pages/reg/admin/bookings.astro` | 511 |
-| `src/pages/office-booking.astro` | 454 |
+| Page                                      | Lines |
+| ----------------------------------------- | ----- |
+| `src/pages/reg/membership/register.astro` | 864   |
+| `src/pages/reg/volunteer/register.astro`  | 640   |
+| `src/pages/reg/volunteer/checkin.astro`   | 568   |
+| `src/pages/reg/admin/bookings.astro`      | 511   |
+| `src/pages/office-booking.astro`          | 454   |
 
 The `checkin.astro` and `search.astro` pages are essentially the **same screen** (search a guest, mark them arrived) written twice with different styling.
 
@@ -423,17 +433,17 @@ Similarly, `src/worker/lib/reg/guests.ts` exports 9 helpers but **5 of them are 
 `src/worker/middleware.ts` now contains four near-identical "public path prefix" sets:
 
 ```ts
-const VOLUNTEER_API = new Set(['/api/volunteer']);
-const MEMBERSHIP_API = new Set(['/api/membership']);
-const LAUGHTER_YOGA_API = new Set(['/api/laughter-yoga']);
-const REG_BUYER_API = new Set(['/api/reg/buyer']);
+const VOLUNTEER_API = new Set(["/api/volunteer"]);
+const MEMBERSHIP_API = new Set(["/api/membership"]);
+const LAUGHTER_YOGA_API = new Set(["/api/laughter-yoga"]);
+const REG_BUYER_API = new Set(["/api/reg/buyer"]);
 ```
 
 …each followed by a comment "public, Turnstile-verified in handler" and a bypass `return next()`. Adding form N requires editing the middleware, the route table, the constants file, the schema and the page. That cross-cutting cost is how the code got big quickly.
 
 ### Flaw 5 — Scope creep: the project quietly became 14 features
 
-The original plan (`docs/plans/SWAPortal-Implementation-Plan.md`) describes a **lean admin tool** — a ~22-page portal with a booking module and a namecard *table*. What actually exists now:
+The original plan (`docs/plans/SWAPortal-Implementation-Plan.md`) describes a **lean admin tool** — a ~22-page portal with a booking module and a namecard _table_. What actually exists now:
 
 - the original admin core (auth, dashboard, members, office booking)
 - a full **gala dinner registration module** (imported from another project, with its own admin/volunteer/buyer/dashboard sub-surfaces)
@@ -442,7 +452,7 @@ The original plan (`docs/plans/SWAPortal-Implementation-Plan.md`) describes a **
 - an **admin settings** module
 - the namecard system, journey: built → removed → rebuilt bigger → hidden
 
-Some of this is genuinely wanted by the client (the forms were the point of the tool). The problem is not adding features — it's adding them *by copy-paste* and never consolidating.
+Some of this is genuinely wanted by the client (the forms were the point of the tool). The problem is not adding features — it's adding them _by copy-paste_ and never consolidating.
 
 ### Flaw 6 — Inconsistencies that trip people up
 
@@ -455,23 +465,23 @@ Some of this is genuinely wanted by the client (the forms were the point of the 
 
 ## 10. Stale and outdated documents
 
-Documentation has the same problem as code: it was written for the state of the project *then*, and not all of it was updated when the project changed. Here is the honest list. A common thread: **the namecard feature and the website-sync feature were removed/hidden, but several documents still describe them as live.**
+Documentation has the same problem as code: it was written for the state of the project _then_, and not all of it was updated when the project changed. Here is the honest list. A common thread: **the namecard feature and the website-sync feature were removed/hidden, but several documents still describe them as live.**
 
 > **Flags used below:** 🔴 definitely misleading — 🟡 partly out of date — 🟢 fine (kept for reference)
 
-| Document | Flag | What's wrong |
-|---|---|---|
-| `docs/specs/SWAPortal-Functional-Specification.md` (v2.0) | 🔴 | A full duplicate of the spec below, listing Namecards as an active feature. Two competing specs (v1.0 and v2.0) both exist and both describe a feature set that has changed. **Two specs should be one.** |
-| `docs/specs/SWAPortal-Functional-Specs.md` (v1.0) | 🟡 | The other half of the duplicate. References website-sync and namecards as planned/removed inconsistently. Doesn't cover the public-intake forms or membership lifecycle. |
-| `docs/NAMECARD.md` | 🟢 | Opens with a prominent "FEATURE HIDDEN — 22-08-2026" banner explaining why and where the `DISABLED 2026-08` markers are. The body below documents the feature as built — an honest archive. |
-| `docs/plans/Namecard-Implementation-Plan.md` | 🔴 | Describes go-live phases for the now-hidden feature. Unlike `NAMECARD.md` it carries no hidden-feature banner, so it reads as if go-live is still ahead. |
-| `docs/specs/SWA-Digital-Infrastructure-Functional-Specification.md` | 🟡 | Introduces "Namecard Management" as one of the portal's six features. Feature is hidden. |
-| `docs/specs/SWA-Workers-Architecture-Assessment.md` | 🟡 | From 13 May, contains a whole section on cross-worker namecard data access that was **removed** on 19 Jul 2026. It has a "REMOVED" banner, so it's honest, but it's really an archive now. |
-| `docs/plans/astro-refactor-plan.md` | 🟡 | A good plan that was never executed. Keep it — but add a status note so readers know it's "proposed, not done". |
-| `docs/plans/SWAPortal-Implementation-Plan.md` | 🟡 | Phase tracker last updated 19 Jul 2026. Doesn't reflect the August security remediation or the hidden namecards. |
-| `docs/checklist/*` (three files, May 2026) | 🟡 | Historical setup checklists. Useful reference, but they describe the world at setup time (e.g. they reference the sister project `gtw2026`). Not misleading per se — just ageing. |
-| `AGENTS.md` | 🟢 | Maintained recently (21 Aug 2026) and correctly describes namecards as hidden. This is the doc to trust. |
-| `progress.md` | 🟢 | In `src`-root, gitignored, updated to 22 Aug 2026 — a reliable recent-history log. |
+| Document                                                            | Flag | What's wrong                                                                                                                                                                                              |
+| ------------------------------------------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docs/specs/SWAPortal-Functional-Specification.md` (v2.0)           | 🔴   | A full duplicate of the spec below, listing Namecards as an active feature. Two competing specs (v1.0 and v2.0) both exist and both describe a feature set that has changed. **Two specs should be one.** |
+| `docs/specs/SWAPortal-Functional-Specs.md` (v1.0)                   | 🟡   | The other half of the duplicate. References website-sync and namecards as planned/removed inconsistently. Doesn't cover the public-intake forms or membership lifecycle.                                  |
+| `docs/NAMECARD.md`                                                  | 🟢   | Opens with a prominent "FEATURE HIDDEN — 22-08-2026" banner explaining why and where the `DISABLED 2026-08` markers are. The body below documents the feature as built — an honest archive.               |
+| `docs/plans/Namecard-Implementation-Plan.md`                        | 🔴   | Describes go-live phases for the now-hidden feature. Unlike `NAMECARD.md` it carries no hidden-feature banner, so it reads as if go-live is still ahead.                                                  |
+| `docs/specs/SWA-Digital-Infrastructure-Functional-Specification.md` | 🟡   | Introduces "Namecard Management" as one of the portal's six features. Feature is hidden.                                                                                                                  |
+| `docs/specs/SWA-Workers-Architecture-Assessment.md`                 | 🟡   | From 13 May, contains a whole section on cross-worker namecard data access that was **removed** on 19 Jul 2026. It has a "REMOVED" banner, so it's honest, but it's really an archive now.                |
+| `docs/plans/astro-refactor-plan.md`                                 | 🟡   | A good plan that was never executed. Keep it — but add a status note so readers know it's "proposed, not done".                                                                                           |
+| `docs/plans/SWAPortal-Implementation-Plan.md`                       | 🟡   | Phase tracker last updated 19 Jul 2026. Doesn't reflect the August security remediation or the hidden namecards.                                                                                          |
+| `docs/checklist/*` (three files, May 2026)                          | 🟡   | Historical setup checklists. Useful reference, but they describe the world at setup time (e.g. they reference the sister project `gtw2026`). Not misleading per se — just ageing.                         |
+| `AGENTS.md`                                                         | 🟢   | Maintained recently (21 Aug 2026) and correctly describes namecards as hidden. This is the doc to trust.                                                                                                  |
+| `progress.md`                                                       | 🟢   | In `src`-root, gitignored, updated to 22 Aug 2026 — a reliable recent-history log.                                                                                                                        |
 
 **One-line summary:** if a document mentions "Namecards" or "website sync", assume it is out of date until proven otherwise. `AGENTS.md` and `progress.md` are the two to trust.
 
@@ -522,10 +532,10 @@ These are deliberately concrete and ordered by "cheapest now / most important la
 
 This is the question the report has been building towards, and the answer is a confident **no**, for four reasons:
 
-1. **The architecture is right.** One small Worker + static pages + D1/KV/R2 is a simple, modern, cheap stack. It is not the cause of the complexity. Rebuilding on the *same* stack would not remove the complexity — the complexity is in the *amount of copy-paste*, not the *structure*.
-2. **A lot of real, hard-won value would be thrown away.** A hardened auth system (the kind of thing that took a security audit to get right), 112 tests that actually exercise the database, 9 migrations of careful data modelling, and a decision trail in the docs that tells you *why* things are the way they are.
+1. **The architecture is right.** One small Worker + static pages + D1/KV/R2 is a simple, modern, cheap stack. It is not the cause of the complexity. Rebuilding on the _same_ stack would not remove the complexity — the complexity is in the _amount of copy-paste_, not the _structure_.
+2. **A lot of real, hard-won value would be thrown away.** A hardened auth system (the kind of thing that took a security audit to get right), 112 tests that actually exercise the database, 9 migrations of careful data modelling, and a decision trail in the docs that tells you _why_ things are the way they are.
 3. **A rewrite is not cheaper than a cleanup.** The un-wanted work in this codebase is duplication and dead code. Deleting and re-writing duplicated code costs more than extracting it into one shared place — and a pressure-filled rewrite is exactly how the same copy-paste habits would return (plus a fresh set of bugs with no test suite to catch them).
-4. **The team already knows what to do.** The `astro-refactor-plan.md` shell exists. The codebase is ~18,000 lines, not 200,000. It is at the perfect size to fix *now*, cheaply, and far easier than a "big bang" rewrite.
+4. **The team already knows what to do.** The `astro-refactor-plan.md` shell exists. The codebase is ~18,000 lines, not 200,000. It is at the perfect size to fix _now_, cheaply, and far easier than a "big bang" rewrite.
 
 **When would "rebuild" be the right call?** If the requirements changed fundamentally (e.g. you need multi-tenant support or a totally different data model), or if the team had no test safety net and the code were genuinely tangled. Neither is true here.
 
@@ -537,36 +547,36 @@ So: **keep the architecture, fix the duplication, prune the dead code, and let t
 
 Quick reference. Each term is one plain-English line.
 
-| Term | Meaning |
-|---|---|
-| **Admin (role)** | A portal user with a `members.category` of `admin` plus `can_login=1`. |
-| **Astro** | A static site generator; produces the finished HTML/CSS/JS pages at build time. |
-| **Binding** | A pre-connected handle Cloudflare gives your Worker — e.g. `c.env.DB` is the *binding* to D1. |
-| **Batch (D1)** | Running several SQL writes together so all succeed or all fail (a transaction). |
-| **Cloudflare Workers** | Tiny scripts run on Cloudflare's global CDN instead of on your own servers. |
-| **Committee (role)** | A portal user with `category = committee` or `advisor`. The default tier. |
-| **Cookie** | A small piece of data the browser stores and sends with every request to a site. |
-| **D1** | Cloudflare's SQLite-like relational database, reached through `c.env.DB`. |
-| **Index** | A database feature that makes specific lookups fast (like an index in a book). |
-| **HMAC** | A "signature" over some data using a secret key; proves it wasn't tampered with. |
-| **Idempotent** | A request that produces the same result however many times it is retried. |
-| **IT Admin (role)** | A user whose email is on the hardcoded `IT_ADMIN_EMAILS` list; full control. |
-| **KV** | Cloudflare key–value store; a fast dictionary, reached through `c.env.SWA_SESSION` or `c.env.SWA_CONFIG`. |
-| **Middleware** | Code that runs *before* a route handler — here, the auth/role/rate-limit gate. |
-| **Migration** | A numbered `.sql` file recording one change to the database schema. |
-| **N+1 problem** | A loop that runs one database query per item instead of one query for all items. |
-| **OTP** | One-Time Password — the 6-digit login code emailed to you, valid for 5 minutes. |
-| **R2** | Cloudflare's object storage (like S3) for files, reached through `c.env.R2_BUCKET`. |
-| **Rate limit** | Capping how often something can happen, to stop abuse. |
-| **run_worker_first** | The wrangler setting that sends certain URLs (here `/api/*`) to the Worker instead of serving static files. |
-| **Schema** | The full structure of the database — all tables, columns, indexes. |
-| **Session** | "This browser is logged in as this person", stored in the `swa_session` cookie. |
-| **Soft delete** | Marking a row with a `deleted_at` timestamp instead of removing it. |
-| **SSR / static** | Server-side rendering (pages built per request) vs static (pages pre-built once, then served). This project is static. |
-| **Turnstile** | Cloudflare's anti-bot check used on the public forms. |
-| **Vertical slice** | One complete feature end-to-end (page → handler → data → email). Here it's used to describe whole copy-pasted modules. |
-| **Wrangler** | The CLI that runs, deploys and configures Cloudflare Workers. |
-| **XSS** | Cross-site scripting; injecting script through user input. Escaping output prevents it. |
+| Term                   | Meaning                                                                                                                |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Admin (role)**       | A portal user with a `members.category` of `admin` plus `can_login=1`.                                                 |
+| **Astro**              | A static site generator; produces the finished HTML/CSS/JS pages at build time.                                        |
+| **Binding**            | A pre-connected handle Cloudflare gives your Worker — e.g. `c.env.DB` is the _binding_ to D1.                          |
+| **Batch (D1)**         | Running several SQL writes together so all succeed or all fail (a transaction).                                        |
+| **Cloudflare Workers** | Tiny scripts run on Cloudflare's global CDN instead of on your own servers.                                            |
+| **Committee (role)**   | A portal user with `category = committee` or `advisor`. The default tier.                                              |
+| **Cookie**             | A small piece of data the browser stores and sends with every request to a site.                                       |
+| **D1**                 | Cloudflare's SQLite-like relational database, reached through `c.env.DB`.                                              |
+| **Index**              | A database feature that makes specific lookups fast (like an index in a book).                                         |
+| **HMAC**               | A "signature" over some data using a secret key; proves it wasn't tampered with.                                       |
+| **Idempotent**         | A request that produces the same result however many times it is retried.                                              |
+| **IT Admin (role)**    | A user whose email is on the hardcoded `IT_ADMIN_EMAILS` list; full control.                                           |
+| **KV**                 | Cloudflare key–value store; a fast dictionary, reached through `c.env.SWA_SESSION` or `c.env.SWA_CONFIG`.              |
+| **Middleware**         | Code that runs _before_ a route handler — here, the auth/role/rate-limit gate.                                         |
+| **Migration**          | A numbered `.sql` file recording one change to the database schema.                                                    |
+| **N+1 problem**        | A loop that runs one database query per item instead of one query for all items.                                       |
+| **OTP**                | One-Time Password — the 6-digit login code emailed to you, valid for 5 minutes.                                        |
+| **R2**                 | Cloudflare's object storage (like S3) for files, reached through `c.env.R2_BUCKET`.                                    |
+| **Rate limit**         | Capping how often something can happen, to stop abuse.                                                                 |
+| **run_worker_first**   | The wrangler setting that sends certain URLs (here `/api/*`) to the Worker instead of serving static files.            |
+| **Schema**             | The full structure of the database — all tables, columns, indexes.                                                     |
+| **Session**            | "This browser is logged in as this person", stored in the `swa_session` cookie.                                        |
+| **Soft delete**        | Marking a row with a `deleted_at` timestamp instead of removing it.                                                    |
+| **SSR / static**       | Server-side rendering (pages built per request) vs static (pages pre-built once, then served). This project is static. |
+| **Turnstile**          | Cloudflare's anti-bot check used on the public forms.                                                                  |
+| **Vertical slice**     | One complete feature end-to-end (page → handler → data → email). Here it's used to describe whole copy-pasted modules. |
+| **Wrangler**           | The CLI that runs, deploys and configures Cloudflare Workers.                                                          |
+| **XSS**                | Cross-site scripting; injecting script through user input. Escaping output prevents it.                                |
 
 ---
 
@@ -589,4 +599,4 @@ After the files above, you'll have the same mental model as anyone working on th
 
 ---
 
-*End of report.* Questions, disagreements, or "the report is wrong about X" — the best outcome would be finding errors. This analysis is a snapshot dated **22 August 2026**.
+_End of report._ Questions, disagreements, or "the report is wrong about X" — the best outcome would be finding errors. This analysis is a snapshot dated **22 August 2026**.
