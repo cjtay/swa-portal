@@ -23,6 +23,12 @@ const ADMIN_EMAILS = [
   'approvals-test-admin4@example.com',
   'approvals-test-admin5@example.com',
   'approvals-test-admin6@example.com',
+  'approvals-test-admin7@example.com',
+  'approvals-test-admin8@example.com',
+  'approvals-test-admin9@example.com',
+  'approvals-test-admin10@example.com',
+  'approvals-test-admin11@example.com',
+  'approvals-test-admin12@example.com',
 ];
 const PURCHASE_EMAIL = 'approval@singaporewomenassociation.org';
 const FINANCE_EMAIL = 'finance@singaporewomenassociation.org';
@@ -76,6 +82,13 @@ beforeAll(async () => {
   await seedMember(env.DB, { name: 'Purchase Approver', email: PURCHASE_EMAIL, category: 'committee' });
   await seedMember(env.DB, { name: 'Finance Approver', email: FINANCE_EMAIL, category: 'committee' });
   await seedMember(env.DB, { name: 'Plain Committee', email: PLAIN_COMMITTEE_EMAIL, category: 'committee' });
+  // A real IT-admin email with a member row — proves IT admins are EXCLUDED
+  // from the finance stage by design (plan §3).
+  await seedMember(env.DB, {
+    name: 'IT Admin',
+    email: 'cjtay@singaporewomenassociation.org',
+    category: 'admin',
+  });
 });
 
 beforeEach(async () => {
@@ -750,5 +763,283 @@ describe('POST /api/approvals/:id/remind', () => {
       headers: { Cookie: await purchaseCookie() },
     });
     expect(res.status).toBe(403);
+  });
+});
+
+/* ----------------------------------------------------
+   Phase 4: voucher and finance stage
+   ---------------------------------------------------- */
+
+async function seedVoucherReadyItem(title = 'Voucher test item'): Promise<number> {
+  // Recurring category skips the purchase stage → purchase_approved directly.
+  const form = new FormData();
+  form.append('category', 'vendor_payment');
+  form.append('title', title);
+  form.append('payee', 'Grand Copthorne Waterfront Hotel');
+  const res = await SELF.fetch('https://example.com/api/approvals', {
+    method: 'POST',
+    headers: { Cookie: await adminCookie() },
+    body: form,
+  });
+  expect(res.status).toBe(201);
+  return (await res.json<{ id: number }>()).id;
+}
+
+function voucherBody(voucherDate: string, lines?: Array<Partial<VoucherLineInput>>) {
+  const finalLines =
+    lines !== undefined
+      ? lines
+      : [
+            { no: null, date: null, description: 'Event: 49th SWA Charity Gala Dinner 2026', amount: null },
+            { no: 1, date: '2026-08-10', description: 'Chinese set dinner 25 tables x $1,350', amount: 36772.5 },
+            { no: null, date: null, description: 'Less: 1st deposit paid', amount: -12139.88 },
+            { no: null, date: null, description: 'DBS: Account No: 003-XXXXXXX-0', amount: null },
+          ];
+  return JSON.stringify({ voucherDate, lines: finalLines });
+}
+
+interface VoucherLineInput {
+  no: number | null;
+  date: string | null;
+  description: string;
+  amount: number | null;
+}
+
+async function submitVoucher(id: number, voucherDate: string, lines?: Array<Partial<VoucherLineInput>>): Promise<Response> {
+  return SELF.fetch(`https://example.com/api/approvals/${id}/voucher`, {
+    method: 'POST',
+    headers: { Cookie: await adminCookie(), 'Content-Type': 'application/json' },
+    body: voucherBody(voucherDate, lines),
+  });
+}
+
+describe('POST /api/approvals/:id/voucher', () => {
+  it('assigns the first PV number of the month, stores lines, moves to finance_check', async () => {
+    const id = await seedVoucherReadyItem('August voucher one');
+    const res = await submitVoucher(id, '2026-08-23');
+    expect(res.status).toBe(200);
+    const body = await res.json<{ success: boolean; voucher_no: string; status: string }>();
+    expect(body.voucher_no).toBe('PV26-0801');
+    expect(body.status).toBe('finance_check');
+
+    const item = await env.DB.prepare(
+      'SELECT voucher_date, voucher_lines, voucher_submitted_by, status, rejected_stage FROM approval_items WHERE id = ?',
+    )
+      .bind(id)
+      .first<{ voucher_date: string; voucher_lines: string; voucher_submitted_by: string; status: string; rejected_stage: string | null }>();
+    expect(item?.voucher_date).toBe('2026-08-23');
+    expect(item?.voucher_submitted_by).toBe(ADMIN_EMAILS[(adminRotation - 1) % ADMIN_EMAILS.length]);
+    expect(item?.status).toBe('finance_check');
+
+    const lines = JSON.parse(item?.voucher_lines || '[]') as VoucherLineInput[];
+    expect(lines.length).toBe(4);
+    expect(lines[0].amount).toBeNull(); // note-only banner row
+    expect(lines[2].amount).toBeCloseTo(-12139.88, 2); // negative deposit row
+    expect(lines[3].description).toContain('DBS');
+
+    const audit = await env.DB.prepare("SELECT note FROM approval_audit_log WHERE item_id = ? AND action = 'voucher_submitted'")
+      .bind(id)
+      .first<{ note: string }>();
+    expect(audit?.note).toContain('voucher_no=PV26-0801');
+  });
+
+  it('sequences numbers within the month and resets for a new month', async () => {
+    await submitVoucher(await seedVoucherReadyItem('August voucher two'), '2026-08-05');
+    const sep = await submitVoucher(await seedVoucherReadyItem('September voucher'), '2026-09-01');
+    const sepBody = await sep.json<{ voucher_no: string }>();
+    expect(sepBody.voucher_no).toBe('PV26-0901');
+  });
+
+  it('refuses the 99th voucher of a full month with a clear message', async () => {
+    // Simulate a full August directly in D1.
+    await env.DB.prepare(
+      "INSERT INTO approval_items (category, title, created_by, status, voucher_no, voucher_date) VALUES ('vendor_payment', 'Filler', 'fill@example.com', 'finance_approved', 'PV26-0899', '2026-08-01')",
+    ).run();
+    const res = await submitVoucher(await seedVoucherReadyItem('Full month'), '2026-08-15');
+    expect(res.status).toBe(400);
+    const body = await res.json<{ message?: string }>();
+    expect(body.message).toContain('99');
+  });
+
+  it('resubmission after finance rejection keeps the number and returns to finance_check', async () => {
+    const id = await seedVoucherReadyItem('Finance reject loop');
+    await submitVoucher(id, '2026-08-12');
+    await SELF.fetch(`https://example.com/api/approvals/${id}/finance-reject`, {
+      method: 'POST',
+      headers: { Cookie: await financeCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Total does not match the invoice' }),
+    });
+
+    const res = await submitVoucher(id, '2026-08-12', [{ no: 1, date: '2026-08-10', description: 'Corrected line', amount: 24000 }]);
+    expect(res.status).toBe(200);
+    const body = await res.json<{ voucher_no: string; status: string; resubmitted: boolean }>();
+    expect(body.voucher_no).toBe('PV26-0801'); // unchanged
+    expect(body.status).toBe('finance_check');
+    expect(body.resubmitted).toBe(true);
+
+    const item = await env.DB.prepare('SELECT finance_rejection_reason, rejected_stage FROM approval_items WHERE id = ?')
+      .bind(id)
+      .first<{ finance_rejection_reason: string | null; rejected_stage: string | null }>();
+    expect(item?.finance_rejection_reason).toBeNull();
+    expect(item?.rejected_stage).toBeNull();
+  });
+
+  it('rejects voucher submission from the wrong status', async () => {
+    const pendingForm = new FormData();
+    pendingForm.append('category', 'quotation');
+    pendingForm.append('title', 'Still pending');
+    const pendingRes = await SELF.fetch('https://example.com/api/approvals', {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: pendingForm,
+    });
+    const pendingId = (await pendingRes.json<{ id: number }>()).id;
+    expect((await submitVoucher(pendingId, '2026-08-23')).status).toBe(409);
+
+    const approvedId = await seedVoucherReadyItem('Already submitted');
+    await submitVoucher(approvedId, '2026-08-23');
+    expect((await submitVoucher(approvedId, '2026-08-23')).status).toBe(409); // finance_check now
+  });
+
+  it('validates date, lines and amounts', async () => {
+    const id = await seedVoucherReadyItem('Validation target');
+    expect((await submitVoucher(id, '23-08-2026')).status).toBe(400);
+    expect((await submitVoucher(id, '2026-08-23', [])).status).toBe(400);
+    expect((await submitVoucher(id, '2026-08-23', [{ description: '' }])).status).toBe(400);
+    expect((await submitVoucher(id, '2026-08-23', [{ description: 'Too big', amount: 20000000 }])).status).toBe(400);
+    expect((await submitVoucher(id, '2026-08-23', [{ description: 'Bad no', amount: 1, no: 0 }])).status).toBe(400);
+    expect((await submitVoucher(id, '2026-13-01')).status).toBe(400); // month 13 is not a real date
+  });
+
+  it('finance approver cannot submit vouchers (403)', async () => {
+    const id = await seedVoucherReadyItem('Finance cannot submit');
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/voucher`, {
+      method: 'POST',
+      headers: { Cookie: await financeCookie(), 'Content-Type': 'application/json' },
+      body: voucherBody('2026-08-23'),
+    });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('POST /api/approvals/:id/finance-approve and finance-reject', () => {
+  async function seedFinanceCheckItem(): Promise<number> {
+    const id = await seedVoucherReadyItem('Finance decision target');
+    const res = await submitVoucher(id, '2026-08-20');
+    // Fail loudly here (e.g. a rate-limit 429) instead of letting the
+    // follow-up assertions report confusing 409s.
+    expect(res.status).toBe(200);
+    return id;
+  }
+
+  it('finance approver approves; decision + audit recorded; creator emailed via waitUntil', async () => {
+    const id = await seedFinanceCheckItem();
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/finance-approve`, {
+      method: 'POST',
+      headers: { Cookie: await financeCookie() },
+    });
+    expect(res.status).toBe(200);
+
+    const item = await env.DB.prepare('SELECT status, finance_decision_by FROM approval_items WHERE id = ?')
+      .bind(id)
+      .first<{ status: string; finance_decision_by: string }>();
+    expect(item?.status).toBe('finance_approved');
+    expect(item?.finance_decision_by).toBe(FINANCE_EMAIL);
+
+    const audit = await env.DB.prepare("SELECT action FROM approval_audit_log WHERE item_id = ? AND action = 'finance_approved'")
+      .bind(id)
+      .first<{ action: string }>();
+    expect(audit?.action).toBe('finance_approved');
+  });
+
+  it('second finance decision is a 409', async () => {
+    const id = await seedFinanceCheckItem();
+    const first = await SELF.fetch(`https://example.com/api/approvals/${id}/finance-approve`, {
+      method: 'POST',
+      headers: { Cookie: await financeCookie() },
+    });
+    expect(first.status).toBe(200);
+    const second = await SELF.fetch(`https://example.com/api/approvals/${id}/finance-approve`, {
+      method: 'POST',
+      headers: { Cookie: await financeCookie() },
+    });
+    expect(second.status).toBe(409);
+  });
+
+  it('IT admins are deliberately excluded from the finance stage (403)', async () => {
+    const id = await seedFinanceCheckItem();
+    const cookie = await mintCookie('cjtay@singaporewomenassociation.org', 'admin');
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/finance-approve`, {
+      method: 'POST',
+      headers: { Cookie: cookie },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('purchase approver and non-finance admin cannot decide (403)', async () => {
+    const id = await seedFinanceCheckItem();
+    for (const cookie of [await purchaseCookie(), await adminCookie()]) {
+      const res = await SELF.fetch(`https://example.com/api/approvals/${id}/finance-approve`, {
+        method: 'POST',
+        headers: { Cookie: cookie },
+      });
+      expect(res.status).toBe(403);
+    }
+  });
+
+  it('finance reject requires a reason and sets the stage for routing', async () => {
+    const id = await seedFinanceCheckItem();
+    const noReason = await SELF.fetch(`https://example.com/api/approvals/${id}/finance-reject`, {
+      method: 'POST',
+      headers: { Cookie: await financeCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: '' }),
+    });
+    expect(noReason.status).toBe(400);
+
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/finance-reject`, {
+      method: 'POST',
+      headers: { Cookie: await financeCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Deposit line is missing' }),
+    });
+    expect(res.status).toBe(200);
+    const item = await env.DB.prepare('SELECT status, rejected_stage, finance_rejection_reason FROM approval_items WHERE id = ?')
+      .bind(id)
+      .first<{ status: string; rejected_stage: string; finance_rejection_reason: string }>();
+    expect(item?.status).toBe('rejected');
+    expect(item?.rejected_stage).toBe('finance');
+    expect(item?.finance_rejection_reason).toBe('Deposit line is missing');
+  });
+
+  it('item-edit resubmit of a finance-rejected item goes straight back to finance_check', async () => {
+    const id = await seedFinanceCheckItem();
+    await SELF.fetch(`https://example.com/api/approvals/${id}/finance-reject`, {
+      method: 'POST',
+      headers: { Cookie: await financeCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Wrong payee name' }),
+    });
+    const form = new FormData();
+    form.append('payee', 'Grand Copthorne Waterfront Hotel Pte Ltd');
+    form.append('resubmit', 'true');
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/edit`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json<{ status: string }>();
+    expect(body.status).toBe('finance_check');
+  });
+
+  it('remind works at the finance stage with a stage=finance audit note', async () => {
+    const id = await seedFinanceCheckItem();
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/remind`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+    });
+    expect(res.status).toBe(200);
+    const audit = await env.DB.prepare("SELECT note FROM approval_audit_log WHERE item_id = ? AND action = 'reminder_sent'")
+      .bind(id)
+      .first<{ note: string }>();
+    expect(audit?.note).toBe('stage=finance');
   });
 });

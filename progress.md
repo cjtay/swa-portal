@@ -12,6 +12,55 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-23 (session 6) — Approval workflow Phase 4 (voucher + finance stage)
+
+Plan: `docs/plans/Approval-Workflow-Implementation-Plan.md` §14 Phase 4.
+Both approval stages now run end to end.
+
+### Done
+- **Voucher submission** (`POST /api/approvals/:id/voucher`, admin only):
+  voucher date + line rows (negative amounts for deposits, note-only rows
+  for bank details, total sums what exists). PV numbering
+  `PV<YY>-<MM><NN>` from the voucher's own month: MAX+1 under the UNIQUE
+  index, next-free retry ×3, 99/month cap returns a clear 400. The number
+  survives finance rejection and resubmission unchanged. Status →
+  `finance_check`; finance rejection fields cleared on resubmit; emails
+  finance approvers (new / resubmitted).
+- **Finance stage**: `finance-approve` / `finance-reject` (reason required)
+  — isFinanceApprover only, atomic `WHERE status='finance_check'`, audit in
+  the same batch, decision email to the creator. IT admins deliberately
+  excluded (test proves 403 with a real IT-admin identity).
+- **Routing**: finance-rejected items return straight to finance_check via
+  voucher resubmit OR item edit; item-edit resubmit now also emails finance.
+  Remind works at both waiting stages (`stage=purchase|finance` audit note).
+- **Board UI**: voucher display block (no/date/payee, lines table, TOTAL,
+  prepared/approved by); "Prepare voucher" / "Edit voucher & resubmit"
+  (admin, purchase_approved or finance-rejected); "Approve voucher" /
+  "Reject voucher…" (finance approver, finance_check); voucher form with
+  add/remove lines, pre-fill from item, live total.
+- **Numbering bug caught by tests**: first draft built `PV26-08-01` (extra
+  dash) and a LIKE pattern that never matched — fixed to plan format
+  `PV26-0801`.
+- **Tests**: +19 (numbering sequence/new-month/99-cap, resubmission number
+  retention, status guards, validation, finance gates incl. IT-admin 403,
+  reason requirement, edit-resubmit routing, finance remind) + 5 email
+  builder tests. 211 total. Test admins widened to 12 rotating identities;
+  finance seed helper now fails loudly on 429 instead of cascading 409s.
+- Docs: ARCHITECTURE.md (80 routes, 211 tests, Phase 4 paragraph).
+
+### Not done (by design — later phases)
+- Phase 5: paid step, standalone voucher export page (`/approvals/voucher`),
+  audit CSV export.
+- Note: `npm run test:run 2>&1 | tail` chained with && stalled twice in this
+  session's shell; running each command separately completes in ~8s. Cause
+  unknown — if it recurs, run checks one at a time.
+
+### Verification
+- `npm run test:run` 211 passed; typecheck + typecheck:worker + build clean.
+- Browser smoke owed: prepare voucher → finance approve/reject → resubmit.
+
+---
+
 ## 2026-08-23 (session 5) — Approval workflow Phase 3 (purchase stage)
 
 Plan: `docs/plans/Approval-Workflow-Implementation-Plan.md` §14 Phase 3.

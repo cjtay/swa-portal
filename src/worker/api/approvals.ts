@@ -4,7 +4,10 @@ import { logError } from '../lib/log-error';
 import {
   sendApprovalRequestEmail,
   sendPurchaseDecisionEmail,
+  sendVoucherEmail,
+  sendFinanceDecisionEmail,
   type ApprovalEmailItem,
+  type VoucherEmailItem,
 } from '../lib/email-approval';
 import {
   APPROVAL_CATEGORIES,
@@ -12,6 +15,7 @@ import {
   APPROVAL_MAX_FILE_BYTES,
   canRaiseApprovalItem,
   isPurchaseApprover,
+  isFinanceApprover,
 } from '../../constants/portal';
 
 // Approval workflow API — docs/plans/Approval-Workflow-Implementation-Plan.md §8.
@@ -64,6 +68,9 @@ const MAX_COMPARISON_ROWS = 20;
 const MAX_COMPARISON_DESCRIPTION_LENGTH = 500;
 const MAX_REJECTION_REASON_LENGTH = 1000;
 const MAX_REQUESTED_AMOUNT = 10_000_000;
+const MAX_VOUCHER_LINES = 50;
+const MAX_VOUCHER_LINE_DESCRIPTION = 500;
+const VOUCHER_NO_RETRY_ATTEMPTS = 3;
 
 function getSessionEmail(c: AppContext): string {
   try {
@@ -116,6 +123,47 @@ function contentDisposition(type: 'inline' | 'attachment', filename: string): st
   return `${type}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(decoded)}`;
 }
 
+/** Build the finance-stage email payload: voucher number + computed total
+ *  from the stored line JSON. */
+async function loadVoucherEmailItem(c: AppContext, itemId: number, row: Record<string, unknown>): Promise<VoucherEmailItem> {
+  let total: number | null = null;
+  if (typeof row.voucher_lines === 'string' && row.voucher_lines.length > 0) {
+    try {
+      const lines = JSON.parse(row.voucher_lines) as Array<{ amount?: number | null }>;
+      total = lines.reduce((sum, line) => sum + (typeof line.amount === 'number' ? line.amount : 0), 0);
+      total = Math.round(total * 100) / 100;
+    } catch {
+      total = null;
+    }
+  }
+  return {
+    id: itemId,
+    title: String(row.title || ''),
+    payee: row.payee ? String(row.payee) : null,
+    voucherNo: String(row.voucher_no || ''),
+    voucherDate: String(row.voucher_date || ''),
+    total,
+    createdBy: String(row.created_by || ''),
+  };
+}
+
+/** Next voucher number for a voucher_date's month: PV<YY>-<MM><NN>, NN from
+ *  the existing maximum + 1 (plan §7). Two digits cap at 99 — returns null
+ *  when the month is full. */
+async function nextVoucherNo(db: D1Database, voucherDate: string): Promise<string | null> {
+  const m = voucherDate.match(/^(\d{4})-(\d{2})-\d{2}$/);
+  if (!m) return null;
+  // PV26-0801 = prefix 'PV26-08' + two-digit sequence, no dash before NN.
+  const prefix = `PV${m[1].slice(2)}-${m[2]}`;
+  const res = await db
+    .prepare('SELECT MAX(voucher_no) AS mx FROM approval_items WHERE voucher_no LIKE ?')
+    .bind(prefix + '%')
+    .first<{ mx: string | null }>();
+  const last = res?.mx ? Number(res.mx.slice(prefix.length)) : 0;
+  const next = last + 1;
+  if (!Number.isFinite(last) || next > 99) return null;
+  return `${prefix}${String(next).padStart(2, '0')}`;
+}
 /** Build the email payload for an item: category label + attachment count
  *  come from extra reads, so decision emails match what the board shows. */
 async function loadEmailItem(c: AppContext, itemId: number, row: Record<string, unknown>): Promise<ApprovalEmailItem> {
@@ -1015,7 +1063,7 @@ export async function handleApprovalEdit(c: AppContext) {
     return handleApiError(c, endpoint, err, 'Could not save the edit.', { error_type: 'D1_UPDATE_APPROVAL_EDIT', http_status: 500 });
   }
 
-  // --- 4. Resubmission re-emails the purchase approvers (plan §10) ---
+  // --- 4. Resubmission re-emails the next stage (plan §10) ---
   if (resubmit && newStatus === 'pending' && item.approval_required === 1) {
     const fresh = await c.env.DB.prepare(
       'SELECT id, title, category, payee, description, requested_amount, created_by FROM approval_items WHERE id = ?',
@@ -1028,15 +1076,33 @@ export async function handleApprovalEdit(c: AppContext) {
       );
     }
   }
+  if (resubmit && newStatus === 'finance_check') {
+    // Finance-stage rejection: the item returns to finance check, never to
+    // the purchase approvers (plan §4 routing).
+    try {
+      const fresh = await c.env.DB.prepare(
+        'SELECT id, title, payee, voucher_no, voucher_date, voucher_lines, created_by FROM approval_items WHERE id = ?',
+      )
+        .bind(Number(id))
+        .first<Record<string, unknown>>();
+      if (fresh) {
+        c.executionCtx.waitUntil(
+          sendVoucherEmail(c.env, await loadVoucherEmailItem(c, Number(id), fresh), 'resubmitted').catch(() => { /* logged inside */ }),
+        );
+      }
+    } catch {
+      // Voucher fields unreadable — the edit itself is saved; do not fail.
+    }
+  }
 
   return c.json({ success: true, status: resubmit ? newStatus : status, resubmitted: resubmit });
 }
 
 /* ----------------------------------------------------
    POST /api/approvals/:id/remind
-   Admin only. Re-sends the request email for the current
-   stage. Phase 3: purchase stage (pending) only; later
-   stages extend this (plan §10). Rate-limited by the
+   Admin only. Re-sends whichever email the current stage
+   needs: purchase request while pending, voucher while in
+   finance check (plan §10). Rate-limited by the
    approvals:remind:post key (5/hour per email).
    ---------------------------------------------------- */
 export async function handleApprovalRemind(c: AppContext) {
@@ -1063,10 +1129,14 @@ export async function handleApprovalRemind(c: AppContext) {
   if (!item) {
     return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
   }
-  if (item.status !== 'pending') {
-    return c.json({ success: false, error_code: 'CONFLICT', message: 'Reminders can only be sent while the item is waiting for a purchase decision.' }, 409);
+  if (item.status !== 'pending' && item.status !== 'finance_check') {
+    return c.json(
+      { success: false, error_code: 'CONFLICT', message: 'Reminders can only be sent while the item is waiting for a decision (purchase or finance).' },
+      409,
+    );
   }
 
+  const remindStage = item.status === 'finance_check' ? 'finance' : 'purchase';
   try {
     await c.env.DB.batch([
       c.env.DB.prepare('INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)').bind(
@@ -1074,16 +1144,353 @@ export async function handleApprovalRemind(c: AppContext) {
         'reminder_sent',
         session.email,
         getSessionName(c) || session.email,
-        'stage=purchase',
+        `stage=${remindStage}`,
       ),
     ]);
   } catch (err) {
     return handleApiError(c, endpoint, err, 'Could not record the reminder.', { error_type: 'D1_INSERT_APPROVAL_REMIND', http_status: 500 });
   }
 
-  c.executionCtx.waitUntil(
-    sendApprovalRequestEmail(c.env, await loadEmailItem(c, Number(id), item), 'reminder').catch(() => { /* logged inside */ }),
-  );
+  if (remindStage === 'finance') {
+    const fresh = await c.env.DB.prepare(
+      'SELECT id, title, payee, voucher_no, voucher_date, voucher_lines, created_by FROM approval_items WHERE id = ?',
+    )
+      .bind(Number(id))
+      .first<Record<string, unknown>>();
+    if (fresh) {
+      c.executionCtx.waitUntil(
+        sendVoucherEmail(c.env, await loadVoucherEmailItem(c, Number(id), fresh), 'reminder').catch(() => { /* logged inside */ }),
+      );
+    }
+  } else {
+    c.executionCtx.waitUntil(
+      sendApprovalRequestEmail(c.env, await loadEmailItem(c, Number(id), item), 'reminder').catch(() => { /* logged inside */ }),
+    );
+  }
 
   return c.json({ success: true });
+}
+
+/* ----------------------------------------------------
+   POST /api/approvals/:id/voucher  (Phase 4)
+   Admin only. JSON: { voucherDate, lines: [{ no?, date?,
+   description, amount? }] }. Amounts may be negative
+   (deposits); rows may omit the amount entirely (bank-note
+   rows) — the total sums what exists (plan §7).
+
+   Allowed from: purchase_approved (first submission) or
+   rejected+finance (resubmission). Assigns the PV number at
+   first submission from the voucher's own month; the number
+   then survives rejection and resubmission unchanged. The
+   UNIQUE index refuses a racing duplicate; the handler takes
+   the next free number and retries, up to 3 attempts.
+   Status → finance_check; emails the finance approvers.
+   ---------------------------------------------------- */
+interface VoucherLine {
+  no: number | null;
+  date: string | null;
+  description: string;
+  amount: number | null;
+}
+
+export async function handleApprovalVoucher(c: AppContext) {
+  const endpoint = 'approvals-voucher';
+  const session = { email: getSessionEmail(c), role: getSessionRole(c) };
+  if (!canRaiseApprovalItem(session)) {
+    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Only the office admin can prepare vouchers.' }, 403);
+  }
+  const id = c.req.param('id') || '';
+  if (!/^\d+$/.test(id)) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid item id.' }, 400);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid request body.' }, 400);
+  }
+
+  // --- Voucher date ---
+  const voucherDate = typeof body['voucherDate'] === 'string' ? body['voucherDate'].trim() : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(voucherDate)) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Voucher date must be a valid date (YYYY-MM-DD).' }, 400);
+  }
+  {
+    const [y, mo, d] = voucherDate.split('-').map(Number);
+    const check = new Date(Date.UTC(y, mo - 1, d));
+    if (check.getUTCFullYear() !== y || check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== d) {
+      return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Voucher date must be a valid date (YYYY-MM-DD).' }, 400);
+    }
+  }
+
+  // --- Lines ---
+  const rawLines = body['lines'];
+  if (!Array.isArray(rawLines) || rawLines.length < 1 || rawLines.length > MAX_VOUCHER_LINES) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: `The voucher needs 1–${MAX_VOUCHER_LINES} lines.` }, 400);
+  }
+  const lines: VoucherLine[] = [];
+  for (const raw of rawLines) {
+    const rec = (raw ?? {}) as Record<string, unknown>;
+    const description = typeof rec['description'] === 'string' ? rec['description'].trim() : '';
+    if (description.length < 1 || description.length > MAX_VOUCHER_LINE_DESCRIPTION) {
+      return c.json(
+        { success: false, error_code: 'VALIDATION_ERROR', message: `Every line needs a description (1–${MAX_VOUCHER_LINE_DESCRIPTION} characters).` },
+        400,
+      );
+    }
+    const dateRaw = typeof rec['date'] === 'string' ? rec['date'].trim() : '';
+    if (dateRaw.length > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)) {
+      return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Line dates must be YYYY-MM-DD or empty.' }, 400);
+    }
+    let amount: number | null = null;
+    if (rec['amount'] !== undefined && rec['amount'] !== null && rec['amount'] !== '') {
+      const parsed = Number(rec['amount']);
+      if (!Number.isFinite(parsed) || Math.abs(parsed) > MAX_REQUESTED_AMOUNT) {
+        return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Line amounts must be numbers between -10,000,000 and 10,000,000.' }, 400);
+      }
+      amount = Math.round(parsed * 100) / 100;
+    }
+    const no = rec['no'] === undefined || rec['no'] === null || rec['no'] === '' ? null : Number(rec['no']);
+    if (no !== null && (!Number.isInteger(no) || no < 1 || no > 99)) {
+      return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Line item numbers must be whole numbers from 1 to 99.' }, 400);
+    }
+    lines.push({ no, date: dateRaw || null, description, amount });
+  }
+
+  // --- Item + status guard ---
+  let item: Record<string, unknown> | null = null;
+  try {
+    item = await c.env.DB.prepare(
+      'SELECT id, title, payee, category, status, rejected_stage, voucher_no, created_by FROM approval_items WHERE id = ?',
+    )
+      .bind(Number(id))
+      .first<Record<string, unknown>>();
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not load the item.', { error_type: 'D1_SELECT_APPROVAL_VOUCHER', http_status: 500 });
+  }
+  if (!item) {
+    return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
+  }
+  const status = String(item.status);
+  const isResubmission = status === 'rejected' && item.rejected_stage === 'finance';
+  if (status !== 'purchase_approved' && !isResubmission) {
+    return c.json(
+      { success: false, error_code: 'CONFLICT', message: 'Vouchers can be submitted once the purchase stage is approved, or resubmitted after a finance rejection.' },
+      409,
+    );
+  }
+
+  // --- Save (with number assignment + UNIQUE retry) ---
+  const linesJson = JSON.stringify(lines);
+  const actorName = getSessionName(c) || session.email;
+  let assignedNo = item.voucher_no ? String(item.voucher_no) : '';
+
+  try {
+    let saved = false;
+    for (let attempt = 0; attempt < VOUCHER_NO_RETRY_ATTEMPTS && !saved; attempt++) {
+      if (!assignedNo) {
+        const next = await nextVoucherNo(c.env.DB, voucherDate);
+        if (!next) {
+          return c.json(
+            { success: false, error_code: 'VALIDATION_ERROR', message: 'This month has reached its voucher limit (99). Use next month\u2019s date or contact an IT admin.' },
+            400,
+          );
+        }
+        assignedNo = next;
+      }
+      try {
+        await c.env.DB.batch([
+          c.env.DB.prepare(
+            `UPDATE approval_items
+                SET voucher_no = ?, voucher_date = ?, voucher_lines = ?,
+                    voucher_submitted_by = ?, voucher_submitted_at = datetime('now'),
+                    status = 'finance_check', rejected_stage = NULL,
+                    finance_decision_by = NULL, finance_decision_at = NULL, finance_rejection_reason = NULL,
+                    updated_at = datetime('now')
+              WHERE id = ?`,
+          ).bind(assignedNo, voucherDate, linesJson, session.email, Number(id)),
+          c.env.DB.prepare(
+            'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)',
+          ).bind(Number(id), 'voucher_submitted', session.email, actorName, `voucher_no=${assignedNo}; resubmitted=${isResubmission ? 1 : 0}`),
+        ]);
+        saved = true;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // Two admins racing for the same number: the UNIQUE index refuses
+        // the loser, who takes the next free number and retries (plan §7).
+        if (msg.includes('UNIQUE constraint failed') && msg.includes('voucher_no') && !item.voucher_no) {
+          assignedNo = '';
+          continue;
+        }
+        throw err;
+      }
+    }
+    if (!saved) {
+      throw new Error('voucher number assignment failed after retries');
+    }
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not save the voucher.', { error_type: 'D1_UPDATE_APPROVAL_VOUCHER', http_status: 500 });
+  }
+
+  // --- Email the finance approvers (plan §10) ---
+  try {
+    const fresh = await c.env.DB.prepare(
+      'SELECT id, title, payee, voucher_no, voucher_date, voucher_lines, created_by FROM approval_items WHERE id = ?',
+    )
+      .bind(Number(id))
+      .first<Record<string, unknown>>();
+    if (fresh) {
+      const voucherItem = await loadVoucherEmailItem(c, Number(id), fresh);
+      c.executionCtx.waitUntil(sendVoucherEmail(c.env, voucherItem, isResubmission ? 'resubmitted' : 'new').catch(() => { /* logged inside */ }));
+    }
+  } catch {
+    // Email payload read failed — the voucher itself is saved; do not fail.
+  }
+
+  return c.json({ success: true, voucher_no: assignedNo, status: 'finance_check', resubmitted: isResubmission });
+}
+
+/* ----------------------------------------------------
+   POST /api/approvals/:id/finance-approve  (Phase 4)
+   Finance approvers ONLY — isFinanceApprover excludes IT
+   admins by design (plan §3): an IT account can never
+   approve a payment voucher.
+   Atomic UPDATE … WHERE status='finance_check'.
+   ---------------------------------------------------- */
+export async function handleFinanceApprove(c: AppContext) {
+  const endpoint = 'approvals-finance-approve';
+  const email = getSessionEmail(c);
+  if (!isFinanceApprover(email)) {
+    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Only finance approvers can approve vouchers.' }, 403);
+  }
+  const id = c.req.param('id') || '';
+  if (!/^\d+$/.test(id)) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid item id.' }, 400);
+  }
+
+  let item: Record<string, unknown> | null = null;
+  try {
+    item = await c.env.DB.prepare(
+      'SELECT id, title, payee, voucher_no, voucher_date, voucher_lines, created_by FROM approval_items WHERE id = ?',
+    )
+      .bind(Number(id))
+      .first<Record<string, unknown>>();
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not load the item.', { error_type: 'D1_SELECT_APPROVAL_FAPP', http_status: 500 });
+  }
+  if (!item) {
+    return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
+  }
+
+  try {
+    const res = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE approval_items
+            SET status = 'finance_approved', finance_decision_by = ?, finance_decision_at = datetime('now'), updated_at = datetime('now')
+          WHERE id = ? AND status = 'finance_check'`,
+      ).bind(email, Number(id)),
+      c.env.DB.prepare(
+        'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, NULL)',
+      ).bind(Number(id), 'finance_approved', email, getSessionName(c) || email),
+    ]);
+    const changes = Number((res[0].meta as { changes?: number } | undefined)?.changes ?? 0);
+    if (changes === 0) {
+      return c.json(
+        { success: false, error_code: 'CONFLICT', message: 'Item is not awaiting a finance decision. It may have been actioned already.' },
+        409,
+      );
+    }
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not approve the voucher.', { error_type: 'D1_UPDATE_APPROVAL_FAPP', http_status: 500 });
+  }
+
+  c.executionCtx.waitUntil(
+    sendFinanceDecisionEmail(c.env, await loadVoucherEmailItem(c, Number(id), item), {
+      approved: true,
+      decidedBy: getSessionName(c) || email,
+    }).catch(() => { /* logged inside */ }),
+  );
+
+  return c.json({ success: true, status: 'finance_approved' });
+}
+
+/* ----------------------------------------------------
+   POST /api/approvals/:id/finance-reject  (Phase 4)
+   Finance approvers only. Body: { reason } — required.
+   Sets rejected_stage='finance' so resubmission (item edit
+   or voucher resubmit) returns straight to finance_check,
+   never back to the purchase approvers (plan §4).
+   ---------------------------------------------------- */
+export async function handleFinanceReject(c: AppContext) {
+  const endpoint = 'approvals-finance-reject';
+  const email = getSessionEmail(c);
+  if (!isFinanceApprover(email)) {
+    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Only finance approvers can reject vouchers.' }, 403);
+  }
+  const id = c.req.param('id') || '';
+  if (!/^\d+$/.test(id)) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid item id.' }, 400);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid request body.' }, 400);
+  }
+  const reason = typeof body['reason'] === 'string' ? body['reason'].trim() : '';
+  if (reason.length < 1 || reason.length > MAX_REJECTION_REASON_LENGTH) {
+    return c.json(
+      { success: false, error_code: 'VALIDATION_ERROR', message: `A rejection reason is required (1–${MAX_REJECTION_REASON_LENGTH} characters).` },
+      400,
+    );
+  }
+
+  let item: Record<string, unknown> | null = null;
+  try {
+    item = await c.env.DB.prepare(
+      'SELECT id, title, payee, voucher_no, voucher_date, voucher_lines, created_by FROM approval_items WHERE id = ?',
+    )
+      .bind(Number(id))
+      .first<Record<string, unknown>>();
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not load the item.', { error_type: 'D1_SELECT_APPROVAL_FREJ', http_status: 500 });
+  }
+  if (!item) {
+    return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
+  }
+
+  try {
+    const res = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE approval_items
+            SET status = 'rejected', rejected_stage = 'finance', finance_rejection_reason = ?,
+                finance_decision_by = ?, finance_decision_at = datetime('now'), updated_at = datetime('now')
+          WHERE id = ? AND status = 'finance_check'`,
+      ).bind(reason, email, Number(id)),
+      c.env.DB.prepare(
+        'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)',
+      ).bind(Number(id), 'finance_rejected', email, getSessionName(c) || email, reason),
+    ]);
+    const changes = Number((res[0].meta as { changes?: number } | undefined)?.changes ?? 0);
+    if (changes === 0) {
+      return c.json(
+        { success: false, error_code: 'CONFLICT', message: 'Item is not awaiting a finance decision. It may have been actioned already.' },
+        409,
+      );
+    }
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not reject the voucher.', { error_type: 'D1_UPDATE_APPROVAL_FREJ', http_status: 500 });
+  }
+
+  c.executionCtx.waitUntil(
+    sendFinanceDecisionEmail(c.env, await loadVoucherEmailItem(c, Number(id), item), {
+      approved: false,
+      reason,
+      decidedBy: getSessionName(c) || email,
+    }).catch(() => { /* logged inside */ }),
+  );
+
+  return c.json({ success: true, status: 'rejected', rejected_stage: 'finance' });
 }

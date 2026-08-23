@@ -52,6 +52,9 @@ import {
   handleApprovalPurchaseReject,
   handleApprovalEdit,
   handleApprovalRemind,
+  handleApprovalVoucher,
+  handleFinanceApprove,
+  handleFinanceReject,
 } from './api/approvals';
 
 const app = new Hono<AppEnv>();
@@ -205,5 +208,8 @@ app.post('/api/approvals/:id/approve', handleApprovalPurchaseApprove);
 app.post('/api/approvals/:id/reject', handleApprovalPurchaseReject);
 app.post('/api/approvals/:id/edit', handleApprovalEdit);
 app.post('/api/approvals/:id/remind', handleApprovalRemind);
+app.post('/api/approvals/:id/voucher', handleApprovalVoucher);
+app.post('/api/approvals/:id/finance-approve', handleFinanceApprove);
+app.post('/api/approvals/:id/finance-reject', handleFinanceReject);
 
 export default app;

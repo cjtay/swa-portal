@@ -45,10 +45,10 @@ Headline numbers, verified 23-08-2026:
 |---|---|
 | Production dependencies | 2 (`astro`, `hono`) |
 | Page files | 25 (all live) |
-| Worker routes | 77 |
+| Worker routes | 80 |
 | Database tables | 16 (14 live, 2 dormant) |
 | Migration files | 11 (two share the number `005`) |
-| Automated tests | 192 |
+| Automated tests | 211 |
 | Source lines, including tests | ~22,000 |
 
 The important number is the 2 production dependencies. The project deliberately builds on two
@@ -229,9 +229,14 @@ path returns 404 in production. See AGENTS.md, "Local dev login".
   attachment stream; Phase 3 adds the purchase stage — approve/reject (atomic,
   race-safe), edit + resubmit with routing by `rejected_stage`, reminders, and the
   emails in `src/worker/lib/email-approval.ts` (request → purchase approvers,
-  decision → creator; description included truncated). Emails go to the named
-  approver list only — the IT-admin union grants authority, not mailbox traffic.
-  Voucher, finance and paid stages ship with later phases — see
+  decision → creator; description included truncated). Phase 4 adds the finance
+  stage: voucher submission with `PV<YY>-<MM><NN>` numbering (UNIQUE-index retry,
+  two digits cap at 99 per month, number survives rejection), finance
+  approve/reject (finance approvers only — verified by a test that IT admins get
+  403), voucher resubmission straight back to finance check, and reminders at
+  either waiting stage. Emails go to the named approver lists only — the IT-admin
+  union grants authority, not mailbox traffic. The paid step, voucher export page
+  and audit CSV ship with later phases — see
   `docs/plans/Approval-Workflow-Implementation-Plan.md`.
 
 Handlers sometimes double-check roles as well (defence in depth). For example,
@@ -350,7 +355,7 @@ All 69 routes registered in `src/worker/index.ts`, verified 23-08-2026.
 | `GET /api/admin/forms/laughter-yoga`, `GET …/export` (2) | Laughter-yoga submissions |
 | `GET /api/admin/forms/membership`, `GET …/export`, `GET …/image/:id/:kind`, `POST …/:id/approve`, `POST …/:id/reject` (5) | Membership submissions + approvals |
 | `GET/POST /api/namecards`, `POST /api/namecards/bulk`, `GET /api/namecards/me`, `GET/PATCH/DELETE /api/namecards/:id`, `PATCH …/:id/slug`, `PATCH …/:id/toggle`, `POST/DELETE …/:id/photo` (11) | Namecard admin + self-service |
-| `GET /api/approvals`, `POST /api/approvals`, `GET /api/approvals/:id`, `GET /api/approvals/:id/attachment/:attId`, `POST …/:id/approve`, `POST …/:id/reject`, `POST …/:id/edit`, `POST …/:id/remind` (8) | Approval workflow: board list + create + detail + attachment stream (Phase 2); purchase approve/reject, edit + resubmit, reminder (Phase 3) |
+| `GET /api/approvals`, `POST /api/approvals`, `GET /api/approvals/:id`, `GET /api/approvals/:id/attachment/:attId`, `POST …/:id/approve`, `POST …/:id/reject`, `POST …/:id/edit`, `POST …/:id/remind`, `POST …/:id/voucher`, `POST …/:id/finance-approve`, `POST …/:id/finance-reject` (11) | Approval workflow: board list + create + detail + attachment stream (Phase 2); purchase approve/reject, edit + resubmit, reminder (Phase 3); voucher with PV numbering + finance stage (Phase 4) |
 
 Totals: 19 public + 58 authenticated = 77.
 
@@ -417,7 +422,7 @@ The rules:
 - **Two typechecks.** `npm run typecheck` runs `astro check` over the pages;
   `npm run typecheck:worker` runs `tsc` over the Worker with its own tsconfig.
 - **Tests hit a simulated Cloudflare, not mocks.** Vitest + Miniflare give the tests a real
-  fake D1/KV/R2. `npm run test:run` currently passes 192 tests. The test files share one D1
+  fake D1/KV/R2. `npm run test:run` currently passes 211 tests. The test files share one D1
   isolate, so `vitest.config.ts` runs them serially.
 - **Destructive local scripts are user-invoked only.** `db:setup`, `db:seed` and
   `db:clear:membership` never run autonomously.

@@ -169,12 +169,22 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   .ap-check[hidden] { display: none; }
 
   .ap-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-  #ap-reject-box, #ap-edit-form {
+  #ap-reject-box, #ap-edit-form, #ap-voucher-form {
     border: 1px solid var(--border);
     border-radius: 0.4rem;
     padding: 0.75rem;
     background: #fafafa;
   }
+
+  .ap-vline-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .ap-vline-row:last-child { border-bottom: none; }
 
   .ap-comp-row {
     display: flex;
@@ -342,10 +352,22 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     finance_rejection_reason: string | null;
     voucher_no: string | null;
     voucher_date: string | null;
+    voucher_lines: string | null;
+    voucher_submitted_by: string | null;
+    voucher_submitted_at: string | null;
+    finance_decision_by: string | null;
+    finance_decision_at: string | null;
     created_by: string;
     created_at: string;
     updated_at: string;
     comparison?: Array<{ attachmentId: number; description: string }> | null;
+  }
+
+  interface VoucherLine {
+    no: number | null;
+    date: string | null;
+    description: string;
+    amount: number | null;
   }
 
   interface ApprovalAttachment {
@@ -412,6 +434,24 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   function fmtSize(bytes: number): string {
     if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     return Math.max(1, Math.round(bytes / 1024)) + ' KB';
+  }
+
+  function todayIso(): string {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+  }
+
+  function parseVoucherLines(raw: string | null): VoucherLine[] {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as VoucherLine[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function voucherTotal(lines: VoucherLine[]): number {
+    return Math.round(lines.reduce((sum, line) => sum + (typeof line.amount === 'number' ? line.amount : 0), 0) * 100) / 100;
   }
 
   function chip(status: string): string {
@@ -566,14 +606,22 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
           </div>`;
 
     // ---- Stage-appropriate actions (plan §11) ----
+    const voucherLines = parseVoucherLines(item.voucher_lines);
+    const hasVoucher = !!item.voucher_no;
     const canApprove = item.status === 'pending' && !!sessionData?.is_purchase_approver;
-    const canRemind = item.status === 'pending' && !!sessionData?.is_admin;
+    const canFinanceDecide = item.status === 'finance_check' && !!sessionData?.is_finance_approver;
+    const canRemind = (item.status === 'pending' || item.status === 'finance_check') && !!sessionData?.is_admin;
     const canEdit = (item.status === 'pending' || item.status === 'rejected') && !!sessionData?.is_admin;
+    const canVoucher =
+      (item.status === 'purchase_approved' || (item.status === 'rejected' && item.rejected_stage === 'finance')) && !!sessionData?.is_admin;
     const actionsHtml =
-      canApprove || canRemind || canEdit
+      canApprove || canFinanceDecide || canRemind || canEdit || canVoucher
         ? `<div class="ap-actions">
+            ${canFinanceDecide ? '<button type="button" class="btn btn-primary" id="ap-act-finance-approve">Approve voucher</button>' : ''}
+            ${canFinanceDecide ? '<button type="button" class="btn btn-danger" id="ap-act-finance-reject">Reject voucher\u2026</button>' : ''}
             ${canApprove ? '<button type="button" class="btn btn-primary" id="ap-act-approve">Approve</button>' : ''}
             ${canApprove ? '<button type="button" class="btn btn-danger" id="ap-act-reject">Reject\u2026</button>' : ''}
+            ${canVoucher ? `<button type="button" class="btn btn-primary" id="ap-act-voucher">${hasVoucher ? 'Edit voucher & resubmit' : 'Prepare voucher'}</button>` : ''}
             ${canRemind ? '<button type="button" class="btn btn-secondary" id="ap-act-remind">Send reminder</button>' : ''}
             ${canEdit ? '<button type="button" class="btn btn-secondary" id="ap-act-edit">Edit</button>' : ''}
             <span id="ap-act-msg" style="font-size:0.85rem;"></span>
@@ -585,6 +633,33 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
             </label>
             <button type="button" class="btn btn-danger" id="ap-act-reject-confirm" style="margin-top:0.5rem;">Confirm rejection</button>
           </div>
+          <div id="ap-finance-reject-box" hidden>
+            <label class="ap-field" style="display:block;">
+              <span>Reason for rejection (sent to the requester)</span>
+              <textarea id="ap-finance-reject-reason" class="form-input" rows="3" maxlength="1000" placeholder="e.g. The total does not match the invoice; please correct line 2."></textarea>
+            </label>
+            <button type="button" class="btn btn-danger" id="ap-act-finance-reject-confirm" style="margin-top:0.5rem;">Confirm rejection</button>
+          </div>
+          <form id="ap-voucher-form" hidden>
+            <div class="ap-form-grid">
+              <label class="ap-field"><span>Voucher date</span>
+                <input type="date" id="ap-voucher-date" class="form-input" value="${esc(item.voucher_date || todayIso())}" required /></label>
+              <label class="ap-field"><span>Payable to (carried from the item)</span>
+                <input type="text" class="form-input" value="${esc(item.payee || '')}" disabled /></label>
+            </div>
+            <p style="margin:0.75rem 0 0.25rem;font-weight:600;font-size:0.85rem;">Voucher lines</p>
+            <p style="margin:0 0 0.5rem;color:var(--text-muted);font-size:0.78rem;">
+              Amounts may be negative (a deposit already paid). Leave the amount empty for note-only lines such as bank details.
+              The voucher number is assigned when you submit.
+            </p>
+            <div id="ap-voucher-lines"></div>
+            <button type="button" class="btn btn-secondary" id="ap-voucher-add-line" style="margin-top:0.5rem;">Add line</button>
+            <p style="margin:0.75rem 0 0;font-weight:600;">Total: <span id="ap-voucher-total">S$0.00</span></p>
+            <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.75rem;">
+              <button type="submit" class="btn btn-primary">Submit voucher to finance</button>
+              <button type="button" class="btn btn-secondary" id="ap-voucher-cancel">Cancel</button>
+            </div>
+          </form>
           <form id="ap-edit-form" hidden>
             <div class="ap-form-grid">
               <label class="ap-field"><span>Title</span>
@@ -608,6 +683,40 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
           </form>`
         : '';
 
+    const voucherHtml =
+      !hasVoucher
+        ? ''
+        : `<div class="ap-voucher">
+            <h3 style="font-size:1rem;margin:0 0 0.5rem;">Payment voucher</h3>
+            <p style="margin:0 0 0.5rem;font-size:0.85rem;">
+              <strong>${esc(item.voucher_no || '')}</strong> — ${esc(item.voucher_date || '')} — payable to ${esc(item.payee || '—')}
+            </p>
+            <table class="ap-comparison-table">
+              <thead><tr><th style="width:2.5rem;">No</th><th style="width:6rem;">Date</th><th>Description</th><th style="width:8rem; text-align:right;">Amount (S$)</th></tr></thead>
+              <tbody>
+                ${voucherLines
+                  .map(
+                    (line) =>
+                      `<tr><td>${line.no ?? ''}</td><td>${esc(line.date || '')}</td><td>${esc(line.description)}</td><td style="text-align:right;">${
+                        line.amount === null ? '' : fmtMoney(line.amount)
+                      }</td></tr>`,
+                  )
+                  .join('')}
+                <tr><td colspan="3" style="text-align:right;font-weight:600;">TOTAL PAYABLE</td><td style="text-align:right;font-weight:600;">${fmtMoney(
+                  voucherTotal(voucherLines),
+                )}</td></tr>
+              </tbody>
+            </table>
+            <p style="margin:0.5rem 0 0;font-size:0.8rem;color:var(--text-muted);">
+              Prepared by ${esc(item.voucher_submitted_by || '')}${item.voucher_submitted_at ? ` (${fmtDateSg(item.voucher_submitted_at)})` : ''}.
+              ${item.finance_decision_by
+                ? `Payment approved by ${esc(item.finance_decision_by)}${item.finance_decision_at ? ` (${fmtDateSg(item.finance_decision_at)})` : ''}.`
+                : item.status === 'finance_check'
+                  ? 'Awaiting finance approval.'
+                  : ''}
+            </p>
+          </div>`;
+
     body.innerHTML = `
       ${notesHtml}
       ${actionsHtml}
@@ -615,6 +724,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
         ${detailRows.map(([label, value]) => `<div class="ap-detail-item"><dt>${label}</dt><dd>${value || '—'}</dd></div>`).join('')}
       </dl>
       ${item.description ? `<div><h3 style="font-size:1rem;margin:0 0 0.5rem;">Description</h3><p style="margin:0;font-size:0.9rem;white-space:pre-wrap;word-break:break-word;">${esc(item.description)}</p></div>` : ''}
+      ${voucherHtml}
       <div>
         <h3 style="font-size:1rem;margin:0 0 0.5rem;">Documents</h3>
         ${attachmentsHtml}
@@ -639,6 +749,157 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
 
   function wireDrawerActions(item: ApprovalItem): void {
     const msg = (text: string, ok = false) => setActMsg(text, ok);
+
+    document.getElementById('ap-act-finance-approve')?.addEventListener('click', async () => {
+      const btn = document.getElementById('ap-act-finance-approve') as HTMLButtonElement | null;
+      if (!btn) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/approvals/${item.id}/finance-approve`, { method: 'POST' });
+        const body = (await res.json()) as { success: boolean; message?: string };
+        if (body.success) {
+          await refreshAfterAction(item.id);
+        } else {
+          msg(body.message || 'Could not approve the voucher.');
+          btn.disabled = false;
+        }
+      } catch {
+        msg('Network error.');
+        btn.disabled = false;
+      }
+    });
+
+    const financeRejectBox = document.getElementById('ap-finance-reject-box');
+    document.getElementById('ap-act-finance-reject')?.addEventListener('click', () => {
+      if (financeRejectBox) financeRejectBox.hidden = !financeRejectBox.hidden;
+    });
+    document.getElementById('ap-act-finance-reject-confirm')?.addEventListener('click', async () => {
+      const reasonEl = document.getElementById('ap-finance-reject-reason') as HTMLTextAreaElement | null;
+      const reason = reasonEl?.value.trim() || '';
+      if (!reason) {
+        msg('A reason is required to reject.');
+        return;
+      }
+      try {
+        const res = await fetch(`/api/approvals/${item.id}/finance-reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason }),
+        });
+        const body = (await res.json()) as { success: boolean; message?: string };
+        if (body.success) {
+          await refreshAfterAction(item.id);
+        } else {
+          msg(body.message || 'Could not reject the voucher.');
+        }
+      } catch {
+        msg('Network error.');
+      }
+    });
+
+    // ---- Voucher form (admin, Phase 4) ----
+    const voucherForm = document.getElementById('ap-voucher-form') as HTMLFormElement | null;
+    const voucherLinesBox = document.getElementById('ap-voucher-lines');
+
+    function addVoucherLine(line?: VoucherLine): void {
+      if (!voucherLinesBox) return;
+      const row = document.createElement('div');
+      row.className = 'ap-vline-row';
+      row.innerHTML = `
+        <input type="text" class="form-input ap-vline-no" placeholder="No" value="${line?.no ?? ''}" maxlength="2" style="width:3rem;" />
+        <input type="date" class="form-input ap-vline-date" value="${esc(line?.date || '')}" style="width:9rem;" />
+        <input type="text" class="form-input ap-vline-desc" placeholder="Description" maxlength="500" style="flex:1;min-width:180px;" value="${esc(line?.description || '')}" />
+        <input type="number" class="form-input ap-vline-amount" placeholder="Amount" step="0.01" style="width:9rem;" value="${line?.amount ?? ''}" />
+        <button type="button" class="ap-file-remove ap-vline-remove" aria-label="Remove line">Remove</button>`;
+      row.querySelector('.ap-vline-remove')?.addEventListener('click', () => {
+        row.remove();
+        updateVoucherTotal();
+      });
+      voucherLinesBox.appendChild(row);
+    }
+
+    function updateVoucherTotal(): void {
+      const totalEl = document.getElementById('ap-voucher-total');
+      if (!totalEl || !voucherLinesBox) return;
+      let total = 0;
+      voucherLinesBox.querySelectorAll<HTMLInputElement>('.ap-vline-amount').forEach((inp) => {
+        const v = inp.value.trim();
+        if (v.length > 0 && Number.isFinite(Number(v))) total += Number(v);
+      });
+      total = Math.round(total * 100) / 100;
+      totalEl.textContent = fmtMoney(total);
+    }
+
+    function initVoucherForm(): void {
+      if (!voucherLinesBox) return;
+      voucherLinesBox.innerHTML = '';
+      const existing = parseVoucherLines(item.voucher_lines);
+      if (existing.length > 0) {
+        existing.forEach((line) => addVoucherLine(line));
+      } else {
+        // Pre-fill from the item: one line for the title/amount (plan §7).
+        addVoucherLine({ no: 1, date: todayIso(), description: item.title, amount: item.requested_amount });
+      }
+      updateVoucherTotal();
+    }
+
+    document.getElementById('ap-act-voucher')?.addEventListener('click', () => {
+      if (!voucherForm) return;
+      if (voucherForm.hidden) initVoucherForm();
+      voucherForm.hidden = !voucherForm.hidden;
+    });
+    document.getElementById('ap-voucher-cancel')?.addEventListener('click', () => {
+      if (voucherForm) voucherForm.hidden = true;
+    });
+    document.getElementById('ap-voucher-add-line')?.addEventListener('click', () => addVoucherLine());
+    voucherLinesBox?.addEventListener('input', updateVoucherTotal);
+
+    voucherForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!voucherLinesBox) return;
+      const dateEl = document.getElementById('ap-voucher-date') as HTMLInputElement | null;
+      const voucherDate = dateEl?.value || '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(voucherDate)) {
+        msg('Pick a voucher date.');
+        return;
+      }
+      const lines: VoucherLine[] = [];
+      for (const row of Array.from(voucherLinesBox.querySelectorAll('.ap-vline-row'))) {
+        const desc = (row.querySelector('.ap-vline-desc') as HTMLInputElement).value.trim();
+        const amountRaw = (row.querySelector('.ap-vline-amount') as HTMLInputElement).value.trim();
+        if (!desc && !amountRaw) continue; // skip fully-empty rows
+        if (!desc) {
+          msg('Every voucher line needs a description.');
+          return;
+        }
+        const noRaw = (row.querySelector('.ap-vline-no') as HTMLInputElement).value.trim();
+        lines.push({
+          no: noRaw === '' ? null : Number(noRaw),
+          date: (row.querySelector('.ap-vline-date') as HTMLInputElement).value || null,
+          description: desc,
+          amount: amountRaw === '' ? null : Number(amountRaw),
+        });
+      }
+      if (lines.length === 0) {
+        msg('The voucher needs at least one line.');
+        return;
+      }
+      try {
+        const res = await fetch(`/api/approvals/${item.id}/voucher`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ voucherDate, lines }),
+        });
+        const body = (await res.json()) as { success: boolean; message?: string };
+        if (body.success) {
+          await refreshAfterAction(item.id);
+        } else {
+          msg(body.message || 'Could not submit the voucher.');
+        }
+      } catch {
+        msg('Network error.');
+      }
+    });
 
     document.getElementById('ap-act-approve')?.addEventListener('click', async () => {
       const btn = document.getElementById('ap-act-approve') as HTMLButtonElement | null;

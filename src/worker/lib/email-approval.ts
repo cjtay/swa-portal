@@ -1,6 +1,6 @@
 import type { Env } from '../types';
 import { logError } from './log-error';
-import { APPROVAL_PURCHASE_APPROVER_EMAILS } from '../../constants/portal';
+import { APPROVAL_FINANCE_APPROVER_EMAILS, APPROVAL_PURCHASE_APPROVER_EMAILS } from '../../constants/portal';
 
 // Approval-workflow emails — docs/plans/Approval-Workflow-Implementation-Plan.md §10.
 //
@@ -174,4 +174,82 @@ export async function sendApprovalRequestEmail(env: Env, item: ApprovalEmailItem
 export async function sendPurchaseDecisionEmail(env: Env, item: ApprovalEmailItem, decision: { approved: boolean; reason?: string; decidedBy: string }): Promise<void> {
   const subject = (decision.approved ? 'Approved: ' : 'Rejected: ') + item.title;
   await sendViaResend(env, [item.createdBy], subject, buildPurchaseDecisionEmail(env, item, decision), 'approvals-decision-email');
+}
+
+/* ---------------- finance stage (Phase 4) ---------------- */
+
+export interface VoucherEmailItem {
+  id: number;
+  title: string;
+  payee: string | null;
+  voucherNo: string;
+  voucherDate: string;
+  total: number | null;
+  createdBy: string;
+}
+
+function moneySigned(amount: number): string {
+  const sign = amount < 0 ? '-' : '';
+  return sign + 'S$' + Math.abs(amount).toFixed(2);
+}
+
+/** "Voucher for finance check" — goes to the finance approvers on submission
+ *  or resubmission after a finance rejection (plan §10). */
+export function buildVoucherEmail(env: Env, item: VoucherEmailItem, kind: 'new' | 'resubmitted' | 'reminder'): string {
+  const heading = kind === 'new' ? 'Voucher for Finance Check' : kind === 'resubmitted' ? 'Voucher Resubmitted for Finance Check' : 'Reminder: Voucher Awaiting Finance Check';
+  const intro =
+    kind === 'new'
+      ? 'A payment voucher has been submitted and needs a finance decision.'
+      : kind === 'resubmitted'
+        ? 'A voucher that was rejected at the finance stage has been resubmitted and needs a new decision.'
+        : 'This voucher is still waiting for a finance decision.';
+  return wrap(
+    header(heading, item.voucherNo) +
+    `<div style="padding:20px 24px;"><p style="margin:0 0 12px 0;color:#374151;font-size:14px;">${intro}</p>` +
+    `<table style="width:100%;border-collapse:collapse;margin:8px 0 20px 0;">` +
+    row('Item', item.title) +
+    row('Voucher No', item.voucherNo) +
+    row('Voucher date', item.voucherDate) +
+    row('Payable to', item.payee || '') +
+    row('Total payable', moneySigned(item.total ?? 0)) +
+    row('Prepared by', item.createdBy) +
+    '</table>' +
+    actionButton(itemUrl(env, item.id), 'Review in SWA Portal') +
+    '</div>',
+  );
+}
+
+/** Finance approve / reject decision — goes to the creator. */
+export function buildFinanceDecisionEmail(env: Env, item: VoucherEmailItem, decision: { approved: boolean; reason?: string; decidedBy: string }): string {
+  const heading = decision.approved ? 'Voucher Approved by Finance' : 'Voucher Rejected by Finance';
+  const intro = decision.approved
+    ? 'Your payment voucher was approved by finance. You can now export the voucher as a PDF and record the payment.'
+    : 'Your payment voucher was rejected at the finance stage. Edit the voucher and resubmit it when ready.';
+  let inner =
+    header(heading, item.title) +
+    `<div style="padding:20px 24px;"><p style="margin:0 0 12px 0;color:#374151;font-size:14px;">${intro}</p>` +
+    `<table style="width:100%;border-collapse:collapse;margin:8px 0 20px 0;">` +
+    row('Voucher No', item.voucherNo) +
+    row('Payable to', item.payee || '') +
+    row('Total payable', moneySigned(item.total ?? 0)) +
+    row('Decided by', decision.decidedBy) +
+    '</table>';
+  if (!decision.approved && decision.reason) {
+    inner +=
+      `<div style="border-left:3px solid #b3261e;background:#fdecea;padding:10px 14px;margin:12px 0 16px 0;border-radius:0 4px 4px 0;">` +
+      `<div style="font-size:12px;color:#b3261e;font-weight:600;margin-bottom:4px;">Reason</div>` +
+      `<div style="font-size:14px;color:#1f2937;white-space:pre-wrap;">${escapeHtml(decision.reason)}</div></div>`;
+  }
+  inner += actionButton(itemUrl(env, item.id), 'Open in SWA Portal') + '</div>';
+  return wrap(inner);
+}
+
+export async function sendVoucherEmail(env: Env, item: VoucherEmailItem, kind: 'new' | 'resubmitted' | 'reminder'): Promise<void> {
+  const prefix = kind === 'new' ? 'Voucher for finance check: ' : kind === 'resubmitted' ? 'Voucher resubmitted: ' : 'Reminder — voucher awaiting finance check: ';
+  await sendViaResend(env, [...APPROVAL_FINANCE_APPROVER_EMAILS], prefix + `${item.title} (${item.voucherNo})`, buildVoucherEmail(env, item, kind), 'approvals-voucher-email');
+}
+
+export async function sendFinanceDecisionEmail(env: Env, item: VoucherEmailItem, decision: { approved: boolean; reason?: string; decidedBy: string }): Promise<void> {
+  const subject = (decision.approved ? 'Finance approved: ' : 'Finance rejected: ') + `${item.title} (${item.voucherNo})`;
+  await sendViaResend(env, [item.createdBy], subject, buildFinanceDecisionEmail(env, item, decision), 'approvals-finance-decision-email');
 }
