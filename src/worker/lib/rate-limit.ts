@@ -27,6 +27,12 @@ const ENDPOINT_LIMITS: Record<string, EndpointLimit> = {
   'namecards:photo:post': { windowSeconds: 60 * 60, maxRequests: 10 },
   // Membership approve/reject — state transitions with email side effects.
   'membership-review:post': { windowSeconds: 60 * 60, maxRequests: 20 },
+  // Approval workflow (plan §8) — reminder emails are externally visible;
+  // review covers approve/reject at both stages (matches membership);
+  // write covers create/edit/voucher at the default cadence.
+  'approvals:remind:post': { windowSeconds: 60 * 60, maxRequests: 5 },
+  'approvals:review:post': { windowSeconds: 60 * 60, maxRequests: 20 },
+  'approvals:write:post': { windowSeconds: 15 * 60, maxRequests: 10 },
 };
 
 export function getEndpointLimit(endpointKey: string): EndpointLimit {
@@ -81,6 +87,15 @@ export function getEndpointKey(path: string, method: string): string | null {
     if (/^\/api\/namecards\/[^/]+\/photo$/.test(path)) return 'namecards:photo:post';
     if (/^\/api\/admin\/forms\/membership\/[^/]+\/(approve|reject)$/.test(path)) {
       return 'membership-review:post';
+    }
+    // Approval workflow — specific actions first, then every remaining POST
+    // under /api/approvals (create, edit, voucher, paid, attachments).
+    if (/^\/api\/approvals\/[^/]+\/remind$/.test(path)) return 'approvals:remind:post';
+    if (/^\/api\/approvals\/[^/]+\/(approve|reject|finance-approve|finance-reject)$/.test(path)) {
+      return 'approvals:review:post';
+    }
+    if (path === '/api/approvals' || path.startsWith('/api/approvals/')) {
+      return 'approvals:write:post';
     }
   }
 

@@ -6,6 +6,8 @@ export interface SessionResponse {
   regRole: string | null;
   is_admin: boolean;
   is_it_admin: boolean;
+  is_purchase_approver: boolean;
+  is_finance_approver: boolean;
 }
 
 interface AuthGateOptions {

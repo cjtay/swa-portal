@@ -12,6 +12,48 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-23 (session 3) — Approval workflow Phase 1 (foundation)
+
+Plan: `docs/plans/Approval-Workflow-Implementation-Plan.md` (v2). Phase 1 is
+plumbing only — no visible feature, no API handler, no pages.
+
+### Done
+- **Migration 009** (`migrations/009_approvals.sql`): `approval_items`
+  (six-status CHECK, `UNIQUE voucher_no`, voucher + paid + comparison fields),
+  `approval_attachments` (`UNIQUE r2_key`), `approval_audit_log`
+  (insert-only). Idempotent; backported into `schema.sql` same commit.
+- **portal.ts**: `APPROVAL_PURCHASE_APPROVER_EMAILS` (dev `approval@`,
+  prod addresses commented for owner swap), `APPROVAL_FINANCE_APPROVER_EMAILS`
+  (dev `finance@`; IT admins deliberately excluded),
+  `isPurchaseApprover` (unions IT_ADMIN_EMAILS), `isFinanceApprover`,
+  `canRaiseApprovalItem` (admin tier), `APPROVAL_CATEGORIES` (8, three
+  recurring with no approval), caps 10 files/item + 10 MB/file.
+- **Session flags**: `is_purchase_approver` / `is_finance_approver` added to
+  all four `/api/session` reply branches + `SessionResponse`
+  (`auth-gate.ts`).
+- **Middleware gate 7c**: `/api/approvals` entry = admin or either approver,
+  all methods; handlers enforce finer rules in later phases.
+- **Rate limits**: `approvals:remind:post` (5/h), `approvals:review:post`
+  (20/h), `approvals:write:post` (10/15m) with POST path routing.
+- **Seed rows**: `approval@` (committee), `finance@` (committee), Jolene Lim
+  (admin), all `can_login = 1`, owner test mobile.
+- **Drive-by fix**: removed 4 stale address fields from the
+  `namecard-svg.test.ts` fixture — a pre-existing `typecheck:worker` failure
+  at HEAD (vitest never caught it because it skips type checking); leftover
+  from the session 2 namecard restore.
+- Docs: ARCHITECTURE.md counts (16 tables, 10 migrations), roles section,
+  table list, migration-quirks note.
+
+### Deferred to Phase 2
+- AdminLayout "Approvals" nav item (no page exists yet — avoids dead link).
+- Create/list endpoints, attachment stream, board page, audit writes.
+
+### Verification
+- `npm run test:run`, `npm run typecheck`, `npm run typecheck:worker` green;
+  migration 009 applied to local D1.
+
+---
+
 ## 2026-08-23 (session 2) — Namecards restored as board-only, auto-generated
 
 Owner decision: restore (not delete). New rules, owner-confirmed:

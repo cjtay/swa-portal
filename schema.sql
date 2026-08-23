@@ -328,3 +328,70 @@ CREATE TABLE IF NOT EXISTS namecards (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_namecards_slug      ON namecards(slug);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_namecards_member_id ON namecards(member_id);
 CREATE INDEX        IF NOT EXISTS idx_namecards_visible   ON namecards(has_namecard) WHERE has_namecard = 1;
+
+-- ============================================================
+-- Approval workflow (backported from migration 009 so schema.sql is a
+-- complete baseline for fresh local databases — Phase 1, 2026-08-23).
+--
+-- Two-stage payment approvals: purchase (Roxanne/Angela), then finance
+-- (YS/Joyce). Spec: docs/plans/Approval-Workflow-Implementation-Plan.md.
+-- approval_audit_log is insert-only: no UPDATE or DELETE endpoint exists.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS approval_items (
+  id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+  category                  TEXT NOT NULL,
+  title                     TEXT NOT NULL,
+  payee                     TEXT,
+  requested_amount          REAL,
+  approval_required         INTEGER NOT NULL DEFAULT 1,
+  status                    TEXT NOT NULL DEFAULT 'pending'
+                            CHECK (status IN ('pending', 'purchase_approved', 'finance_check', 'finance_approved', 'rejected', 'paid')),
+  rejected_stage            TEXT CHECK (rejected_stage IN ('purchase', 'finance') OR rejected_stage IS NULL),
+  purchase_decision_by      TEXT,
+  purchase_decision_at      TEXT,
+  rejection_reason          TEXT,
+  voucher_no                TEXT UNIQUE,
+  voucher_date              TEXT,
+  voucher_lines             TEXT,
+  voucher_submitted_by      TEXT,
+  voucher_submitted_at      TEXT,
+  finance_decision_by       TEXT,
+  finance_decision_at       TEXT,
+  finance_rejection_reason  TEXT,
+  paid_by                   TEXT,
+  paid_at                   TEXT,
+  payment_method            TEXT,
+  payment_reference         TEXT,
+  created_by                TEXT NOT NULL,
+  comparison                TEXT,
+  created_at                TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at                TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_approval_items_status     ON approval_items(status);
+CREATE INDEX IF NOT EXISTS idx_approval_items_created_at ON approval_items(created_at);
+
+CREATE TABLE IF NOT EXISTS approval_attachments (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id     INTEGER NOT NULL REFERENCES approval_items(id),
+  r2_key      TEXT NOT NULL UNIQUE,
+  filename    TEXT NOT NULL,
+  mime_type   TEXT NOT NULL,
+  size        INTEGER NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_approval_attachments_item ON approval_attachments(item_id);
+
+CREATE TABLE IF NOT EXISTS approval_audit_log (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id     INTEGER NOT NULL REFERENCES approval_items(id),
+  action      TEXT NOT NULL,
+  actor_email TEXT NOT NULL,
+  actor_name  TEXT NOT NULL,
+  note        TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_approval_audit_item    ON approval_audit_log(item_id);
+CREATE INDEX IF NOT EXISTS idx_approval_audit_created ON approval_audit_log(created_at);

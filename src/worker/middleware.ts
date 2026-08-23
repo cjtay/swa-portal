@@ -1,7 +1,7 @@
 import type { Next } from 'hono';
 import type { AppContext } from './types';
 import { getSession, getDevBypassSession } from './api/session';
-import { IT_ADMIN_EMAILS } from '../constants/portal';
+import { IT_ADMIN_EMAILS, isPurchaseApprover, isFinanceApprover } from '../constants/portal';
 import { checkApiRateLimit, getEndpointKey } from './lib/rate-limit';
 import { revalidateSession } from './lib/session-revalidation';
 import { sessionCookieHeader, clearedSessionCookieHeader } from './lib/session-cookie';
@@ -57,6 +57,14 @@ const REG_ADMIN_API = new Set([
 
 const ONLINE_FORMS_API = new Set([
   '/api/admin/forms',
+]);
+
+// Approval workflow — entry requires admin, purchase approver, or finance
+// approver for ALL methods (plan §8). Each handler then enforces its finer
+// rule (e.g. finance approve/reject re-checks isFinanceApprover). Ordinary
+// committee members see nothing: this is financial data.
+const APPROVALS_API = new Set([
+  '/api/approvals',
 ]);
 
 function getBasePath(path: string): string {
@@ -196,6 +204,14 @@ export async function authMiddleware(c: AppContext, next: Next) {
   if (pathStartsWithAny(path, ONLINE_FORMS_API)) {
     if (session.role !== 'admin' && session.role !== 'committee') {
       return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Admin or committee access required.' }, 403);
+    }
+  }
+
+  // 7c. Approval workflow routes — entry requires admin, purchase approver,
+  // or finance approver (all methods). Handlers enforce the finer rules.
+  if (pathStartsWithAny(path, APPROVALS_API)) {
+    if (session.role !== 'admin' && !isPurchaseApprover(session.email) && !isFinanceApprover(session.email)) {
+      return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Approval workflow access required.' }, 403);
     }
   }
 

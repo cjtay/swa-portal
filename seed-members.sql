@@ -39,3 +39,14 @@ INSERT INTO members (name, role, email, mobile, job_title, category, can_login, 
 -- IT_ADMIN_EMAILS constant — send-otp lets them log in without a row.
 INSERT INTO members (name, role, email, category, can_login, sort_order, membership_status, fee_waived) VALUES
 ('Test Admin', 'Office Admin', 'cjtay@singaporewomenassociation.org', 'admin', 1, 100, 'active', 1);
+
+-- Approval workflow test identities (docs/plans/Approval-Workflow-Implementation-
+-- Plan.md §13). Shared inboxes the owner controls stand in for the four
+-- approvers — the members table forbids duplicate emails, so locally there is
+-- one row per shared inbox rather than four. Production gives each person
+-- their own address (and the audit log then names people properly).
+-- All three rows set can_login = 1 so the dev quick-login picker lists them.
+INSERT INTO members (name, role, email, mobile, job_title, category, can_login, address_line1, address_line2, address_postal_code, address_country, sort_order, membership_status, fee_due_date, fee_waived) VALUES
+('Purchase Approver (test)', 'Purchase Approver', 'approval@singaporewomenassociation.org', '+65 9323 1688', 'Purchase Approver (shared test inbox)', 'committee', 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', 101, 'active', '2027-01-31', 1),
+('Finance Approver (test)', 'Finance Approver', 'finance@singaporewomenassociation.org', '+65 9323 1688', 'Finance Approver (shared test inbox)', 'committee', 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', 102, 'active', '2027-01-31', 1),
+('Jolene Lim', 'Office Admin', 'jolene.lim@singaporewomenassociation.org', '+65 9323 1688', 'Office Admin', 'admin', 1, '1 Test Avenue', '#01-001', '000001', 'Singapore', 103, 'active', '2027-01-31', 1);
