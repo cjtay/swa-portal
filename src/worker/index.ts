@@ -48,6 +48,10 @@ import {
   handleApprovalsCreate,
   handleApprovalDetail,
   handleApprovalAttachment,
+  handleApprovalPurchaseApprove,
+  handleApprovalPurchaseReject,
+  handleApprovalEdit,
+  handleApprovalRemind,
 } from './api/approvals';
 
 const app = new Hono<AppEnv>();
@@ -197,5 +201,9 @@ app.get('/api/approvals', handleApprovalsList);
 app.post('/api/approvals', handleApprovalsCreate);
 app.get('/api/approvals/:id', handleApprovalDetail);
 app.get('/api/approvals/:id/attachment/:attId', handleApprovalAttachment);
+app.post('/api/approvals/:id/approve', handleApprovalPurchaseApprove);
+app.post('/api/approvals/:id/reject', handleApprovalPurchaseReject);
+app.post('/api/approvals/:id/edit', handleApprovalEdit);
+app.post('/api/approvals/:id/remind', handleApprovalRemind);
 
 export default app;

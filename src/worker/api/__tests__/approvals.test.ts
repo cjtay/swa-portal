@@ -20,6 +20,9 @@ const ADMIN_EMAILS = [
   'approvals-test-admin1@example.com',
   'approvals-test-admin2@example.com',
   'approvals-test-admin3@example.com',
+  'approvals-test-admin4@example.com',
+  'approvals-test-admin5@example.com',
+  'approvals-test-admin6@example.com',
 ];
 const PURCHASE_EMAIL = 'approval@singaporewomenassociation.org';
 const FINANCE_EMAIL = 'finance@singaporewomenassociation.org';
@@ -469,5 +472,283 @@ describe('GET /api/approvals/:id — detail and attachments', () => {
       headers: { Cookie: await purchaseCookie() },
     });
     expect(res.status).toBe(404);
+  });
+});
+
+/* ----------------------------------------------------
+   Phase 3: purchase stage — approve, reject, edit, remind
+   ---------------------------------------------------- */
+
+async function seedPendingItem(): Promise<number> {
+  const form = new FormData();
+  form.append('category', 'quotation');
+  form.append('title', 'Stage test item');
+  form.append('payee', 'Test Vendor Pte Ltd');
+  form.append('requestedAmount', '1200.50');
+  const res = await SELF.fetch('https://example.com/api/approvals', {
+    method: 'POST',
+    headers: { Cookie: await adminCookie() },
+    body: form,
+  });
+  expect(res.status).toBe(201);
+  return (await res.json<{ id: number }>()).id;
+}
+
+describe('POST /api/approvals/:id/approve — purchase stage', () => {
+  it('purchase approver approves a pending item; decision + audit recorded', async () => {
+    const id = await seedPendingItem();
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/approve`, {
+      method: 'POST',
+      headers: { Cookie: await purchaseCookie(), 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json<{ success: boolean; status: string }>();
+    expect(body.status).toBe('purchase_approved');
+
+    const item = await env.DB.prepare('SELECT status, purchase_decision_by FROM approval_items WHERE id = ?')
+      .bind(id)
+      .first<{ status: string; purchase_decision_by: string }>();
+    expect(item?.status).toBe('purchase_approved');
+    expect(item?.purchase_decision_by).toBe(PURCHASE_EMAIL);
+
+    const audit = await env.DB.prepare("SELECT action FROM approval_audit_log WHERE item_id = ? AND action = 'purchase_approved'")
+      .bind(id)
+      .first<{ action: string }>();
+    expect(audit?.action).toBe('purchase_approved');
+  });
+
+  it('second approve on the same item is a 409 (atomic guard)', async () => {
+    const id = await seedPendingItem();
+    const first = await SELF.fetch(`https://example.com/api/approvals/${id}/approve`, {
+      method: 'POST',
+      headers: { Cookie: await purchaseCookie() },
+    });
+    expect(first.status).toBe(200);
+    const second = await SELF.fetch(`https://example.com/api/approvals/${id}/approve`, {
+      method: 'POST',
+      headers: { Cookie: await purchaseCookie() },
+    });
+    expect(second.status).toBe(409);
+  });
+
+  it('finance approver and plain admin cannot approve (403)', async () => {
+    const id = await seedPendingItem();
+    for (const cookie of [await financeCookie(), await adminCookie()]) {
+      const res = await SELF.fetch(`https://example.com/api/approvals/${id}/approve`, {
+        method: 'POST',
+        headers: { Cookie: cookie },
+      });
+      expect(res.status).toBe(403);
+    }
+  });
+
+  it('approving a non-pending item is a 409', async () => {
+    const form = new FormData();
+    form.append('category', 'payroll');
+    form.append('title', 'Recurring, never pending');
+    const created = await SELF.fetch('https://example.com/api/approvals', {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    const id = (await created.json<{ id: number }>()).id;
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/approve`, {
+      method: 'POST',
+      headers: { Cookie: await purchaseCookie() },
+    });
+    expect(res.status).toBe(409);
+  });
+});
+
+describe('POST /api/approvals/:id/reject — purchase stage', () => {
+  it('rejects with a reason; stage and audit recorded', async () => {
+    const id = await seedPendingItem();
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/reject`, {
+      method: 'POST',
+      headers: { Cookie: await purchaseCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Please get a second quotation above S$5,000.' }),
+    });
+    expect(res.status).toBe(200);
+
+    const item = await env.DB.prepare('SELECT status, rejected_stage, rejection_reason FROM approval_items WHERE id = ?')
+      .bind(id)
+      .first<{ status: string; rejected_stage: string; rejection_reason: string }>();
+    expect(item?.status).toBe('rejected');
+    expect(item?.rejected_stage).toBe('purchase');
+    expect(item?.rejection_reason).toContain('second quotation');
+
+    const audit = await env.DB.prepare("SELECT action, note FROM approval_audit_log WHERE item_id = ? AND action = 'purchase_rejected'")
+      .bind(id)
+      .first<{ action: string; note: string }>();
+    expect(audit?.note).toContain('second quotation');
+  });
+
+  it('rejects without a reason as 400', async () => {
+    const id = await seedPendingItem();
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/reject`, {
+      method: 'POST',
+      headers: { Cookie: await purchaseCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: '   ' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('finance approver cannot reject (403)', async () => {
+    const id = await seedPendingItem();
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/reject`, {
+      method: 'POST',
+      headers: { Cookie: await financeCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'nope' }),
+    });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('POST /api/approvals/:id/edit — edit and resubmit', () => {
+  it('admin edits fields and adds an attachment; audits land', async () => {
+    const id = await seedPendingItem();
+    const form = new FormData();
+    form.append('title', 'Stage test item (amended)');
+    form.append('requestedAmount', '1350');
+    form.append('files', pdfFile('extra-quote.pdf', '%PDF extra'));
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/edit`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    expect(res.status).toBe(200);
+
+    const item = await env.DB.prepare('SELECT title, requested_amount, status FROM approval_items WHERE id = ?')
+      .bind(id)
+      .first<{ title: string; requested_amount: number; status: string }>();
+    expect(item?.title).toBe('Stage test item (amended)');
+    expect(item?.requested_amount).toBeCloseTo(1350, 2);
+    expect(item?.status).toBe('pending');
+
+    const actions = await env.DB.prepare('SELECT action FROM approval_audit_log WHERE item_id = ? ORDER BY id').bind(id).all<{ action: string }>();
+    const names = (actions.results || []).map((r) => r.action);
+    expect(names).toContain('item_edited');
+    expect(names).toContain('attachments_added');
+
+    const attCount = await env.DB.prepare('SELECT COUNT(*) AS n FROM approval_attachments WHERE item_id = ?').bind(id).first<{ n: number }>();
+    expect(attCount?.n).toBe(1);
+  });
+
+  it('resubmit after purchase rejection returns to pending and clears the stage', async () => {
+    const id = await seedPendingItem();
+    await SELF.fetch(`https://example.com/api/approvals/${id}/reject`, {
+      method: 'POST',
+      headers: { Cookie: await purchaseCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Too expensive' }),
+    });
+
+    const form = new FormData();
+    form.append('title', 'Stage test item (renegotiated)');
+    form.append('resubmit', 'true');
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/edit`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json<{ success: boolean; status: string; resubmitted: boolean }>();
+    expect(body.status).toBe('pending');
+    expect(body.resubmitted).toBe(true);
+
+    const item = await env.DB.prepare('SELECT status, rejected_stage, rejection_reason FROM approval_items WHERE id = ?')
+      .bind(id)
+      .first<{ status: string; rejected_stage: string | null; rejection_reason: string | null }>();
+    expect(item?.status).toBe('pending');
+    expect(item?.rejected_stage).toBeNull();
+    expect(item?.rejection_reason).toBeNull();
+
+    const audit = await env.DB.prepare("SELECT note FROM approval_audit_log WHERE item_id = ? AND action = 'item_resubmitted'")
+      .bind(id)
+      .first<{ note: string }>();
+    expect(audit?.note).toBe('to=pending');
+  });
+
+  it('resubmit on a non-rejected item is a 409', async () => {
+    const id = await seedPendingItem();
+    const form = new FormData();
+    form.append('resubmit', 'true');
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/edit`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it('editing a paid or finance-stage item is a 409', async () => {
+    const id = await seedPendingItem();
+    await SELF.fetch(`https://example.com/api/approvals/${id}/approve`, { method: 'POST', headers: { Cookie: await purchaseCookie() } });
+    const form = new FormData();
+    form.append('title', 'Should not edit');
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/edit`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it('purchase approver cannot edit (403)', async () => {
+    const id = await seedPendingItem();
+    const form = new FormData();
+    form.append('title', 'Nope');
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/edit`, {
+      method: 'POST',
+      headers: { Cookie: await purchaseCookie() },
+      body: form,
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('comparison rebuild referencing a foreign attachment id is a 400', async () => {
+    const id = await seedPendingItem();
+    const form = new FormData();
+    form.append('comparison', JSON.stringify([{ attachmentId: 999999, description: 'Not mine' }]));
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/edit`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /api/approvals/:id/remind', () => {
+  it('admin sends a reminder for a pending item; audit recorded', async () => {
+    const id = await seedPendingItem();
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/remind`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+    });
+    expect(res.status).toBe(200);
+    const audit = await env.DB.prepare("SELECT action, note FROM approval_audit_log WHERE item_id = ? AND action = 'reminder_sent'")
+      .bind(id)
+      .first<{ action: string; note: string }>();
+    expect(audit?.note).toBe('stage=purchase');
+  });
+
+  it('reminder on a non-pending item is a 409', async () => {
+    const id = await seedPendingItem();
+    await SELF.fetch(`https://example.com/api/approvals/${id}/approve`, { method: 'POST', headers: { Cookie: await purchaseCookie() } });
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/remind`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it('purchase approver cannot send reminders (403)', async () => {
+    const id = await seedPendingItem();
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/remind`, {
+      method: 'POST',
+      headers: { Cookie: await purchaseCookie() },
+    });
+    expect(res.status).toBe(403);
   });
 });

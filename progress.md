@@ -12,6 +12,54 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-23 (session 5) — Approval workflow Phase 3 (purchase stage)
+
+Plan: `docs/plans/Approval-Workflow-Implementation-Plan.md` §14 Phase 3.
+Stage one now runs end to end on the board.
+
+### Done
+- **`src/worker/lib/email-approval.ts`** (new): membership-email structure.
+  Request email (new / resubmitted / reminder) → purchase approvers with
+  description truncated to 500 chars; decision email → creator (approve
+  points at the voucher step, reject shows the reason). Recipients are the
+  named approver list only — the IT-admin union grants authority, not
+  mailbox traffic. Resend, waitUntil, failures logged never fatal.
+- **`approvals.ts`**: `POST /:id/approve` and `/:id/reject` —
+  isPurchaseApprover re-checked in-handler, atomic
+  `UPDATE … WHERE status='pending'` (second click 409), audit + state change
+  in one batch, decision email to creator. `POST /:id/edit` — admin-only,
+  title/payee/description/amount, add attachments (caps count existing),
+  optional comparison rebuild validated against attachment ids
+  (existing + new), `resubmit=true` routes by `rejected_stage`
+  (purchase → pending, resets rejection fields) and re-emails approvers.
+  `POST /:id/remind` — admin-only, pending-only, audit + reminder email.
+  Create now emails approvers when `approval_required = 1`.
+- **Board UI**: drawer action bar — Approve / Reject (reason box) for
+  purchase approvers on pending; Send reminder and Edit (fields + add
+  files + resubmit tick) for admins; `?item=<id>` deep link opens the
+  drawer (the emails' target); drawer refreshes after every action.
+- **Tests**: +21 (approve happy/race/403s/409-on-recurring, reject
+  reason/400/403, edit fields+files/audits/resubmit routing/409s/403/
+  foreign-comparison-400, remind 200/409/403) + 5 email-builder unit
+  tests. 192 total. Test admins widened to 6 rotating identities — the
+  shared-KV write bucket (10/15 min per email) counts validation-failing
+  requests too, and Phase 2+3 together overflowed 3 identities.
+- Docs: ARCHITECTURE.md (77 routes, 192 tests, Phase 3 roles paragraph,
+  stale duplicate test-count line removed).
+
+### Not done (by design — later phases)
+- Phase 4: voucher form with numbering, finance approve/reject + emails,
+  finance-check view. Phase 5: paid step, voucher export page, audit CSV.
+- Comparison editing UI (API accepts it; edit form offers fields/files/
+  resubmit only).
+
+### Verification
+- `npm run test:run` 192 passed; typecheck + typecheck:worker clean.
+- Browser smoke of the full loop owed: create → approve → reject path →
+  edit + resubmit → remind.
+
+---
+
 ## 2026-08-23 (session 4) — Approval workflow Phase 2 (items and the board)
 
 Plan: `docs/plans/Approval-Workflow-Implementation-Plan.md` §14 Phase 2.

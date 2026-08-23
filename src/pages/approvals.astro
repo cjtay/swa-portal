@@ -168,6 +168,14 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
      the 2026-07-05 drawer fix) — restore it explicitly. */
   .ap-check[hidden] { display: none; }
 
+  .ap-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+  #ap-reject-box, #ap-edit-form {
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    padding: 0.75rem;
+    background: #fafafa;
+  }
+
   .ap-comp-row {
     display: flex;
     align-items: center;
@@ -371,6 +379,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   let allItems: ApprovalItem[] = [];
   let counts: Record<string, number> = {};
   let currentTab = 'pending';
+  let sessionData: SessionResponse | null = null;
 
   function esc(value: unknown): string {
     return String(value ?? '')
@@ -556,8 +565,52 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
             </table>
           </div>`;
 
+    // ---- Stage-appropriate actions (plan §11) ----
+    const canApprove = item.status === 'pending' && !!sessionData?.is_purchase_approver;
+    const canRemind = item.status === 'pending' && !!sessionData?.is_admin;
+    const canEdit = (item.status === 'pending' || item.status === 'rejected') && !!sessionData?.is_admin;
+    const actionsHtml =
+      canApprove || canRemind || canEdit
+        ? `<div class="ap-actions">
+            ${canApprove ? '<button type="button" class="btn btn-primary" id="ap-act-approve">Approve</button>' : ''}
+            ${canApprove ? '<button type="button" class="btn btn-danger" id="ap-act-reject">Reject\u2026</button>' : ''}
+            ${canRemind ? '<button type="button" class="btn btn-secondary" id="ap-act-remind">Send reminder</button>' : ''}
+            ${canEdit ? '<button type="button" class="btn btn-secondary" id="ap-act-edit">Edit</button>' : ''}
+            <span id="ap-act-msg" style="font-size:0.85rem;"></span>
+          </div>
+          <div id="ap-reject-box" hidden>
+            <label class="ap-field" style="display:block;">
+              <span>Reason for rejection (sent to the requester)</span>
+              <textarea id="ap-reject-reason" class="form-input" rows="3" maxlength="1000" placeholder="e.g. Please get a second quotation above S$5,000."></textarea>
+            </label>
+            <button type="button" class="btn btn-danger" id="ap-act-reject-confirm" style="margin-top:0.5rem;">Confirm rejection</button>
+          </div>
+          <form id="ap-edit-form" hidden>
+            <div class="ap-form-grid">
+              <label class="ap-field"><span>Title</span>
+                <input type="text" id="ap-edit-title" class="form-input" maxlength="300" value="${esc(item.title)}" /></label>
+              <label class="ap-field"><span>Payable to</span>
+                <input type="text" id="ap-edit-payee" class="form-input" maxlength="300" value="${esc(item.payee || '')}" /></label>
+              <label class="ap-field"><span>Requested amount (S$)</span>
+                <input type="number" id="ap-edit-amount" class="form-input" min="0" max="10000000" step="0.01" value="${item.requested_amount ?? ''}" /></label>
+            </div>
+            <label class="ap-field" style="display:block;margin-top:0.75rem;"><span>Description</span>
+              <textarea id="ap-edit-description" class="form-input" rows="4" maxlength="4000">${esc(item.description || '')}</textarea></label>
+            <label class="ap-field" style="display:block;margin-top:0.75rem;"><span>Add documents (optional)</span>
+              <input type="file" id="ap-edit-files" class="form-input" multiple accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" /></label>
+            ${item.status === 'rejected'
+              ? `<label class="ap-check" style="margin-top:0.75rem;"><input type="checkbox" id="ap-edit-resubmit" checked /><span>Resubmit for approval (returns to the stage that rejected it)</span></label>`
+              : ''}
+            <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.75rem;">
+              <button type="submit" class="btn btn-primary">Save changes</button>
+              <button type="button" class="btn btn-secondary" id="ap-edit-cancel">Cancel</button>
+            </div>
+          </form>`
+        : '';
+
     body.innerHTML = `
       ${notesHtml}
+      ${actionsHtml}
       <dl class="ap-detail-grid">
         ${detailRows.map(([label, value]) => `<div class="ap-detail-item"><dt>${label}</dt><dd>${value || '—'}</dd></div>`).join('')}
       </dl>
@@ -568,6 +621,121 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       </div>
       ${comparisonHtml}
     `;
+
+    wireDrawerActions(item);
+  }
+
+  function setActMsg(text: string, ok: boolean): void {
+    const el = document.getElementById('ap-act-msg');
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = ok ? '#1b7f3b' : '#b3261e';
+  }
+
+  async function refreshAfterAction(id: number): Promise<void> {
+    await loadList();
+    await openDrawer(id);
+  }
+
+  function wireDrawerActions(item: ApprovalItem): void {
+    const msg = (text: string, ok = false) => setActMsg(text, ok);
+
+    document.getElementById('ap-act-approve')?.addEventListener('click', async () => {
+      const btn = document.getElementById('ap-act-approve') as HTMLButtonElement | null;
+      if (!btn) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/approvals/${item.id}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const body = (await res.json()) as { success: boolean; message?: string };
+        if (body.success) {
+          await refreshAfterAction(item.id);
+        } else {
+          msg(body.message || 'Could not approve.');
+          btn.disabled = false;
+        }
+      } catch {
+        msg('Network error.');
+        btn.disabled = false;
+      }
+    });
+
+    const rejectBox = document.getElementById('ap-reject-box');
+    document.getElementById('ap-act-reject')?.addEventListener('click', () => {
+      if (rejectBox) rejectBox.hidden = !rejectBox.hidden;
+    });
+    document.getElementById('ap-act-reject-confirm')?.addEventListener('click', async () => {
+      const reasonEl = document.getElementById('ap-reject-reason') as HTMLTextAreaElement | null;
+      const reason = reasonEl?.value.trim() || '';
+      if (!reason) {
+        msg('A reason is required to reject.');
+        return;
+      }
+      try {
+        const res = await fetch(`/api/approvals/${item.id}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason }),
+        });
+        const body = (await res.json()) as { success: boolean; message?: string };
+        if (body.success) {
+          await refreshAfterAction(item.id);
+        } else {
+          msg(body.message || 'Could not reject.');
+        }
+      } catch {
+        msg('Network error.');
+      }
+    });
+
+    document.getElementById('ap-act-remind')?.addEventListener('click', async () => {
+      const btn = document.getElementById('ap-act-remind') as HTMLButtonElement | null;
+      if (!btn) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/approvals/${item.id}/remind`, { method: 'POST' });
+        const body = (await res.json()) as { success: boolean; message?: string };
+        if (body.success) {
+          msg('Reminder sent.', true);
+        } else {
+          msg(body.message || 'Could not send the reminder.');
+          btn.disabled = false;
+        }
+      } catch {
+        msg('Network error.');
+        btn.disabled = false;
+      }
+    });
+
+    const editForm = document.getElementById('ap-edit-form') as HTMLFormElement | null;
+    document.getElementById('ap-act-edit')?.addEventListener('click', () => {
+      if (editForm) editForm.hidden = !editForm.hidden;
+    });
+    document.getElementById('ap-edit-cancel')?.addEventListener('click', () => {
+      if (editForm) editForm.hidden = true;
+    });
+    editForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = new FormData();
+      form.append('title', (document.getElementById('ap-edit-title') as HTMLInputElement).value.trim());
+      form.append('payee', (document.getElementById('ap-edit-payee') as HTMLInputElement).value.trim());
+      form.append('requestedAmount', (document.getElementById('ap-edit-amount') as HTMLInputElement).value.trim());
+      form.append('description', (document.getElementById('ap-edit-description') as HTMLTextAreaElement).value.trim());
+      const filesInput = document.getElementById('ap-edit-files') as HTMLInputElement | null;
+      for (const file of Array.from(filesInput?.files || [])) form.append('files', file);
+      const resubmit = document.getElementById('ap-edit-resubmit') as HTMLInputElement | null;
+      if (resubmit?.checked) form.append('resubmit', 'true');
+      try {
+        const res = await fetch(`/api/approvals/${item.id}/edit`, { method: 'POST', body: form });
+        const body = (await res.json()) as { success: boolean; message?: string };
+        if (body.success) {
+          await refreshAfterAction(item.id);
+        } else {
+          msg(body.message || 'Could not save the edit.');
+        }
+      } catch {
+        msg('Network error.');
+      }
+    });
   }
 
   function closeDrawer(): void {
@@ -793,10 +961,18 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
 
   requireAuth({
     onAuthenticated(data: SessionResponse) {
+      sessionData = data;
       const createCard = document.getElementById('ap-create-card');
       if (createCard) createCard.style.display = data.is_admin ? '' : 'none';
       syncApprovalDefault();
-      void loadList();
+      void loadList().then(() => {
+        // Deep link from approval emails: /approvals?item=<id>
+        const deep = new URLSearchParams(window.location.search).get('item');
+        if (deep && /^\d+$/.test(deep)) {
+          const exists = allItems.some((i) => i.id === Number(deep)) || counts.all > 0;
+          if (exists) void openDrawer(Number(deep));
+        }
+      });
     },
   });
 </script>

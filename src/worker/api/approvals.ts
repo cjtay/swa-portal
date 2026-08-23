@@ -2,10 +2,16 @@ import type { AppContext } from '../types';
 import { handleApiError } from '../lib/error-handler';
 import { logError } from '../lib/log-error';
 import {
+  sendApprovalRequestEmail,
+  sendPurchaseDecisionEmail,
+  type ApprovalEmailItem,
+} from '../lib/email-approval';
+import {
   APPROVAL_CATEGORIES,
   APPROVAL_MAX_FILES_PER_ITEM,
   APPROVAL_MAX_FILE_BYTES,
   canRaiseApprovalItem,
+  isPurchaseApprover,
 } from '../../constants/portal';
 
 // Approval workflow API — docs/plans/Approval-Workflow-Implementation-Plan.md §8.
@@ -56,6 +62,7 @@ const MAX_PAYEE_LENGTH = 300;
 const MAX_DESCRIPTION_LENGTH = 4000;
 const MAX_COMPARISON_ROWS = 20;
 const MAX_COMPARISON_DESCRIPTION_LENGTH = 500;
+const MAX_REJECTION_REASON_LENGTH = 1000;
 const MAX_REQUESTED_AMOUNT = 10_000_000;
 
 function getSessionEmail(c: AppContext): string {
@@ -107,6 +114,25 @@ function contentDisposition(type: 'inline' | 'attachment', filename: string): st
   }
   const ascii = sanitizeAsciiFilename(decoded);
   return `${type}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(decoded)}`;
+}
+
+/** Build the email payload for an item: category label + attachment count
+ *  come from extra reads, so decision emails match what the board shows. */
+async function loadEmailItem(c: AppContext, itemId: number, row: Record<string, unknown>): Promise<ApprovalEmailItem> {
+  const category = APPROVAL_CATEGORIES.find((cat) => cat.key === String(row.category));
+  const countRes = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM approval_attachments WHERE item_id = ?')
+    .bind(itemId)
+    .first<{ n: number }>();
+  return {
+    id: itemId,
+    title: String(row.title || ''),
+    categoryLabel: category?.label || String(row.category || ''),
+    payee: row.payee ? String(row.payee) : null,
+    requestedAmount: row.requested_amount === null || row.requested_amount === undefined ? null : Number(row.requested_amount),
+    description: row.description ? String(row.description) : null,
+    createdBy: String(row.created_by || ''),
+    fileCount: Number(countRes?.n || 0),
+  };
 }
 
 /* ----------------------------------------------------
@@ -423,6 +449,23 @@ export async function handleApprovalsCreate(c: AppContext) {
     });
   }
 
+  // --- 5. Email the purchase approvers when the item needs a decision.
+  //     Recurring items (approval_required = 0) email nobody (plan §10).
+  //     Non-blocking: an email failure never fails the create.
+  if (approvalRequired) {
+    const emailItem: ApprovalEmailItem = {
+      id: itemId,
+      title,
+      categoryLabel: category.label,
+      payee: payeeRaw || null,
+      requestedAmount,
+      description: descriptionRaw || null,
+      createdBy: session.email,
+      fileCount: fileList.length,
+    };
+    c.executionCtx.waitUntil(sendApprovalRequestEmail(c.env, emailItem, 'new').catch(() => { /* logged inside */ }));
+  }
+
   return c.json({ success: true, id: itemId, status }, 201);
 }
 
@@ -528,4 +571,519 @@ export async function handleApprovalAttachment(c: AppContext) {
       'Cache-Control': 'private, max-age=3600',
     },
   });
+}
+
+/* ----------------------------------------------------
+   POST /api/approvals/:id/approve  (purchase stage)
+   Purchase approvers only (re-checked here — plan §3).
+   Atomic UPDATE … WHERE status='pending' so two approvers
+   clicking at once cannot both decide (membership pattern).
+   Audit row lands in the same D1 batch as the state change.
+   ---------------------------------------------------- */
+export async function handleApprovalPurchaseApprove(c: AppContext) {
+  const endpoint = 'approvals-purchase-approve';
+  const email = getSessionEmail(c);
+  if (!isPurchaseApprover(email)) {
+    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Only purchase approvers can approve at this stage.' }, 403);
+  }
+  const id = c.req.param('id') || '';
+  if (!/^\d+$/.test(id)) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid item id.' }, 400);
+  }
+
+  let item: Record<string, unknown> | null = null;
+  try {
+    item = await c.env.DB.prepare(
+      'SELECT id, title, category, payee, description, requested_amount, created_by, approval_required FROM approval_items WHERE id = ?',
+    )
+      .bind(Number(id))
+      .first<Record<string, unknown>>();
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not load the item.', { error_type: 'D1_SELECT_APPROVAL_APPROVE', http_status: 500 });
+  }
+  if (!item) {
+    return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
+  }
+
+  try {
+    const res = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE approval_items
+            SET status = 'purchase_approved', purchase_decision_by = ?, purchase_decision_at = datetime('now'), updated_at = datetime('now')
+          WHERE id = ? AND status = 'pending'`,
+      ).bind(email, Number(id)),
+      c.env.DB.prepare(
+        'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, NULL)',
+      ).bind(Number(id), 'purchase_approved', email, getSessionName(c) || email),
+    ]);
+
+    const changes = Number((res[0].meta as { changes?: number } | undefined)?.changes ?? 0);
+    if (changes === 0) {
+      return c.json(
+        { success: false, error_code: 'CONFLICT', message: 'Item is no longer pending. It may have been actioned by another approver.' },
+        409,
+      );
+    }
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not approve the item.', { error_type: 'D1_UPDATE_APPROVAL_APPROVE', http_status: 500 });
+  }
+
+  c.executionCtx.waitUntil(
+    sendPurchaseDecisionEmail(c.env, await loadEmailItem(c, Number(id), item), {
+      approved: true,
+      decidedBy: getSessionName(c) || email,
+    }).catch(() => { /* logged inside */ }),
+  );
+
+  return c.json({ success: true, status: 'purchase_approved' });
+}
+
+/* ----------------------------------------------------
+   POST /api/approvals/:id/reject  (purchase stage)
+   Body: { reason } — required, ≤1000 chars.
+   Sets rejected_stage='purchase' so resubmission routes
+   back to pending (plan §4).
+   ---------------------------------------------------- */
+export async function handleApprovalPurchaseReject(c: AppContext) {
+  const endpoint = 'approvals-purchase-reject';
+  const email = getSessionEmail(c);
+  if (!isPurchaseApprover(email)) {
+    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Only purchase approvers can reject at this stage.' }, 403);
+  }
+  const id = c.req.param('id') || '';
+  if (!/^\d+$/.test(id)) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid item id.' }, 400);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid request body.' }, 400);
+  }
+  const reason = typeof body['reason'] === 'string' ? body['reason'].trim() : '';
+  if (reason.length < 1 || reason.length > MAX_REJECTION_REASON_LENGTH) {
+    return c.json(
+      { success: false, error_code: 'VALIDATION_ERROR', message: `A rejection reason is required (1–${MAX_REJECTION_REASON_LENGTH} characters).` },
+      400,
+    );
+  }
+
+  let item: Record<string, unknown> | null = null;
+  try {
+    item = await c.env.DB.prepare(
+      'SELECT id, title, category, payee, description, requested_amount, created_by FROM approval_items WHERE id = ?',
+    )
+      .bind(Number(id))
+      .first<Record<string, unknown>>();
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not load the item.', { error_type: 'D1_SELECT_APPROVAL_REJECT', http_status: 500 });
+  }
+  if (!item) {
+    return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
+  }
+
+  try {
+    const res = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE approval_items
+            SET status = 'rejected', rejected_stage = 'purchase', rejection_reason = ?,
+                purchase_decision_by = ?, purchase_decision_at = datetime('now'), updated_at = datetime('now')
+          WHERE id = ? AND status = 'pending'`,
+      ).bind(reason, email, Number(id)),
+      c.env.DB.prepare(
+        'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)',
+      ).bind(Number(id), 'purchase_rejected', email, getSessionName(c) || email, reason),
+    ]);
+
+    const changes = Number((res[0].meta as { changes?: number } | undefined)?.changes ?? 0);
+    if (changes === 0) {
+      return c.json(
+        { success: false, error_code: 'CONFLICT', message: 'Item is no longer pending. It may have been actioned by another approver.' },
+        409,
+      );
+    }
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not reject the item.', { error_type: 'D1_UPDATE_APPROVAL_REJECT', http_status: 500 });
+  }
+
+  c.executionCtx.waitUntil(
+    sendPurchaseDecisionEmail(c.env, await loadEmailItem(c, Number(id), item), {
+      approved: false,
+      reason,
+      decidedBy: getSessionName(c) || email,
+    }).catch(() => { /* logged inside */ }),
+  );
+
+  return c.json({ success: true, status: 'rejected', rejected_stage: 'purchase' });
+}
+
+/* ----------------------------------------------------
+   POST /api/approvals/:id/edit
+   Admin only (canRaiseApprovalItem). Multipart:
+   title/payee/description/requestedAmount, optional new
+   `files`, optional `comparison` JSON referencing
+   attachment ids (existing or newly added), and
+   resubmit=true to return a rejected item to the stage
+   that rejected it (plan §4 routing).
+   Editable while status IN (pending, rejected).
+   ---------------------------------------------------- */
+export async function handleApprovalEdit(c: AppContext) {
+  const endpoint = 'approvals-edit';
+  const session = { email: getSessionEmail(c), role: getSessionRole(c) };
+  if (!canRaiseApprovalItem(session)) {
+    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Only the office admin can edit approval items.' }, 403);
+  }
+  const id = c.req.param('id') || '';
+  if (!/^\d+$/.test(id)) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid item id.' }, 400);
+  }
+
+  let form: Record<string, unknown>;
+  try {
+    form = await c.req.parseBody({ all: true });
+  } catch {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid request body.' }, 400);
+  }
+
+  let item: Record<string, unknown> | null = null;
+  try {
+    item = await c.env.DB.prepare(
+      'SELECT id, status, rejected_stage, approval_required, category, created_by FROM approval_items WHERE id = ?',
+    )
+      .bind(Number(id))
+      .first<Record<string, unknown>>();
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not load the item.', { error_type: 'D1_SELECT_APPROVAL_EDIT', http_status: 500 });
+  }
+  if (!item) {
+    return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
+  }
+  const status = String(item.status);
+  if (status !== 'pending' && status !== 'rejected') {
+    return c.json(
+      { success: false, error_code: 'CONFLICT', message: 'Only pending or rejected items can be edited.' },
+      409,
+    );
+  }
+
+  // --- Field validation (same rules as create; every field optional) ---
+  const updates: string[] = [];
+  const params: unknown[] = [];
+
+  if (form['title'] !== undefined) {
+    const title = String(form['title']).trim();
+    if (title.length < 1 || title.length > MAX_TITLE_LENGTH) {
+      return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: `Title must be 1–${MAX_TITLE_LENGTH} characters.` }, 400);
+    }
+    updates.push('title = ?');
+    params.push(title);
+  }
+  if (form['payee'] !== undefined) {
+    const payee = String(form['payee']).trim();
+    if (payee.length > MAX_PAYEE_LENGTH) {
+      return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Payee is too long.' }, 400);
+    }
+    updates.push('payee = ?');
+    params.push(payee || null);
+  }
+  if (form['description'] !== undefined) {
+    const description = String(form['description']).trim();
+    if (description.length > MAX_DESCRIPTION_LENGTH) {
+      return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: `Description must be ${MAX_DESCRIPTION_LENGTH} characters or fewer.` }, 400);
+    }
+    updates.push('description = ?');
+    params.push(description || null);
+  }
+  if (form['requestedAmount'] !== undefined) {
+    const raw = String(form['requestedAmount']).trim();
+    if (raw.length > 0) {
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed) || parsed < 0 || parsed > MAX_REQUESTED_AMOUNT) {
+        return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Requested amount must be a number between 0 and 10,000,000.' }, 400);
+      }
+      updates.push('requested_amount = ?');
+      params.push(Math.round(parsed * 100) / 100);
+    } else {
+      updates.push('requested_amount = ?');
+      params.push(null);
+    }
+  }
+
+  // --- Resubmit flag ---
+  const resubmit = String(form['resubmit'] ?? '').toLowerCase() === 'true';
+  let newStatus = '';
+  if (resubmit) {
+    if (status !== 'rejected') {
+      return c.json({ success: false, error_code: 'CONFLICT', message: 'Only rejected items can be resubmitted.' }, 409);
+    }
+    // Routing per plan §4: purchase-stage rejection → pending;
+    // finance-stage rejection → finance_check (Phase 4 will allow editing
+    // vouchers there; the routing itself is decided here).
+    newStatus = item.rejected_stage === 'finance' ? 'finance_check' : 'pending';
+  }
+
+  // --- New files (same allowlist/caps as create; count existing too) ---
+  const filesRaw = form['files'];
+  const fileList: File[] = [];
+  if (Array.isArray(filesRaw)) {
+    for (const f of filesRaw) if (f instanceof File && f.size > 0) fileList.push(f);
+  } else if (filesRaw instanceof File && filesRaw.size > 0) {
+    fileList.push(filesRaw);
+  }
+
+  let existingCount = 0;
+  if (fileList.length > 0) {
+    try {
+      const countRes = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM approval_attachments WHERE item_id = ?')
+        .bind(Number(id))
+        .first<{ n: number }>();
+      existingCount = Number(countRes?.n || 0);
+    } catch (err) {
+      return handleApiError(c, endpoint, err, 'Could not check existing attachments.', { error_type: 'D1_COUNT_APPROVAL_ATT', http_status: 500 });
+    }
+    if (existingCount + fileList.length > APPROVAL_MAX_FILES_PER_ITEM) {
+      return c.json(
+        { success: false, error_code: 'VALIDATION_ERROR', message: `At most ${APPROVAL_MAX_FILES_PER_ITEM} files per item (this item already has ${existingCount}).` },
+        400,
+      );
+    }
+    for (const file of fileList) {
+      if (!ALLOWED_ATTACHMENT_MIME.has(file.type)) {
+        return c.json(
+          { success: false, error_code: 'VALIDATION_ERROR', message: `"${file.name}" is not an accepted type. Only PDF, JPG, PNG, WebP, HEIC and HEIF files are allowed.` },
+          400,
+        );
+      }
+      if (file.size > APPROVAL_MAX_FILE_BYTES) {
+        return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: `"${file.name}" is larger than 10 MB.` }, 400);
+      }
+    }
+  }
+
+  // --- Optional comparison rebuild, referencing attachment ids ---
+  let comparisonJson: string | null = null;
+  if (form['comparison'] !== undefined) {
+    const comparisonRaw = typeof form['comparison'] === 'string' ? form['comparison'].trim() : '';
+    if (comparisonRaw.length === 0) {
+      comparisonJson = null; // explicit clear
+    } else {
+      try {
+        const parsed: unknown = JSON.parse(comparisonRaw);
+        if (!Array.isArray(parsed) || parsed.length > MAX_COMPARISON_ROWS) throw new Error('bad shape');
+        const rows: Array<{ attachmentId: number; description: string }> = [];
+        for (const row of parsed) {
+          const attachmentId = Number((row as Record<string, unknown>)?.attachmentId);
+          const description = String((row as Record<string, unknown>)?.description ?? '').trim();
+          if (!Number.isInteger(attachmentId) || attachmentId <= 0) throw new Error('bad attachmentId');
+          if (description.length < 1 || description.length > MAX_COMPARISON_DESCRIPTION_LENGTH) throw new Error('bad description');
+          rows.push({ attachmentId, description });
+        }
+        // Every referenced id must belong to this item — verified AFTER the
+        // new attachment rows exist (ids from this same request are valid too).
+        comparisonJson = JSON.stringify(rows);
+      } catch {
+        return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Comparison table is malformed.' }, 400);
+      }
+    }
+  }
+
+  // --- 1. Upload new files to R2 (before the UPDATE so ids exist) ---
+  const uploadedKeys: Array<{ file: File; r2Key: string }> = [];
+  if (fileList.length > 0) {
+    try {
+      for (const file of fileList) {
+        const ext = MIME_EXTENSION[file.type] || 'bin';
+        const r2Key = `approvals/${Number(id)}/${crypto.randomUUID()}.${ext}`;
+        await c.env.R2_BUCKET.put(r2Key, file.stream(), {
+          httpMetadata: { contentType: file.type },
+          customMetadata: {
+            item_id: String(id),
+            original_filename: file.name,
+            uploaded_by: session.email,
+            uploaded_at: new Date().toISOString(),
+          },
+        });
+        uploadedKeys.push({ file, r2Key });
+      }
+    } catch (err) {
+      await logError(c.env, {
+        endpoint,
+        error_type: 'R2_PUT',
+        error_message: `approvals-edit r2: ${err instanceof Error ? err.message : String(err)}`,
+        http_status: 500,
+        user_email: session.email,
+      });
+      return c.json({ success: false, error_code: 'UPLOAD_FAILED', message: 'Could not save the attached files. Please try again.' }, 500);
+    }
+  }
+
+  // --- 2. Attachment batch first, so comparison rows can reference the new ids ---
+  const actorName = getSessionName(c) || session.email;
+  const newAttachmentIds: number[] = [];
+  try {
+    if (uploadedKeys.length > 0) {
+      const statements: D1PreparedStatement[] = uploadedKeys.map(({ file, r2Key }) =>
+        c.env.DB.prepare('INSERT INTO approval_attachments (item_id, r2_key, filename, mime_type, size) VALUES (?, ?, ?, ?, ?)').bind(
+          Number(id),
+          r2Key,
+          file.name,
+          file.type,
+          file.size,
+        ),
+      );
+      statements.push(
+        c.env.DB.prepare('INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)').bind(
+          Number(id),
+          'attachments_added',
+          session.email,
+          actorName,
+          `files=${uploadedKeys.length}`,
+        ),
+      );
+      const results = await c.env.DB.batch(statements);
+      for (let i = 0; i < uploadedKeys.length; i++) {
+        newAttachmentIds.push(Number((results[i].meta as { last_row_id?: number }).last_row_id));
+      }
+    }
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'The attachments could not be recorded. Please try again.', {
+      error_type: 'D1_INSERT_APPROVAL_ATTACHMENTS',
+      http_status: 500,
+    });
+  }
+
+  // --- 3. Comparison attachment-id validation (existing ∪ new ids) ---
+  if (comparisonJson !== null) {
+    const rows = JSON.parse(comparisonJson) as Array<{ attachmentId: number }>;
+    const valid = await c.env.DB.prepare('SELECT id FROM approval_attachments WHERE item_id = ?').bind(Number(id)).all();
+    const validIds = new Set<number>([...(valid.results || []).map((r) => Number((r as { id: number }).id)), ...newAttachmentIds]);
+    if (!rows.every((r) => validIds.has(r.attachmentId))) {
+      return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Comparison rows must reference this item\u2019s attachments.' }, 400);
+    }
+  }
+
+  // --- 4. Item update + audit rows in one batch ---
+  let finalStatus = status;
+  try {
+    const setClauses = [...updates];
+    const bindParams = [...params];
+    if (form['comparison'] !== undefined) {
+      setClauses.push('comparison = ?');
+      bindParams.push(comparisonJson);
+    }
+    const auditActions: Array<{ action: string; note: string | null }> = [];
+
+    if (resubmit) {
+      setClauses.push('status = ?', 'rejected_stage = NULL', "updated_at = datetime('now')");
+      bindParams.push(newStatus);
+      finalStatus = newStatus;
+      // Rejections reset so the next decision overwrites cleanly.
+      if (item.rejected_stage === 'finance') {
+        setClauses.push('finance_rejection_reason = NULL', 'finance_decision_by = NULL', 'finance_decision_at = NULL');
+      } else {
+        setClauses.push('rejection_reason = NULL', 'purchase_decision_by = NULL', 'purchase_decision_at = NULL');
+      }
+    }
+
+    const statements: D1PreparedStatement[] = [];
+    if (setClauses.length > 0) {
+      if (!resubmit) setClauses.push("updated_at = datetime('now')");
+      statements.push(
+        c.env.DB.prepare(`UPDATE approval_items SET ${setClauses.join(', ')} WHERE id = ?`).bind(...bindParams, Number(id)),
+      );
+      auditActions.push({ action: 'item_edited', note: null });
+    }
+    if (resubmit) {
+      auditActions.push({ action: 'item_resubmitted', note: `to=${newStatus}` });
+    }
+    for (const a of auditActions) {
+      statements.push(
+        c.env.DB.prepare('INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)').bind(
+          Number(id),
+          a.action,
+          session.email,
+          actorName,
+          a.note,
+        ),
+      );
+    }
+    if (statements.length > 0) {
+      await c.env.DB.batch(statements);
+    }
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not save the edit.', { error_type: 'D1_UPDATE_APPROVAL_EDIT', http_status: 500 });
+  }
+
+  // --- 4. Resubmission re-emails the purchase approvers (plan §10) ---
+  if (resubmit && newStatus === 'pending' && item.approval_required === 1) {
+    const fresh = await c.env.DB.prepare(
+      'SELECT id, title, category, payee, description, requested_amount, created_by FROM approval_items WHERE id = ?',
+    )
+      .bind(Number(id))
+      .first<Record<string, unknown>>();
+    if (fresh) {
+      c.executionCtx.waitUntil(
+        sendApprovalRequestEmail(c.env, await loadEmailItem(c, Number(id), fresh), 'resubmitted').catch(() => { /* logged inside */ }),
+      );
+    }
+  }
+
+  return c.json({ success: true, status: resubmit ? newStatus : status, resubmitted: resubmit });
+}
+
+/* ----------------------------------------------------
+   POST /api/approvals/:id/remind
+   Admin only. Re-sends the request email for the current
+   stage. Phase 3: purchase stage (pending) only; later
+   stages extend this (plan §10). Rate-limited by the
+   approvals:remind:post key (5/hour per email).
+   ---------------------------------------------------- */
+export async function handleApprovalRemind(c: AppContext) {
+  const endpoint = 'approvals-remind';
+  const session = { email: getSessionEmail(c), role: getSessionRole(c) };
+  if (!canRaiseApprovalItem(session)) {
+    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Only the office admin can send reminders.' }, 403);
+  }
+  const id = c.req.param('id') || '';
+  if (!/^\d+$/.test(id)) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid item id.' }, 400);
+  }
+
+  let item: Record<string, unknown> | null = null;
+  try {
+    item = await c.env.DB.prepare(
+      'SELECT id, title, category, payee, description, requested_amount, created_by, status, approval_required FROM approval_items WHERE id = ?',
+    )
+      .bind(Number(id))
+      .first<Record<string, unknown>>();
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not load the item.', { error_type: 'D1_SELECT_APPROVAL_REMIND', http_status: 500 });
+  }
+  if (!item) {
+    return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
+  }
+  if (item.status !== 'pending') {
+    return c.json({ success: false, error_code: 'CONFLICT', message: 'Reminders can only be sent while the item is waiting for a purchase decision.' }, 409);
+  }
+
+  try {
+    await c.env.DB.batch([
+      c.env.DB.prepare('INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)').bind(
+        Number(id),
+        'reminder_sent',
+        session.email,
+        getSessionName(c) || session.email,
+        'stage=purchase',
+      ),
+    ]);
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not record the reminder.', { error_type: 'D1_INSERT_APPROVAL_REMIND', http_status: 500 });
+  }
+
+  c.executionCtx.waitUntil(
+    sendApprovalRequestEmail(c.env, await loadEmailItem(c, Number(id), item), 'reminder').catch(() => { /* logged inside */ }),
+  );
+
+  return c.json({ success: true });
 }
