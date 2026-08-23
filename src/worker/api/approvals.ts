@@ -1,6 +1,7 @@
 import type { AppContext } from '../types';
 import { handleApiError } from '../lib/error-handler';
 import { logError } from '../lib/log-error';
+import { csvEscape } from '../lib/csv';
 import {
   sendApprovalRequestEmail,
   sendPurchaseDecisionEmail,
@@ -654,12 +655,15 @@ export async function handleApprovalPurchaseApprove(c: AppContext) {
   }
 
   try {
+    // The item column stores the printed name (the voucher shows "Approved
+    // by <name>"); the audit row keeps the email for traceability.
+    const deciderName = getSessionName(c) || email;
     const res = await c.env.DB.batch([
       c.env.DB.prepare(
         `UPDATE approval_items
             SET status = 'purchase_approved', purchase_decision_by = ?, purchase_decision_at = datetime('now'), updated_at = datetime('now')
           WHERE id = ? AND status = 'pending'`,
-      ).bind(email, Number(id)),
+      ).bind(deciderName, Number(id)),
       c.env.DB.prepare(
         'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, NULL)',
       ).bind(Number(id), 'purchase_approved', email, getSessionName(c) || email),
@@ -732,13 +736,14 @@ export async function handleApprovalPurchaseReject(c: AppContext) {
   }
 
   try {
+    const deciderName = getSessionName(c) || email;
     const res = await c.env.DB.batch([
       c.env.DB.prepare(
         `UPDATE approval_items
             SET status = 'rejected', rejected_stage = 'purchase', rejection_reason = ?,
                 purchase_decision_by = ?, purchase_decision_at = datetime('now'), updated_at = datetime('now')
           WHERE id = ? AND status = 'pending'`,
-      ).bind(reason, email, Number(id)),
+      ).bind(reason, deciderName, Number(id)),
       c.env.DB.prepare(
         'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)',
       ).bind(Number(id), 'purchase_rejected', email, getSessionName(c) || email, reason),
@@ -1309,7 +1314,7 @@ export async function handleApprovalVoucher(c: AppContext) {
                     finance_decision_by = NULL, finance_decision_at = NULL, finance_rejection_reason = NULL,
                     updated_at = datetime('now')
               WHERE id = ?`,
-          ).bind(assignedNo, voucherDate, linesJson, session.email, Number(id)),
+          ).bind(assignedNo, voucherDate, linesJson, actorName, Number(id)),
           c.env.DB.prepare(
             'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)',
           ).bind(Number(id), 'voucher_submitted', session.email, actorName, `voucher_no=${assignedNo}; resubmitted=${isResubmission ? 1 : 0}`),
@@ -1384,12 +1389,14 @@ export async function handleFinanceApprove(c: AppContext) {
   }
 
   try {
+    // Name for the voucher's "Payment approved by" line; audit keeps email.
+    const deciderName = getSessionName(c) || email;
     const res = await c.env.DB.batch([
       c.env.DB.prepare(
         `UPDATE approval_items
             SET status = 'finance_approved', finance_decision_by = ?, finance_decision_at = datetime('now'), updated_at = datetime('now')
           WHERE id = ? AND status = 'finance_check'`,
-      ).bind(email, Number(id)),
+      ).bind(deciderName, Number(id)),
       c.env.DB.prepare(
         'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, NULL)',
       ).bind(Number(id), 'finance_approved', email, getSessionName(c) || email),
@@ -1462,13 +1469,14 @@ export async function handleFinanceReject(c: AppContext) {
   }
 
   try {
+    const deciderName = getSessionName(c) || email;
     const res = await c.env.DB.batch([
       c.env.DB.prepare(
         `UPDATE approval_items
             SET status = 'rejected', rejected_stage = 'finance', finance_rejection_reason = ?,
                 finance_decision_by = ?, finance_decision_at = datetime('now'), updated_at = datetime('now')
           WHERE id = ? AND status = 'finance_check'`,
-      ).bind(reason, email, Number(id)),
+      ).bind(reason, deciderName, Number(id)),
       c.env.DB.prepare(
         'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)',
       ).bind(Number(id), 'finance_rejected', email, getSessionName(c) || email, reason),
@@ -1493,4 +1501,149 @@ export async function handleFinanceReject(c: AppContext) {
   );
 
   return c.json({ success: true, status: 'rejected', rejected_stage: 'finance' });
+}
+
+/* ----------------------------------------------------
+   POST /api/approvals/:id/paid  (Phase 5)
+   Admin only. Records the payment: who paid, when, how,
+   and an optional reference. Allowed only from
+   finance_approved — the final state change to 'paid'.
+   ---------------------------------------------------- */
+const PAYMENT_METHODS = ['paynow', 'bank_transfer', 'cheque', 'cash', 'other'] as const;
+const MAX_PAID_BY_LENGTH = 200;
+const MAX_PAYMENT_REFERENCE_LENGTH = 200;
+
+export async function handleApprovalPaid(c: AppContext) {
+  const endpoint = 'approvals-paid';
+  const session = { email: getSessionEmail(c), role: getSessionRole(c) };
+  if (!canRaiseApprovalItem(session)) {
+    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Only the office admin can record payments.' }, 403);
+  }
+  const id = c.req.param('id') || '';
+  if (!/^\d+$/.test(id)) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid item id.' }, 400);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid request body.' }, 400);
+  }
+
+  const paidBy = typeof body['paidBy'] === 'string' ? body['paidBy'].trim() : '';
+  if (paidBy.length < 1 || paidBy.length > MAX_PAID_BY_LENGTH) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: `Record who made the payment (1–${MAX_PAID_BY_LENGTH} characters).` }, 400);
+  }
+  const paidDate = typeof body['paidDate'] === 'string' ? body['paidDate'].trim() : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(paidDate)) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Payment date must be a valid date (YYYY-MM-DD).' }, 400);
+  }
+  {
+    const [y, mo, d] = paidDate.split('-').map(Number);
+    const check = new Date(Date.UTC(y, mo - 1, d));
+    if (check.getUTCFullYear() !== y || check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== d) {
+      return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Payment date must be a valid date (YYYY-MM-DD).' }, 400);
+    }
+  }
+  const paymentMethod = typeof body['paymentMethod'] === 'string' ? body['paymentMethod'].trim() : '';
+  if (!(PAYMENT_METHODS as readonly string[]).includes(paymentMethod)) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Choose a payment method.' }, 400);
+  }
+  const paymentReference = typeof body['paymentReference'] === 'string' ? body['paymentReference'].trim() : '';
+  if (paymentReference.length > MAX_PAYMENT_REFERENCE_LENGTH) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: `Payment reference must be ${MAX_PAYMENT_REFERENCE_LENGTH} characters or fewer.` }, 400);
+  }
+
+  let item: Record<string, unknown> | null = null;
+  try {
+    item = await c.env.DB.prepare('SELECT id, voucher_no, status FROM approval_items WHERE id = ?')
+      .bind(Number(id))
+      .first<Record<string, unknown>>();
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not load the item.', { error_type: 'D1_SELECT_APPROVAL_PAID', http_status: 500 });
+  }
+  if (!item) {
+    return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
+  }
+
+  try {
+    const actorName = getSessionName(c) || session.email;
+    const auditNote = `paid_by=${paidBy}; method=${paymentMethod}` + (paymentReference ? `; ref=${paymentReference}` : '');
+    const res = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE approval_items
+            SET status = 'paid', paid_by = ?, paid_at = ?, payment_method = ?, payment_reference = ?, updated_at = datetime('now')
+          WHERE id = ? AND status = 'finance_approved'`,
+      ).bind(paidBy, paidDate, paymentMethod, paymentReference || null, Number(id)),
+      c.env.DB.prepare('INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)').bind(
+        Number(id),
+        'paid_recorded',
+        session.email,
+        actorName,
+        auditNote,
+      ),
+    ]);
+    const changes = Number((res[0].meta as { changes?: number } | undefined)?.changes ?? 0);
+    if (changes === 0) {
+      return c.json(
+        { success: false, error_code: 'CONFLICT', message: 'Only finance-approved items can be marked as paid.' },
+        409,
+      );
+    }
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not record the payment.', { error_type: 'D1_UPDATE_APPROVAL_PAID', http_status: 500 });
+  }
+
+  return c.json({ success: true, status: 'paid' });
+}
+
+/* ----------------------------------------------------
+   GET /api/approvals/audit/export  (Phase 5)
+   Admin tier only (plan §3). CSV of the whole audit log,
+   oldest first, capped at 5000 rows (plan §12). Reuses
+   the shared formula-injection-guarded csvEscape.
+   ---------------------------------------------------- */
+export async function handleApprovalAuditExport(c: AppContext) {
+  const endpoint = 'approvals-audit-export';
+  if (getSessionRole(c) !== 'admin') {
+    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Admin access required.' }, 403);
+  }
+
+  let rows: Array<Record<string, unknown>>;
+  try {
+    const res = await c.env.DB.prepare(
+      `SELECT a.created_at, a.item_id, i.voucher_no, a.action, a.actor_name, a.actor_email, a.note
+         FROM approval_audit_log a
+         LEFT JOIN approval_items i ON i.id = a.item_id
+        ORDER BY a.id ASC
+        LIMIT 5000`,
+    ).all();
+    rows = (res.results || []) as Array<Record<string, unknown>>;
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not load the audit log.', {
+      error_type: 'D1_SELECT_APPROVAL_AUDIT',
+      http_status: 500,
+    });
+  }
+
+  const lines: string[] = [
+    ['Timestamp', 'Item ID', 'Voucher No', 'Action', 'Actor Name', 'Actor Email', 'Note'].map(csvEscape).join(','),
+  ];
+  for (const row of rows) {
+    lines.push(
+      [row.created_at, row.item_id, row.voucher_no, row.action, row.actor_name, row.actor_email, row.note]
+        .map(csvEscape)
+        .join(','),
+    );
+  }
+
+  const csv = '\uFEFF' + lines.join('\n');
+  const stamp = new Date().toISOString().slice(0, 10);
+  return new Response(csv, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="approval-audit-${stamp}.csv"`,
+    },
+  });
 }

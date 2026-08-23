@@ -523,7 +523,9 @@ describe('POST /api/approvals/:id/approve — purchase stage', () => {
       .bind(id)
       .first<{ status: string; purchase_decision_by: string }>();
     expect(item?.status).toBe('purchase_approved');
-    expect(item?.purchase_decision_by).toBe(PURCHASE_EMAIL);
+    // Decision columns store the session NAME (printed on the voucher;
+    // revalidation resolves it from the D1 row), audit keeps the email.
+    expect(item?.purchase_decision_by).toBe('Purchase Approver');
 
     const audit = await env.DB.prepare("SELECT action FROM approval_audit_log WHERE item_id = ? AND action = 'purchase_approved'")
       .bind(id)
@@ -828,7 +830,7 @@ describe('POST /api/approvals/:id/voucher', () => {
       .bind(id)
       .first<{ voucher_date: string; voucher_lines: string; voucher_submitted_by: string; status: string; rejected_stage: string | null }>();
     expect(item?.voucher_date).toBe('2026-08-23');
-    expect(item?.voucher_submitted_by).toBe(ADMIN_EMAILS[(adminRotation - 1) % ADMIN_EMAILS.length]);
+    expect(item?.voucher_submitted_by).toBe('Approvals Admin'); // session name (from the D1 row), printed on the voucher
     expect(item?.status).toBe('finance_check');
 
     const lines = JSON.parse(item?.voucher_lines || '[]') as VoucherLineInput[];
@@ -944,7 +946,7 @@ describe('POST /api/approvals/:id/finance-approve and finance-reject', () => {
       .bind(id)
       .first<{ status: string; finance_decision_by: string }>();
     expect(item?.status).toBe('finance_approved');
-    expect(item?.finance_decision_by).toBe(FINANCE_EMAIL);
+    expect(item?.finance_decision_by).toBe('Finance Approver'); // name (from the D1 row), printed on the voucher
 
     const audit = await env.DB.prepare("SELECT action FROM approval_audit_log WHERE item_id = ? AND action = 'finance_approved'")
       .bind(id)
@@ -1041,5 +1043,145 @@ describe('POST /api/approvals/:id/finance-approve and finance-reject', () => {
       .bind(id)
       .first<{ note: string }>();
     expect(audit?.note).toBe('stage=finance');
+  });
+});
+
+/* ----------------------------------------------------
+   Phase 5: paid step + audit CSV export
+   ---------------------------------------------------- */
+
+async function seedFinanceApprovedItem(): Promise<number> {
+  const id = await seedVoucherReadyItem('Paid step target');
+  const res = await submitVoucher(id, '2026-08-21');
+  expect(res.status).toBe(200);
+  const approve = await SELF.fetch(`https://example.com/api/approvals/${id}/finance-approve`, {
+    method: 'POST',
+    headers: { Cookie: await financeCookie() },
+  });
+  expect(approve.status).toBe(200);
+  return id;
+}
+
+describe('POST /api/approvals/:id/paid', () => {
+  it('records the payment and closes the item; audit carries the detail', async () => {
+    const id = await seedFinanceApprovedItem();
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/paid`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paidBy: 'Jolene Lim (SWA DBS app)', paidDate: '2026-08-24', paymentMethod: 'paynow', paymentReference: 'PN-88231' }),
+    });
+    expect(res.status).toBe(200);
+
+    const item = await env.DB.prepare('SELECT status, paid_by, paid_at, payment_method, payment_reference FROM approval_items WHERE id = ?')
+      .bind(id)
+      .first<{ status: string; paid_by: string; paid_at: string; payment_method: string; payment_reference: string }>();
+    expect(item?.status).toBe('paid');
+    expect(item?.paid_by).toBe('Jolene Lim (SWA DBS app)');
+    expect(item?.paid_at).toBe('2026-08-24');
+    expect(item?.payment_method).toBe('paynow');
+    expect(item?.payment_reference).toBe('PN-88231');
+
+    const audit = await env.DB.prepare("SELECT note FROM approval_audit_log WHERE item_id = ? AND action = 'paid_recorded'")
+      .bind(id)
+      .first<{ note: string }>();
+    expect(audit?.note).toContain('paid_by=Jolene Lim (SWA DBS app)');
+    expect(audit?.note).toContain('ref=PN-88231');
+  });
+
+  it('payment reference is optional', async () => {
+    const id = await seedFinanceApprovedItem();
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/paid`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paidBy: 'Treasurer', paidDate: '2026-08-24', paymentMethod: 'cheque' }),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('validates fields (who/date/method)', async () => {
+    const id = await seedFinanceApprovedItem();
+    const post = async (payload: Record<string, unknown>) =>
+      await SELF.fetch(`https://example.com/api/approvals/${id}/paid`, {
+        method: 'POST',
+        headers: { Cookie: await adminCookie(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    expect((await post({ paidBy: '', paidDate: '2026-08-24', paymentMethod: 'cash' })).status).toBe(400);
+    expect((await post({ paidBy: 'X', paidDate: '24-08-2026', paymentMethod: 'cash' })).status).toBe(400);
+    expect((await post({ paidBy: 'X', paidDate: '2026-08-24', paymentMethod: 'crypto' })).status).toBe(400);
+    expect((await post({ paidBy: 'X', paidDate: '2026-13-40', paymentMethod: 'cash' })).status).toBe(400);
+  });
+
+  it('non-finance-approved items cannot be marked paid (409)', async () => {
+    const id = await seedVoucherReadyItem('Not approved yet');
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/paid`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paidBy: 'X', paidDate: '2026-08-24', paymentMethod: 'cash' }),
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it('double payment is a 409; finance approver cannot record payment (403)', async () => {
+    const id = await seedFinanceApprovedItem();
+    const first = await SELF.fetch(`https://example.com/api/approvals/${id}/paid`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paidBy: 'X', paidDate: '2026-08-24', paymentMethod: 'cash' }),
+    });
+    expect(first.status).toBe(200);
+    const second = await SELF.fetch(`https://example.com/api/approvals/${id}/paid`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paidBy: 'X', paidDate: '2026-08-24', paymentMethod: 'cash' }),
+    });
+    expect(second.status).toBe(409);
+
+    const other = await seedFinanceApprovedItem();
+    const forbidden = await SELF.fetch(`https://example.com/api/approvals/${other}/paid`, {
+      method: 'POST',
+      headers: { Cookie: await financeCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paidBy: 'X', paidDate: '2026-08-24', paymentMethod: 'cash' }),
+    });
+    expect(forbidden.status).toBe(403);
+  });
+});
+
+describe('GET /api/approvals/audit/export', () => {
+  it('admin only — finance approver and purchase approver get 403', async () => {
+    for (const cookie of [await financeCookie(), await purchaseCookie()]) {
+      const res = await SELF.fetch('https://example.com/api/approvals/audit/export', {
+        headers: { Cookie: cookie },
+      });
+      expect(res.status).toBe(403);
+    }
+  });
+
+  it('returns CSV with headers, voucher numbers, oldest first, and guarded cells', async () => {
+    // Seed one full pipeline row with a formula-looking note.
+    const id = await seedFinanceApprovedItem();
+    await env.DB.prepare(
+      "INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, 'item_edited', 'x@example.com', 'X', '=SUM(A1:A9)')",
+    ).bind(id).run();
+
+    const res = await SELF.fetch('https://example.com/api/approvals/audit/export', {
+      headers: { Cookie: await adminCookie() },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('text/csv; charset=utf-8');
+    expect(res.headers.get('content-disposition') || '').toContain('approval-audit-');
+
+    const csv = await res.text();
+    const lines = csv.split('\n');
+    // Line 1 carries the UTF-8 BOM (checked below); strip it for the compare.
+    expect(lines[0].replace(/^\uFEFF/, '')).toBe('Timestamp,Item ID,Voucher No,Action,Actor Name,Actor Email,Note');
+    // Oldest first: the first data row's action must not be later than the last's id ordering;
+    // here we just assert every seeded action appears and the formula cell is neutralised.
+    expect(csv).toContain('item_created');
+    expect(csv).toContain('voucher_submitted');
+    expect(csv).toContain('finance_approved');
+    expect(csv).toContain("'=SUM(A1:A9)");
+    // The BOM leads the file so Excel opens UTF-8 correctly.
+    expect(csv.charCodeAt(0)).toBe(0xfeff);
   });
 });

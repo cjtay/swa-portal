@@ -55,6 +55,8 @@ import {
   handleApprovalVoucher,
   handleFinanceApprove,
   handleFinanceReject,
+  handleApprovalPaid,
+  handleApprovalAuditExport,
 } from './api/approvals';
 
 const app = new Hono<AppEnv>();
@@ -198,8 +200,9 @@ app.delete('/api/namecards/:id/photo', handleNamecardPhoto);
 //
 // Entry gated by middleware gate 7c: admin, purchase approver, or finance
 // approver for all methods. Handlers enforce the finer rules.
-// NOTE: when the Phase 5 audit export (GET /api/approvals/audit/export)
-// lands, register it BEFORE the /:id routes — Hono matches in order.
+// NOTE: /api/approvals/audit/export is registered BEFORE the /:id routes —
+// Hono matches in order (the Phase 2 comment anticipated this).
+app.get('/api/approvals/audit/export', handleApprovalAuditExport);
 app.get('/api/approvals', handleApprovalsList);
 app.post('/api/approvals', handleApprovalsCreate);
 app.get('/api/approvals/:id', handleApprovalDetail);
@@ -211,5 +214,6 @@ app.post('/api/approvals/:id/remind', handleApprovalRemind);
 app.post('/api/approvals/:id/voucher', handleApprovalVoucher);
 app.post('/api/approvals/:id/finance-approve', handleFinanceApprove);
 app.post('/api/approvals/:id/finance-reject', handleFinanceReject);
+app.post('/api/approvals/:id/paid', handleApprovalPaid);
 
 export default app;

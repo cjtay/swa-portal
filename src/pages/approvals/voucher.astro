@@ -1,0 +1,281 @@
+---
+// Voucher export page — standalone, deliberately NO AdminLayout (same
+// reasoning as login.astro: the layout's auth redirect would loop). Because
+// it stands alone it carries its own noindex meta, which AdminLayout
+// normally provides. Renders the finished voucher for browser "Save as PDF"
+// (plan §7 + §11). No PDF library — keeps the two-dependency rule.
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, notranslate, noimageindex" />
+  <title>Payment Voucher | SWA Portal</title>
+  <link rel="icon" type="image/webp" href="/swa-logo.webp" />
+  <style>
+    :root { --swa-1: #70308c; --swa-2: #450a5e; --border: #e5e7eb; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 2rem 1rem 4rem;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #1f2937;
+      background: #f9fafb;
+    }
+    .voucher-sheet {
+      max-width: 720px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      padding: 2.5rem 3rem;
+    }
+    .voucher-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+      border-bottom: 3px solid var(--swa-1);
+      padding-bottom: 0.75rem;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+    }
+    .voucher-head h1 {
+      margin: 0;
+      font-size: 1.3rem;
+      letter-spacing: 0.08em;
+      color: var(--swa-2);
+    }
+    .voucher-meta { font-size: 0.9rem; text-align: right; }
+    .voucher-payee { margin: 0 0 1.25rem; font-size: 0.95rem; }
+    .voucher-payee strong { font-weight: 600; }
+    table.voucher-lines { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    table.voucher-lines th, table.voucher-lines td {
+      border: 1px solid #9ca3af;
+      padding: 0.45rem 0.6rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    table.voucher-lines th { background: #f3f4f6; font-weight: 600; }
+    table.voucher-lines td.num { text-align: right; white-space: nowrap; }
+    .voucher-total {
+      margin: 1rem 0 1.5rem;
+      text-align: right;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    .voucher-signatures {
+      display: flex;
+      justify-content: space-between;
+      gap: 2rem;
+      font-size: 0.9rem;
+      flex-wrap: wrap;
+      margin-top: 2rem;
+    }
+    .voucher-signatures p { margin: 0; }
+    .voucher-note {
+      margin: 1.5rem 0 0;
+      font-size: 0.8rem;
+      color: #6b7280;
+      font-style: italic;
+    }
+    .no-print { text-align: center; margin: 1.5rem auto 0; }
+    .no-print button {
+      background: var(--swa-1);
+      color: #fff;
+      border: none;
+      border-radius: 0.3rem;
+      padding: 0.6rem 1.4rem;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    .no-print button:hover { background: var(--swa-2); }
+    .msg { max-width: 720px; margin: 4rem auto; text-align: center; color: #6b7280; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .voucher-sheet { border: none; max-width: none; padding: 0; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="msg" id="voucher-msg">Loading voucher…</div>
+  <div class="voucher-sheet" id="voucher-sheet" hidden>
+    <div class="voucher-head">
+      <h1>PAYMENT VOUCHER</h1>
+      <div class="voucher-meta">
+        <div><strong>Voucher No:</strong> <span id="v-no"></span></div>
+        <div><strong>Date:</strong> <span id="v-date"></span></div>
+      </div>
+    </div>
+    <p class="voucher-payee"><strong>Payable to:</strong> <span id="v-payee"></span></p>
+    <table class="voucher-lines">
+      <thead>
+        <tr><th style="width:3.5rem;">Item No</th><th style="width:6.5rem;">Date</th><th>Description</th><th style="width:8rem; text-align:right;">Amount</th></tr>
+      </thead>
+      <tbody id="v-lines"></tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3" style="text-align:right;font-weight:700;">TOTAL PAYABLE</td>
+          <td class="num" style="font-weight:700;" id="v-total"></td>
+        </tr>
+      </tfoot>
+    </table>
+    <div class="voucher-signatures">
+      <p><strong>Prepared by:</strong> <span id="v-prepared"></span></p>
+      <p><strong>Payment approved by:</strong> <span id="v-approved"></span></p>
+    </div>
+    <p class="voucher-note" id="v-note" hidden></p>
+    <div class="no-print">
+      <button type="button" id="v-print">Print / Save as PDF</button>
+    </div>
+  </div>
+
+  <script>
+    interface VoucherLine {
+      no: number | null;
+      date: string | null;
+      description: string;
+      amount: number | null;
+    }
+
+    interface VoucherItem {
+      id: number;
+      title: string;
+      payee: string | null;
+      approval_required: number;
+      status: string;
+      voucher_no: string | null;
+      voucher_date: string | null;
+      voucher_lines: string | null;
+      voucher_submitted_by: string | null;
+      voucher_submitted_at: string | null;
+      finance_decision_by: string | null;
+      finance_decision_at: string | null;
+    }
+
+    function esc(value: unknown): string {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // Voucher dates print like the June sample: 17-Jun-26.
+    function fmtVoucherDate(iso: string | null): string {
+      if (!iso) return '';
+      const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!m) return iso;
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${Number(m[3])}-${months[Number(m[2]) - 1]}-${m[1].slice(2)}`;
+    }
+
+    function money(amount: number): string {
+      return '$' + amount.toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function fail(text: string): void {
+      const msg = document.getElementById('voucher-msg');
+      if (msg) msg.textContent = text;
+    }
+
+    async function loadVoucher(): Promise<void> {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get('id') || '';
+      if (!/^\d+$/.test(id)) {
+        fail('No voucher selected. Open a voucher from the approvals board.');
+        return;
+      }
+
+      let res: Response;
+      try {
+        res = await fetch(`/api/approvals/${id}`);
+      } catch {
+        fail('Network error. Please try again.');
+        return;
+      }
+      if (res.status === 401) {
+        window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
+        return;
+      }
+      if (res.status === 403) {
+        fail('You do not have access to the approvals board.');
+        return;
+      }
+      if (!res.ok) {
+        fail('Voucher not found.');
+        return;
+      }
+
+      const data = (await res.json()) as { item: VoucherItem };
+      const item = data.item;
+      if (!item.voucher_no) {
+        fail('This item has no voucher yet.');
+        return;
+      }
+
+      document.getElementById('v-no')!.textContent = item.voucher_no;
+      document.getElementById('v-date')!.textContent = fmtVoucherDate(item.voucher_date);
+      document.getElementById('v-payee')!.textContent = item.payee || '—';
+
+      let lines: VoucherLine[] = [];
+      try {
+        const parsed = JSON.parse(item.voucher_lines || '[]');
+        if (Array.isArray(parsed)) lines = parsed;
+      } catch {
+        lines = [];
+      }
+      let total = 0;
+      const body = document.getElementById('v-lines')!;
+      body.innerHTML = lines
+        .map((line) => {
+          if (typeof line.amount === 'number') total += line.amount;
+          return `<tr>
+            <td>${line.no ?? ''}</td>
+            <td>${esc(fmtVoucherDate(line.date))}</td>
+            <td>${esc(line.description)}</td>
+            <td class="num">${typeof line.amount === 'number' ? esc(money(line.amount)) : ''}</td>
+          </tr>`;
+        })
+        .join('');
+      total = Math.round(total * 100) / 100;
+      document.getElementById('v-total')!.textContent = money(total);
+
+      document.getElementById('v-prepared')!.textContent = item.voucher_submitted_by || '—';
+      const approvedEl = document.getElementById('v-approved')!;
+      if (item.approval_required === 0) {
+        // Recurring items never email approvers; the sample voucher shows
+        // "No approval required" (plan §4, sample PV26-0611).
+        approvedEl.textContent = 'No approval required';
+      } else if (item.finance_decision_by) {
+        approvedEl.textContent = `${item.finance_decision_by} (approved ${fmtVoucherDate(item.finance_decision_at?.slice(0, 10) || null)})`;
+      } else {
+        approvedEl.textContent = 'Pending finance approval';
+      }
+
+      if (item.approval_required === 0) {
+        const note = document.getElementById('v-note');
+        if (note) {
+          note.textContent = 'Recurring payment — purchase approval not required.';
+          note.removeAttribute('hidden');
+        }
+      }
+
+      const msg = document.getElementById('voucher-msg');
+      if (msg) msg.setAttribute('hidden', '');
+      const sheet = document.getElementById('voucher-sheet');
+      if (sheet) sheet.removeAttribute('hidden');
+      document.title = `${item.voucher_no} — Payment Voucher | SWA Portal`;
+    }
+
+    document.getElementById('v-print')?.addEventListener('click', () => {
+      window.print();
+    });
+
+    void loadVoucher();
+  </script>
+</body>
+</html>

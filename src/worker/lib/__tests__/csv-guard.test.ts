@@ -20,6 +20,7 @@ import volunteerRegSrc from '../../api/volunteer-reg?raw';
 import membershipRegSrc from '../../api/membership-reg?raw';
 import laughterYogaRegSrc from '../../api/laughter-yoga-reg?raw';
 import regAdminExportSrc from '../../api/reg/admin-export?raw';
+import approvalsSrc from '../../api/approvals?raw';
 
 // Vite's import.meta.glob is not in @cloudflare/workers-types; declare the
 // narrow shape this file uses so tsc passes.
@@ -38,6 +39,7 @@ const EXPORTERS: Array<[name: string, source: string]> = [
   ['membership-reg.ts', membershipRegSrc],
   ['laughter-yoga-reg.ts', laughterYogaRegSrc],
   ['reg/admin-export.ts', regAdminExportSrc],
+  ['approvals.ts', approvalsSrc],
 ];
 
 describe('csvEscape — formula-injection guard', () => {

@@ -12,6 +12,56 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-23 (session 7) — Approval workflow Phase 5 (finish) + test-stall root cause
+
+Plan: `docs/plans/Approval-Workflow-Implementation-Plan.md` §14 Phase 5.
+The workflow is complete end to end: raise → purchase → voucher → finance →
+paid → export.
+
+### Phase 5 done
+- **Paid step** (`POST /api/approvals/:id/paid`, admin only, from
+  finance_approved): who paid, payment date, method (paynow / bank_transfer
+  / cheque / cash / other), optional reference. Atomic status flip to
+  `paid`; `paid_recorded` audit carries the detail. Drawer "Record
+  payment…" form + paid rows in the detail grid.
+- **Voucher export page** (`src/pages/approvals/voucher.astro`, standalone —
+  no AdminLayout, own noindex): renders the voucher like the June sample
+  (PV no, date, payee, lines, TOTAL PAYABLE, "Prepared by" / "Payment
+  approved by (approved <date>)", "No approval required" for recurring
+  items), one Print / Save-as-PDF button hidden when printing. Board
+  drawer gains a "View voucher" link once finance approved.
+- **Audit CSV export** (`GET /api/approvals/audit/export`, admin tier
+  only): joined with voucher numbers, oldest first, 5,000-row cap, BOM,
+  shared injection-guarded csvEscape. Registered BEFORE the /:id routes.
+- **Decision columns now store session names** (voucher prints "Prepared
+  by: Jolene Lim", not an email); audit rows keep emails. The csv-guard
+  tripwire caught the new exporter and demanded registration — working as
+  designed.
+- Tests: +9 (paid happy/optional-ref/validation/409s/403, CSV gates +
+  format incl. formula-cell neutralisation). 220 total.
+
+### Test-stall root cause (the session-6 note, investigated)
+- Symptom: `npm run test:run` sometimes hung forever AFTER tests finished
+  (results printed at ~2s, process never exited).
+- Evidence: stack samples showed vitest and its workerd child both parked
+  in `kevent`, each waiting on the other — a teardown deadlock in
+  `@cloudflare/vitest-pool-workers`. `npm ls` also showed the installed
+  pool-workers was 0.18.8 while package.json pinned ^0.22.0 (interrupted
+  install at some point).
+- Fixes: (1) `npm install` to the pinned 0.22.0 — three consecutive clean
+  runs after; (2) belt-and-braces watchdog `scripts/test-run.mjs` now
+  fronts `npm run test:run`: kills the process tree on 90s of silence or
+  10 minutes total, exits 75 with a clear message so results remain
+  readable. Env knobs: SWA_TEST_SILENCE_MS / SWA_TEST_MAX_MS.
+
+### Verification
+- `npm run test:run` 220 passed, exit 0, ~10s. typecheck + typecheck:worker
+  + build clean (26 pages).
+- Browser smoke: record payment → paid; voucher page renders PV26-0801
+  with names; audit CSV downloads.
+
+---
+
 ## 2026-08-23 (session 6) — Approval workflow Phase 4 (voucher + finance stage)
 
 Plan: `docs/plans/Approval-Workflow-Implementation-Plan.md` §14 Phase 4.

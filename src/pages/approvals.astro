@@ -169,7 +169,8 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   .ap-check[hidden] { display: none; }
 
   .ap-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-  #ap-reject-box, #ap-edit-form, #ap-voucher-form {
+  .ap-actions a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+  #ap-reject-box, #ap-edit-form, #ap-voucher-form, #ap-paid-form {
     border: 1px solid var(--border);
     border-radius: 0.4rem;
     padding: 0.75rem;
@@ -357,6 +358,10 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     voucher_submitted_at: string | null;
     finance_decision_by: string | null;
     finance_decision_at: string | null;
+    paid_by: string | null;
+    paid_at: string | null;
+    payment_method: string | null;
+    payment_reference: string | null;
     created_by: string;
     created_at: string;
     updated_at: string;
@@ -387,6 +392,14 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     paid: 'Paid',
   };
 
+  const PAYMENT_METHOD_LABELS: Record<string, string> = {
+    paynow: 'PayNow',
+    bank_transfer: 'Bank transfer',
+    cheque: 'Cheque',
+    cash: 'Cash',
+    other: 'Other',
+  };
+
   // Category labels are read from the <select> options rather than an inline
   // JSON tag: Astro treats content inside <script> tags as raw text, so an
   // {expression} there ships unevaluated and breaks JSON.parse.
@@ -414,7 +427,9 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
 
   function fmtMoney(value: number | null): string {
     if (value === null || value === undefined) return '';
-    return 'S$' + Number(value).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // Sign before the currency, matching the emails: -S$400.00.
+    const sign = value < 0 ? '-' : '';
+    return sign + 'S$' + Math.abs(value).toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   function fmtDateSg(sqlite: string | null): string {
@@ -549,6 +564,14 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       ['Voucher date', esc(item.voucher_date || '')],
       ['Raised by', esc(item.created_by)],
       ['Raised at (SG)', esc(fmtDateSg(item.created_at))],
+      ...(item.paid_by
+        ? ([
+            ['Paid by', esc(item.paid_by)],
+            ['Paid on', esc(item.paid_at || '')],
+            ['Payment method', esc(PAYMENT_METHOD_LABELS[item.payment_method || ''] || item.payment_method || '')],
+            ['Payment reference', esc(item.payment_reference || '')],
+          ] as Array<[string, string]>)
+        : []),
     ];
 
     let notesHtml = '';
@@ -614,14 +637,18 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     const canEdit = (item.status === 'pending' || item.status === 'rejected') && !!sessionData?.is_admin;
     const canVoucher =
       (item.status === 'purchase_approved' || (item.status === 'rejected' && item.rejected_stage === 'finance')) && !!sessionData?.is_admin;
+    const canRecordPaid = item.status === 'finance_approved' && !!sessionData?.is_admin;
+    const showVoucherLink = (item.status === 'finance_approved' || item.status === 'paid') && !!item.voucher_no;
     const actionsHtml =
-      canApprove || canFinanceDecide || canRemind || canEdit || canVoucher
+      canApprove || canFinanceDecide || canRemind || canEdit || canVoucher || canRecordPaid || showVoucherLink
         ? `<div class="ap-actions">
             ${canFinanceDecide ? '<button type="button" class="btn btn-primary" id="ap-act-finance-approve">Approve voucher</button>' : ''}
             ${canFinanceDecide ? '<button type="button" class="btn btn-danger" id="ap-act-finance-reject">Reject voucher\u2026</button>' : ''}
             ${canApprove ? '<button type="button" class="btn btn-primary" id="ap-act-approve">Approve</button>' : ''}
             ${canApprove ? '<button type="button" class="btn btn-danger" id="ap-act-reject">Reject\u2026</button>' : ''}
             ${canVoucher ? `<button type="button" class="btn btn-primary" id="ap-act-voucher">${hasVoucher ? 'Edit voucher & resubmit' : 'Prepare voucher'}</button>` : ''}
+            ${canRecordPaid ? '<button type="button" class="btn btn-primary" id="ap-act-paid">Record payment\u2026</button>' : ''}
+            ${showVoucherLink ? `<a class="btn btn-secondary" href="/approvals/voucher?id=${item.id}" target="_blank" rel="noopener noreferrer">View voucher</a>` : ''}
             ${canRemind ? '<button type="button" class="btn btn-secondary" id="ap-act-remind">Send reminder</button>' : ''}
             ${canEdit ? '<button type="button" class="btn btn-secondary" id="ap-act-edit">Edit</button>' : ''}
             <span id="ap-act-msg" style="font-size:0.85rem;"></span>
@@ -640,6 +667,28 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
             </label>
             <button type="button" class="btn btn-danger" id="ap-act-finance-reject-confirm" style="margin-top:0.5rem;">Confirm rejection</button>
           </div>
+          <form id="ap-paid-form" hidden>
+            <div class="ap-form-grid">
+              <label class="ap-field"><span>Who made the payment</span>
+                <input type="text" id="ap-paid-by" class="form-input" maxlength="200" placeholder="e.g. Jolene Lim (SWA DBS app)" required /></label>
+              <label class="ap-field"><span>Payment date</span>
+                <input type="date" id="ap-paid-date" class="form-input" value="${todayIso()}" required /></label>
+              <label class="ap-field"><span>Method</span>
+                <select id="ap-paid-method" class="form-input" required>
+                  <option value="paynow">PayNow</option>
+                  <option value="bank_transfer">Bank transfer</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="cash">Cash</option>
+                  <option value="other">Other</option>
+                </select></label>
+              <label class="ap-field"><span>Reference (optional)</span>
+                <input type="text" id="ap-paid-reference" class="form-input" maxlength="200" placeholder="e.g. PayNow ref 20260824001" /></label>
+            </div>
+            <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.75rem;">
+              <button type="submit" class="btn btn-primary">Record payment</button>
+              <button type="button" class="btn btn-secondary" id="ap-paid-cancel">Cancel</button>
+            </div>
+          </form>
           <form id="ap-voucher-form" hidden>
             <div class="ap-form-grid">
               <label class="ap-field"><span>Voucher date</span>
@@ -791,6 +840,41 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
           await refreshAfterAction(item.id);
         } else {
           msg(body.message || 'Could not reject the voucher.');
+        }
+      } catch {
+        msg('Network error.');
+      }
+    });
+
+    // ---- Paid form (admin, Phase 5) ----
+    const paidForm = document.getElementById('ap-paid-form') as HTMLFormElement | null;
+    document.getElementById('ap-act-paid')?.addEventListener('click', () => {
+      if (paidForm) paidForm.hidden = !paidForm.hidden;
+    });
+    document.getElementById('ap-paid-cancel')?.addEventListener('click', () => {
+      if (paidForm) paidForm.hidden = true;
+    });
+    paidForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const paidBy = (document.getElementById('ap-paid-by') as HTMLInputElement).value.trim();
+      const paidDate = (document.getElementById('ap-paid-date') as HTMLInputElement).value;
+      const paymentMethod = (document.getElementById('ap-paid-method') as HTMLSelectElement).value;
+      const paymentReference = (document.getElementById('ap-paid-reference') as HTMLInputElement).value.trim();
+      if (!paidBy || !paidDate) {
+        msg('Record who made the payment and the date.');
+        return;
+      }
+      try {
+        const res = await fetch(`/api/approvals/${item.id}/paid`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paidBy, paidDate, paymentMethod, paymentReference }),
+        });
+        const body = (await res.json()) as { success: boolean; message?: string };
+        if (body.success) {
+          await refreshAfterAction(item.id);
+        } else {
+          msg(body.message || 'Could not record the payment.');
         }
       } catch {
         msg('Network error.');
