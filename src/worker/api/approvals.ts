@@ -1600,7 +1600,9 @@ export async function handleApprovalPaid(c: AppContext) {
 
 /* ----------------------------------------------------
    GET /api/approvals/audit/export  (Phase 5)
-   Admin tier only (plan §3). CSV of the whole audit log,
+   IT admin only (owner decision 24-08-2026). Enforced by the
+   middleware IT_ADMIN_ONLY_API set; the role check below stays
+   as belt-and-braces. CSV of the whole audit log,
    oldest first, capped at 5000 rows (plan §12). Reuses
    the shared formula-injection-guarded csvEscape.
    ---------------------------------------------------- */

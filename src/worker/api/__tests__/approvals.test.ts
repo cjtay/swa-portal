@@ -13,7 +13,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { SELF, env } from 'cloudflare:test';
 import { signHmac, base64urlEncode } from '../../lib/crypto';
-import { SESSION_COOKIE_NAME } from '../../../constants/portal';
+import { SESSION_COOKIE_NAME, IT_ADMIN_EMAILS } from '../../../constants/portal';
 import { applyMigrations, seedMember } from '../../../../test/db-helpers';
 
 const ADMIN_EMAILS = [
@@ -68,6 +68,12 @@ async function financeCookie(): Promise<string> {
 
 async function plainCommitteeCookie(): Promise<string> {
   return mintCookie(PLAIN_COMMITTEE_EMAIL, 'committee');
+}
+
+/** IT-admin session. IT_ADMIN_EMAILS[0] has a seeded member row in beforeAll,
+ *  so middleware revalidation resolves the role from D1. */
+async function itAdminCookie(): Promise<string> {
+  return mintCookie(IT_ADMIN_EMAILS[0], 'admin');
 }
 
 function pdfFile(name: string, content = '%PDF-1.4 test'): File {
@@ -1148,8 +1154,8 @@ describe('POST /api/approvals/:id/paid', () => {
 });
 
 describe('GET /api/approvals/audit/export', () => {
-  it('admin only — finance approver and purchase approver get 403', async () => {
-    for (const cookie of [await financeCookie(), await purchaseCookie()]) {
+  it('IT admin only — finance approver, purchase approver, and D1 admin get 403', async () => {
+    for (const cookie of [await financeCookie(), await purchaseCookie(), await adminCookie()]) {
       const res = await SELF.fetch('https://example.com/api/approvals/audit/export', {
         headers: { Cookie: cookie },
       });
@@ -1165,7 +1171,7 @@ describe('GET /api/approvals/audit/export', () => {
     ).bind(id).run();
 
     const res = await SELF.fetch('https://example.com/api/approvals/audit/export', {
-      headers: { Cookie: await adminCookie() },
+      headers: { Cookie: await itAdminCookie() },
     });
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('text/csv; charset=utf-8');

@@ -40,7 +40,7 @@ Entry gate (middleware 7c): all `/api/approvals*` methods require admin, purchas
 | `POST /api/approvals/:id/finance-approve` | POST | Finance approver only | Atomic finance_check → finance_approved; emails creator |
 | `POST /api/approvals/:id/finance-reject` | POST | Finance approver only | Reason required; resubmission returns to finance_check |
 | `POST /api/approvals/:id/paid` | POST | Item creator | Records who/date/method/reference; → paid |
-| `GET /api/approvals/audit/export` | GET | Admin tier only | Audit CSV (oldest first, ≤5000 rows, injection-guarded) |
+| `GET /api/approvals/audit/export` | GET | IT admin only (owner decision 24-08-2026) | Audit CSV (oldest first, ≤5000 rows, injection-guarded). Reached from the Settings page card — no approvals-page UI |
 
 Rate limits (per email): approve/reject at both stages 20/hour; create/edit/voucher 10 per 15 min; remind 5/hour.
 

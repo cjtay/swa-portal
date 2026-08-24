@@ -12,6 +12,36 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-24 (session 9) — Audit export restricted to IT admin + page button
+
+Owner decision: the approval audit CSV is IT-admin eyes only. D1-category
+admins (the office admin) lose access; approvers and committee never had it.
+
+### Done
+- **Middleware gate**: `/api/approvals/audit/export` added to
+  `IT_ADMIN_ONLY_API` (src/worker/middleware.ts). Full path on purpose —
+  the basePath `/api/approvals` would lock the whole approvals API. The
+  handler's admin-tier check stays as belt-and-braces.
+- **Page button**: lives on the Settings page (settings/index.astro), a new
+  "Approvals — Audit Log" card with the CSV link. The Settings group is already
+  IT-admin only (requireItAdmin), so no per-button session check is needed.
+  The approvals board stays clean — no audit UI there. Previously the only
+  access was typing the raw URL.
+- **Tests**: `itAdminCookie()` helper (IT_ADMIN_EMAILS[0], seeded row).
+  The 403 test now also covers D1 admins; the CSV test uses the IT-admin
+  cookie. Count unchanged at 220.
+- **Docs**: features/approvals.md API row, core spec §3.2 matrix row
+  (Admin column No) + §3 note, ARCHITECTURE route table.
+
+### Verification
+- `npm run test:run` 220 passed. typecheck + typecheck:worker + build
+  clean (26 pages).
+- Browser smoke (dev:worker): bypass identity sees the Settings card and gets
+  the 200 CSV; quick-login Jolene (admin, not IT) is turned away from Settings
+  by requireItAdmin and the URL returns 403 "IT Admin access required."
+
+---
+
 ## 2026-08-23 (session 8) — Specs reorganisation: core + per-feature docs
 
 Owner decision: split the single 800-line functional spec. The docs folder

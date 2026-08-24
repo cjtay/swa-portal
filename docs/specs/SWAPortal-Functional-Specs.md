@@ -73,7 +73,7 @@ Beyond base roles, specific powers are granted by email lists in `src/constants/
 ### 3.1 Conventions
 
 - **Middleware tiers** (`src/worker/middleware.ts`): public paths; authenticated-by-default; IT-admin-only set; admin-write sets (GET open, writes admin); `reg_role` gates for the gala module; gate 7c for `/api/approvals` (admin or either approval group).
-- **Handlers re-check finer rules** (defence in depth) — e.g. finance decisions re-check `isFinanceApprover`, audit export re-checks the admin tier.
+- **Handlers re-check finer rules** (defence in depth) — e.g. finance decisions re-check `isFinanceApprover`; audit export is IT-admin only (middleware set, handler re-checks the admin tier).
 - **Writes are rate-limited** per email per endpoint (`src/worker/lib/rate-limit.ts`); public form endpoints are IP rate-limited.
 - **New feature rule**: one row in the §3.2 matrix below + one spec file in `docs/specs/features/`.
 
@@ -92,7 +92,7 @@ Beyond base roles, specific powers are granted by email lists in `src/constants/
 | Approvals — raise/edit/voucher/paid/remind | No | Yes | Yes | 〃 |
 | Approvals — purchase decision | Approvers only | No | Yes | 〃 |
 | Approvals — voucher decision | Finance approvers only | No | **No** (by design) | 〃 |
-| Approvals — audit CSV export | No | Yes | Yes | 〃 |
+| Approvals — audit CSV export | No | No | Yes | 〃 |
 | Gala — manage bookings | `reg_admin` only | Yes | Yes | `features/gala-registration.md` |
 | Gala — check-in guests | Yes | Yes | Yes | 〃 |
 | Public forms — submit | Public (Turnstile + IP limits) | — | — | `features/public-forms.md` |

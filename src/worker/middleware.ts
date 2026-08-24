@@ -19,8 +19,12 @@ const PUBLIC_PATHS = new Set([
   '/api/dev/members',
 ]);
 
+// Full paths only. A basePath entry would lock every route under that
+// prefix (e.g. '/api/approvals' would lock the whole approvals API).
 const IT_ADMIN_ONLY_API = new Set([
   '/api/admin/settings',
+  // Audit CSV — owner decision 24-08-2026: IT-admin eyes only.
+  '/api/approvals/audit/export',
 ]);
 
 const ADMIN_WRITE_API = new Set([

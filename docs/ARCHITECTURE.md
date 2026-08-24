@@ -361,7 +361,7 @@ All 69 routes registered in `src/worker/index.ts`, verified 23-08-2026.
 | `GET /api/admin/forms/laughter-yoga`, `GET …/export` (2) | Laughter-yoga submissions |
 | `GET /api/admin/forms/membership`, `GET …/export`, `GET …/image/:id/:kind`, `POST …/:id/approve`, `POST …/:id/reject` (5) | Membership submissions + approvals |
 | `GET/POST /api/namecards`, `POST /api/namecards/bulk`, `GET /api/namecards/me`, `GET/PATCH/DELETE /api/namecards/:id`, `PATCH …/:id/slug`, `PATCH …/:id/toggle`, `POST/DELETE …/:id/photo` (11) | Namecard admin + self-service |
-| `GET /api/approvals`, `POST /api/approvals`, `GET /api/approvals/:id`, `GET /api/approvals/:id/attachment/:attId`, `POST …/:id/approve`, `POST …/:id/reject`, `POST …/:id/edit`, `POST …/:id/remind`, `POST …/:id/voucher`, `POST …/:id/finance-approve`, `POST …/:id/finance-reject`, `POST …/:id/paid`, `GET /api/approvals/audit/export` (13) | Approval workflow, complete: board + create + attachments (Phase 2); purchase stage (Phase 3); voucher + finance stage (Phase 4); paid step + audit CSV (Phase 5) |
+| `GET /api/approvals`, `POST /api/approvals`, `GET /api/approvals/:id`, `GET /api/approvals/:id/attachment/:attId`, `POST …/:id/approve`, `POST …/:id/reject`, `POST …/:id/edit`, `POST …/:id/remind`, `POST …/:id/voucher`, `POST …/:id/finance-approve`, `POST …/:id/finance-reject`, `POST …/:id/paid`, `GET /api/approvals/audit/export` (13; audit export IT-admin only) | Approval workflow, complete: board + create + attachments (Phase 2); purchase stage (Phase 3); voucher + finance stage (Phase 4); paid step + audit CSV (Phase 5) |
 
 Totals: 19 public + 58 authenticated = 77.
 

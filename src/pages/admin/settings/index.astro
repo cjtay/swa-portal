@@ -37,6 +37,16 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     </table>
   </div>
 
+  <div class="card" style="margin-top:1.5rem;">
+    <h2>Approvals — Audit Log</h2>
+    <p style="color:var(--text-muted);font-size:0.85rem;">
+      Every approval action (raised, edited, decided, voucher, paid) is recorded in an
+      insert-only audit log. Export the full history as a CSV, oldest first, capped at
+      5,000 rows. IT Admin access only.
+    </p>
+    <a class="btn btn-secondary" href="/api/approvals/audit/export">Export audit log (CSV)</a>
+  </div>
+
   <div class="card steps-card" style="margin-top:1.5rem;">
     <h3 style="color:#16a34a;font-size:0.9rem;margin-bottom:0.5rem;">Where are the other settings?</h3>
     <p style="font-size:0.85rem;color:var(--text-muted);">
