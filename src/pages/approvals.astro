@@ -918,7 +918,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     const canApprove = item.status === 'pending' && !!sessionData?.is_purchase_approver;
     const canFinanceDecide = item.status === 'finance_check' && !!sessionData?.is_finance_approver;
     const canRemind = (item.status === 'pending' || item.status === 'finance_check') && !!sessionData?.is_admin;
-    const canEdit = (item.status === 'pending' || item.status === 'rejected') && !!sessionData?.is_admin;
+    const canEdit = (item.status === 'pending' || (item.status === 'rejected' && item.rejected_stage === 'purchase')) && !!sessionData?.is_admin;
     const canVoucher =
       (item.status === 'purchase_approved' || (item.status === 'rejected' && item.rejected_stage === 'finance')) && !!sessionData?.is_admin;
     const canRecordPaid = item.status === 'finance_approved' && !!sessionData?.is_admin;

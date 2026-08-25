@@ -33,6 +33,10 @@ const ENDPOINT_LIMITS: Record<string, EndpointLimit> = {
   'approvals:remind:post': { windowSeconds: 60 * 60, maxRequests: 5 },
   'approvals:review:post': { windowSeconds: 60 * 60, maxRequests: 20 },
   'approvals:write:post': { windowSeconds: 15 * 60, maxRequests: 10 },
+  // Approval reads (board list, item detail, attachment streaming, audit CSV)
+  // share one per-email bucket so one logged-in approver cannot loop the R2
+  // attachment route. Generous enough for a five-person finance board.
+  'approvals:read:get': { windowSeconds: 60, maxRequests: 60 },
 };
 
 export function getEndpointLimit(endpointKey: string): EndpointLimit {
@@ -70,7 +74,11 @@ export function getEndpointKey(path: string, method: string): string | null {
   const basePath = getBasePath(path);
   const m = method.toUpperCase();
 
-  // Only write operations are rate limited
+  // Only write operations are rate limited, except the /api/approvals reads,
+  // which stream from R2 and are matched before the generic GET passthrough.
+  if (m === 'GET' && path.startsWith('/api/approvals')) {
+    return 'approvals:read:get';
+  }
   if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') {
     return null;
   }

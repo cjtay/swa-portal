@@ -274,15 +274,21 @@ Roxanne's approve click at the door. This version fixes that.)
 | `GET /api/approvals/:id/attachment/:attId` | Streams from R2 for in-page viewing; `?download=1` forces download |
 | `GET /api/approvals/audit/export` | CSV of the audit log; admin only |
 
-Every state-changing handler writes its audit row in the same D1 batch as
-the state change, so the log and the status can never disagree.
+Every state-changing handler runs a guarded `UPDATE … WHERE status = …`, then
+writes its audit row only when that UPDATE matched a row. The two writes are
+deliberately not one batch: a lost race (two approvers acting at once) must
+never insert a false decision into the insert-only audit log. An audit-write
+failure is logged and never rolls the decision back — the state change is the
+source of truth.
 
-`src/worker/lib/rate-limit.ts` gains three endpoint keys (the earlier draft
+`src/worker/lib/rate-limit.ts` gains four endpoint keys (the earlier draft
 forgot this file; without it the new buttons have no spam protection):
 
 - `approvals:remind:post` — 5 per hour (emails are externally visible)
 - `approvals:review:post` — 20 per hour (approve/reject, matching membership)
 - `approvals:write:post` — default 10 per 15 minutes for create/edit/voucher
+- `approvals:read:get` — 60 per minute for the reads (board list, detail,
+  attachment streaming, audit CSV) so one approver cannot loop the R2 route
 
 ## 9. Uploads and file safety
 

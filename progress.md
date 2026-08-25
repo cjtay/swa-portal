@@ -12,6 +12,62 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-25 (session 12) — Approvals hardening: race-safe writes + field freeze
+
+Gap-review against gtw2026's safeguards and the docs/checklist set found six
+gaps in the approval money path, plus a latent audit-integrity flaw. All fixed
+in `src/worker/api/approvals.ts` (+ rate-limit.ts, approvals.astro, tests).
+
+### Done
+- **Race-safe decisions (gap 1 + a broader fix)**. A lost race (two approvers
+  acting on the same item at once) used to leave a false entry in the
+  insert-only audit log, because each handler ran `DB.batch([UPDATE, INSERT
+  audit])` and the losing UPDATE matched nothing while the audit still wrote.
+  New shared helper `applyTransition()` runs the guarded UPDATE first, then
+  writes the audit row only if the change won. Used by approve, reject,
+  finance-approve, finance-reject, paid, voucher and edit. The voucher save
+  also re-states its status rule in the WHERE clause, so a second concurrent
+  submit returns a 409 instead of overwriting the first set of lines.
+- **Create leaves no untracked item (gap 2)**. The `item_created` audit row is
+  written immediately after the item insert, before any file work, so an R2
+  or attachment failure can no longer produce an item with no audit entry. If
+  the audit write itself fails the item is rolled back. Files already uploaded
+  are deleted on failure, and each failure message now says honestly what
+  happened instead of a blanket "attachments could not be recorded".
+- **Edit guarded (gap 3)**. The edit item-update re-checks the editable status
+  in its WHERE clause and returns 409 on zero rows; uploaded files are cleaned
+  up if the attachment batch fails.
+- **Fields freeze at purchase approval (gap 4, owner decision)**. Editing is
+  only allowed for `pending` items or items rejected at the purchase stage. A
+  finance-stage rejection is corrected through the voucher editor only, never
+  the item edit form. Updated the API gate, the resubmit routing, the approvals
+  page `canEdit`, and the spec.
+- **GET endpoints rate limited (gap 5)**. New `approvals:read:get` bucket
+  (60/min per email) on the board list, item detail, attachment streaming and
+  audit CSV, so one approver cannot loop the R2 route.
+- **Polish (gap 6)**. Voucher and payment dates reject implausible years
+  (typo like 2206 fails). The voucher email total sums in integer cents. The
+  board list supports `offset`/`limit`/`total` so items beyond 500 are
+  reachable.
+- **Tests**: finance-reject item edit now expects 409 (was finance_check);
+  +2 pagination, +1 spurious-audit regression (a second approving click writes
+  exactly one `purchase_approved` row). 225 total.
+- **Docs**: features/approvals.md (edit rule, freeze rule, read rate limit,
+  audit-write note), Approval-Workflow-Implementation-Plan.md (audit
+  pattern + 4th rate-limit key).
+
+### Verification
+- `npm run test:run` 225 passed (15 files). `npm run typecheck` 0 errors
+  (16 pre-existing hints in unrelated files). `npm run typecheck:worker` clean.
+  `npm run build` clean (26 pages).
+
+### Owner steps before go-live
+- Swap `APPROVAL_PURCHASE_APPROVER_EMAILS` and `APPROVAL_FINANCE_APPROVER_EMAILS`
+  in `src/constants/portal.ts` from the dev shared inboxes to the real
+  addresses (the comments mark them). Not a code safeguard; a go-live step.
+
+---
+
 ## 2026-08-25 (session 11) — Approvals UI polish (CSS + micro-fixes)
 
 Owner requested a visual polish of the approval pages — typography, spacing,

@@ -72,6 +72,29 @@ const MAX_REQUESTED_AMOUNT = 10_000_000;
 const MAX_VOUCHER_LINES = 50;
 const MAX_VOUCHER_LINE_DESCRIPTION = 500;
 const VOUCHER_NO_RETRY_ATTEMPTS = 3;
+const LIST_DEFAULT_LIMIT = 500;
+const LIST_MAX_LIMIT = 500;
+
+// Gap 6: a gross date typo (e.g. year 2206) must fail even though the date is
+// otherwise real. Bound the year to a plausible financial-record range.
+const MIN_SANE_YEAR = 1900;
+const MAX_SANE_YEAR = 2100;
+
+function isRealDate(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, mo, d] = s.split('-').map(Number);
+  if (y < MIN_SANE_YEAR || y > MAX_SANE_YEAR) return false;
+  const check = new Date(Date.UTC(y, mo - 1, d));
+  return check.getUTCFullYear() === y && check.getUTCMonth() === mo - 1 && check.getUTCDate() === d;
+}
+
+/** Parse a non-negative integer query parameter with a default and a max. */
+function parsePageParam(raw: string | null | undefined, defaultValue: number, max: number): number | null {
+  if (raw === null || raw === undefined || raw.trim() === '') return defaultValue;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0 || n > max) return null;
+  return n;
+}
 
 function getSessionEmail(c: AppContext): string {
   try {
@@ -95,6 +118,43 @@ function getSessionRole(c: AppContext): string {
   } catch {
     return '';
   }
+}
+
+/**
+ * Run a state change guarded by a WHERE status rule, then write the audit row
+ * only if the row actually changed.
+ *
+ * These are two separate writes, not one D1 batch. If they were one batch, a
+ * lost race (two approvers acting at once) would still insert its audit row
+ * even though the UPDATE matched nothing, writing a false entry into the
+ * insert-only financial audit log. Keeping them separate means a lost race
+ * returns early with no audit row at all.
+ *
+ * The audit write is best-effort: an audit insert failure is logged and never
+ * rolls the decision back. The state change is the source of truth.
+ * Returns true when the item moved to the new state, false when it had already
+ * been actioned by someone else.
+ */
+async function applyTransition(
+  c: AppContext,
+  updateStmt: D1PreparedStatement,
+  auditStmt: D1PreparedStatement,
+): Promise<boolean> {
+  const res = await updateStmt.run();
+  const changes = Number((res.meta as { changes?: number } | undefined)?.changes ?? 0);
+  if (changes === 0) return false;
+  try {
+    await auditStmt.run();
+  } catch (err) {
+    await logError(c.env, {
+      endpoint: 'approvals-state-change',
+      error_type: 'D1_AUDIT',
+      error_message: `audit insert for state change failed: ${err instanceof Error ? err.message : String(err)}`,
+      http_status: 500,
+      user_email: getSessionEmail(c),
+    });
+  }
+  return true;
 }
 
 /** Strip quotes, backslashes, control chars and non-ASCII for the
@@ -131,9 +191,9 @@ async function loadVoucherEmailItem(c: AppContext, itemId: number, row: Record<s
   if (typeof row.voucher_lines === 'string' && row.voucher_lines.length > 0) {
     try {
       const lines = JSON.parse(row.voucher_lines) as Array<{ amount?: number | null }>;
-      total = lines.reduce((sum, line) => sum + (typeof line.amount === 'number' ? line.amount : 0), 0);
-      total = Math.round(total * 100) / 100;
-    } catch {
+      // Sum in integer cents to avoid floating-point drift on the total.
+      const totalCents = lines.reduce((sum, line) => sum + (typeof line.amount === 'number' ? Math.round(line.amount * 100) : 0), 0);
+      total = totalCents / 100;    } catch {
       total = null;
     }
   }
@@ -196,6 +256,13 @@ export async function handleApprovalsList(c: AppContext) {
     return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid status filter.' }, 400);
   }
 
+  // Gap 6: server-side paging so items beyond the first 500 are reachable.
+  const limit = parsePageParam(c.req.query('limit'), LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT);
+  const offset = parsePageParam(c.req.query('offset'), 0, 100_000);
+  if (limit === null || offset === null) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid paging parameters.' }, 400);
+  }
+
   try {
     const baseSelect =
       'SELECT id, category, title, payee, requested_amount, approval_required, status, ' +
@@ -203,10 +270,10 @@ export async function handleApprovalsList(c: AppContext) {
       'voucher_no, voucher_date, created_by, created_at, updated_at ' +
       'FROM approval_items';
     const listPromise = statusFilter
-      ? c.env.DB.prepare(`${baseSelect} WHERE status = ? ORDER BY created_at DESC, id DESC LIMIT 500`)
-          .bind(statusFilter)
+      ? c.env.DB.prepare(`${baseSelect} WHERE status = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`)
+          .bind(statusFilter, limit, offset)
           .all()
-      : c.env.DB.prepare(`${baseSelect} ORDER BY created_at DESC, id DESC LIMIT 500`).all();
+      : c.env.DB.prepare(`${baseSelect} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`).bind(limit, offset).all();
 
     const [listResult, countResult] = await Promise.all([
       listPromise,
@@ -228,7 +295,9 @@ export async function handleApprovalsList(c: AppContext) {
     }
     counts.all = all;
 
-    return c.json({ success: true, items: listResult.results || [], counts });
+    const total = statusFilter ? (counts[statusFilter] ?? 0) : all;
+
+    return c.json({ success: true, items: listResult.results || [], counts, total });
   } catch (err) {
     return handleApiError(c, endpoint, err, 'Could not load approvals.', {
       error_type: 'D1_SELECT_APPROVALS',
@@ -424,6 +493,26 @@ export async function handleApprovalsCreate(c: AppContext) {
     });
   }
 
+  // --- 1b. Write the item_created audit row now, before any file work.
+  //     A later R2 or attachment failure must never leave an item on the board
+  //     that the insert-only audit log never recorded. If this write itself
+  //     fails, roll the item back so no un-audited item survives.
+  const actorName = getSessionName(c) || session.email;
+  const auditNote = `category=${category.key}; files=${fileList.length}` + (requestedAmount !== null ? `; S$${requestedAmount.toFixed(2)}` : '');
+  try {
+    await c.env.DB.prepare(
+      'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)',
+    )
+      .bind(itemId, 'item_created', session.email, actorName, auditNote)
+      .run();
+  } catch (err) {
+    await c.env.DB.prepare('DELETE FROM approval_items WHERE id = ?').bind(itemId).run().catch(() => {});
+    return handleApiError(c, endpoint, err, 'Could not record the item creation. Nothing was saved.', {
+      error_type: 'D1_INSERT_APPROVAL_AUDIT',
+      http_status: 500,
+    });
+  }
+
   // --- 2. Upload files to R2 under approvals/<itemId>/ ---
   const uploadedKeys: Array<{ file: File; r2Key: string }> = [];
   if (fileList.length > 0) {
@@ -450,52 +539,74 @@ export async function handleApprovalsCreate(c: AppContext) {
         http_status: 500,
         user_email: session.email,
       });
+      // Clean up anything already written so no orphaned objects linger.
+      await Promise.allSettled(uploadedKeys.map(({ r2Key }) => c.env.R2_BUCKET.delete(r2Key)));
       return c.json(
-        { success: false, error_code: 'UPLOAD_FAILED', message: 'Could not save the attached files. Please try again.' },
+        {
+          success: false,
+          error_code: 'UPLOAD_FAILED',
+          message: 'The item was created but its attachments could not be saved. It is on the board without files; reopen it and attach the files again.',
+        },
         500,
       );
     }
   }
 
-  // --- 3. Attachment rows + the item_created audit row in one batch ---
-  const actorName = getSessionName(c) || session.email;
-  const auditNote = `category=${category.key}; files=${fileList.length}` + (requestedAmount !== null ? `; S$${requestedAmount.toFixed(2)}` : '');
+  // --- 3. Attachment rows (their item_created audit row was written above) ---
+  let batchResults: Array<{ meta?: { last_row_id?: number } }> = [];
+  if (uploadedKeys.length > 0) {
+    try {
+      const statements = uploadedKeys.map(({ file, r2Key }) =>
+        c.env.DB.prepare(
+          'INSERT INTO approval_attachments (item_id, r2_key, filename, mime_type, size) VALUES (?, ?, ?, ?, ?)',
+        ).bind(itemId, r2Key, file.name, file.type, file.size),
+      );
+      batchResults = await c.env.DB.batch(statements);
+    } catch (err) {
+      // Clean up the files just written to R2 so nothing is left orphaned.
+      await Promise.allSettled(uploadedKeys.map(({ r2Key }) => c.env.R2_BUCKET.delete(r2Key)));
+      return handleApiError(
+        c,
+        endpoint,
+        err,
+        'The item was created but its attachments could not be recorded. It is on the board without files; try the upload again.',
+        { error_type: 'D1_INSERT_APPROVAL_ATTACHMENTS', http_status: 500 },
+      );
+    }
+  }
 
-  try {
-    const statements = uploadedKeys.map(({ file, r2Key }) =>
-      c.env.DB.prepare(
-        'INSERT INTO approval_attachments (item_id, r2_key, filename, mime_type, size) VALUES (?, ?, ?, ?, ?)',
-      ).bind(itemId, r2Key, file.name, file.type, file.size),
-    );
-    statements.push(
-      c.env.DB.prepare(
-        'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)',
-      ).bind(itemId, 'item_created', session.email, actorName, auditNote),
-    );
-    const batchResults = await c.env.DB.batch(statements);
-
-    // --- 4. Store the comparison rows with the real attachment ids ---
-    if (comparisonRows.length > 0) {
-      const attachmentIds = uploadedKeys.map(({ file }, i) => ({
-        name: file.name,
-        id: Number(batchResults[i].meta?.last_row_id),
-      }));
-      const stored = comparisonRows.map((row) => ({
-        attachmentId: attachmentIds.find((a) => a.name === row.file)?.id ?? null,
-        description: row.description,
-      }));
-      if (stored.some((s) => !s.attachmentId || Number.isNaN(s.attachmentId))) {
-        throw new Error('comparison mapping failed');
-      }
+  // --- 4. Store the comparison rows with the real attachment ids ---
+  if (comparisonRows.length > 0) {
+    const attachmentIds = uploadedKeys.map(({ file }, i) => ({
+      name: file.name,
+      id: Number(batchResults[i]?.meta?.last_row_id),
+    }));
+    const stored = comparisonRows.map((row) => ({
+      attachmentId: attachmentIds.find((a) => a.name === row.file)?.id ?? null,
+      description: row.description,
+    }));
+    if (stored.some((s) => !s.attachmentId || Number.isNaN(s.attachmentId))) {
+      return handleApiError(
+        c,
+        endpoint,
+        new Error('comparison mapping failed'),
+        'The item was created but its comparison table could not be recorded. Open the item and rebuild the table.',
+        { error_type: 'D1_MAP_APPROVAL_COMPARISON', http_status: 500 },
+      );
+    }
+    try {
       await c.env.DB.prepare("UPDATE approval_items SET comparison = ?, updated_at = datetime('now') WHERE id = ?")
         .bind(JSON.stringify(stored), itemId)
         .run();
+    } catch (err) {
+      return handleApiError(
+        c,
+        endpoint,
+        err,
+        'The item was created and its attachments saved, but the comparison table could not be stored. Open the item and rebuild the table.',
+        { error_type: 'D1_UPDATE_APPROVAL_COMPARISON', http_status: 500 },
+      );
     }
-  } catch (err) {
-    return handleApiError(c, endpoint, err, 'The item was created but its attachments could not be recorded. Please contact an IT admin.', {
-      error_type: 'D1_INSERT_APPROVAL_ATTACHMENTS',
-      http_status: 500,
-    });
   }
 
   // --- 5. Email the purchase approvers when the item needs a decision.
@@ -658,7 +769,8 @@ export async function handleApprovalPurchaseApprove(c: AppContext) {
     // The item column stores the printed name (the voucher shows "Approved
     // by <name>"); the audit row keeps the email for traceability.
     const deciderName = getSessionName(c) || email;
-    const res = await c.env.DB.batch([
+    const changed = await applyTransition(
+      c,
       c.env.DB.prepare(
         `UPDATE approval_items
             SET status = 'purchase_approved', purchase_decision_by = ?, purchase_decision_at = datetime('now'), updated_at = datetime('now')
@@ -666,11 +778,9 @@ export async function handleApprovalPurchaseApprove(c: AppContext) {
       ).bind(deciderName, Number(id)),
       c.env.DB.prepare(
         'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, NULL)',
-      ).bind(Number(id), 'purchase_approved', email, getSessionName(c) || email),
-    ]);
-
-    const changes = Number((res[0].meta as { changes?: number } | undefined)?.changes ?? 0);
-    if (changes === 0) {
+      ).bind(Number(id), 'purchase_approved', email, deciderName),
+    );
+    if (!changed) {
       return c.json(
         { success: false, error_code: 'CONFLICT', message: 'Item is no longer pending. It may have been actioned by another approver.' },
         409,
@@ -737,7 +847,8 @@ export async function handleApprovalPurchaseReject(c: AppContext) {
 
   try {
     const deciderName = getSessionName(c) || email;
-    const res = await c.env.DB.batch([
+    const changed = await applyTransition(
+      c,
       c.env.DB.prepare(
         `UPDATE approval_items
             SET status = 'rejected', rejected_stage = 'purchase', rejection_reason = ?,
@@ -746,11 +857,9 @@ export async function handleApprovalPurchaseReject(c: AppContext) {
       ).bind(reason, deciderName, Number(id)),
       c.env.DB.prepare(
         'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)',
-      ).bind(Number(id), 'purchase_rejected', email, getSessionName(c) || email, reason),
-    ]);
-
-    const changes = Number((res[0].meta as { changes?: number } | undefined)?.changes ?? 0);
-    if (changes === 0) {
+      ).bind(Number(id), 'purchase_rejected', email, deciderName, reason),
+    );
+    if (!changed) {
       return c.json(
         { success: false, error_code: 'CONFLICT', message: 'Item is no longer pending. It may have been actioned by another approver.' },
         409,
@@ -813,9 +922,18 @@ export async function handleApprovalEdit(c: AppContext) {
     return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
   }
   const status = String(item.status);
-  if (status !== 'pending' && status !== 'rejected') {
+  const rejectedStage = item.rejected_stage ? String(item.rejected_stage) : '';
+  const editable = status === 'pending' || (status === 'rejected' && rejectedStage === 'purchase');
+  if (!editable) {
+    // Owner decision (gap 4): once purchase has approved an item, its fields
+    // are frozen. A finance-stage rejection must be corrected through the
+    // voucher, not the item edit form.
     return c.json(
-      { success: false, error_code: 'CONFLICT', message: 'Only pending or rejected items can be edited.' },
+      {
+        success: false,
+        error_code: 'CONFLICT',
+        message: 'Only pending items, or items rejected at the purchase stage, can be edited. Once an item is purchase approved its fields are locked; after a finance rejection, edit the voucher instead.',
+      },
       409,
     );
   }
@@ -870,10 +988,10 @@ export async function handleApprovalEdit(c: AppContext) {
     if (status !== 'rejected') {
       return c.json({ success: false, error_code: 'CONFLICT', message: 'Only rejected items can be resubmitted.' }, 409);
     }
-    // Routing per plan §4: purchase-stage rejection → pending;
-    // finance-stage rejection → finance_check (Phase 4 will allow editing
-    // vouchers there; the routing itself is decided here).
-    newStatus = item.rejected_stage === 'finance' ? 'finance_check' : 'pending';
+    // Only a purchase-stage rejection can reach this form (the gate above
+    // excludes finance-stage rejections). Routing per plan §4: a purchase
+    // rejection always returns the item to pending.
+    newStatus = 'pending';
   }
 
   // --- New files (same allowlist/caps as create; count existing too) ---
@@ -1000,6 +1118,8 @@ export async function handleApprovalEdit(c: AppContext) {
       }
     }
   } catch (err) {
+    // Clean up the files just written to R2 so nothing is left orphaned.
+    await Promise.allSettled(uploadedKeys.map(({ r2Key }) => c.env.R2_BUCKET.delete(r2Key)));
     return handleApiError(c, endpoint, err, 'The attachments could not be recorded. Please try again.', {
       error_type: 'D1_INSERT_APPROVAL_ATTACHMENTS',
       http_status: 500,
@@ -1016,7 +1136,9 @@ export async function handleApprovalEdit(c: AppContext) {
     }
   }
 
-  // --- 4. Item update + audit rows in one batch ---
+  // --- 4. Item update, then audit rows. Two writings, so a lost race (an
+  //     approver acts on the item between the read above and this write) never
+  //     writes a false audit entry. The WHERE re-checks the editable states. ---
   let finalStatus = status;
   try {
     const setClauses = [...updates];
@@ -1031,38 +1153,51 @@ export async function handleApprovalEdit(c: AppContext) {
       setClauses.push('status = ?', 'rejected_stage = NULL', "updated_at = datetime('now')");
       bindParams.push(newStatus);
       finalStatus = newStatus;
-      // Rejections reset so the next decision overwrites cleanly.
-      if (item.rejected_stage === 'finance') {
-        setClauses.push('finance_rejection_reason = NULL', 'finance_decision_by = NULL', 'finance_decision_at = NULL');
-      } else {
-        setClauses.push('rejection_reason = NULL', 'purchase_decision_by = NULL', 'purchase_decision_at = NULL');
-      }
+      // Only a purchase-stage rejection reaches the edit form, so reset the
+      // purchase decision columns for a clean re-approval.
+      setClauses.push('rejection_reason = NULL', 'purchase_decision_by = NULL', 'purchase_decision_at = NULL');
     }
 
-    const statements: D1PreparedStatement[] = [];
     if (setClauses.length > 0) {
       if (!resubmit) setClauses.push("updated_at = datetime('now')");
-      statements.push(
-        c.env.DB.prepare(`UPDATE approval_items SET ${setClauses.join(', ')} WHERE id = ?`).bind(...bindParams, Number(id)),
-      );
+      const updateRes = await c.env.DB
+        .prepare(
+          `UPDATE approval_items SET ${setClauses.join(', ')}
+            WHERE id = ? AND (status = 'pending' OR (status = 'rejected' AND rejected_stage = 'purchase'))`,
+        )
+        .bind(...bindParams, Number(id))
+        .run();
+      const changes = Number((updateRes.meta as { changes?: number } | undefined)?.changes ?? 0);
+      if (changes === 0) {
+        return c.json(
+          { success: false, error_code: 'CONFLICT', message: 'Item is no longer editable. It may have been actioned by another approver.' },
+          409,
+        );
+      }
       auditActions.push({ action: 'item_edited', note: null });
     }
     if (resubmit) {
       auditActions.push({ action: 'item_resubmitted', note: `to=${newStatus}` });
     }
+    // Best-effort audit: an insert failure is logged, never rolls the edit back.
     for (const a of auditActions) {
-      statements.push(
-        c.env.DB.prepare('INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)').bind(
+      try {
+        await c.env.DB.prepare('INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)').bind(
           Number(id),
           a.action,
           session.email,
           actorName,
           a.note,
-        ),
-      );
-    }
-    if (statements.length > 0) {
-      await c.env.DB.batch(statements);
+        ).run();
+      } catch (err) {
+        await logError(c.env, {
+          endpoint: 'approvals-edit-audit',
+          error_type: 'D1_AUDIT',
+          error_message: `edit audit insert failed: ${err instanceof Error ? err.message : String(err)}`,
+          http_status: 500,
+          user_email: session.email,
+        });
+      }
     }
   } catch (err) {
     return handleApiError(c, endpoint, err, 'Could not save the edit.', { error_type: 'D1_UPDATE_APPROVAL_EDIT', http_status: 500 });
@@ -1218,15 +1353,8 @@ export async function handleApprovalVoucher(c: AppContext) {
 
   // --- Voucher date ---
   const voucherDate = typeof body['voucherDate'] === 'string' ? body['voucherDate'].trim() : '';
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(voucherDate)) {
+  if (!isRealDate(voucherDate)) {
     return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Voucher date must be a valid date (YYYY-MM-DD).' }, 400);
-  }
-  {
-    const [y, mo, d] = voucherDate.split('-').map(Number);
-    const check = new Date(Date.UTC(y, mo - 1, d));
-    if (check.getUTCFullYear() !== y || check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== d) {
-      return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Voucher date must be a valid date (YYYY-MM-DD).' }, 400);
-    }
   }
 
   // --- Lines ---
@@ -1287,6 +1415,10 @@ export async function handleApprovalVoucher(c: AppContext) {
   }
 
   // --- Save (with number assignment + UNIQUE retry) ---
+  //   The UPDATE repeats the status rule in its WHERE clause (gap 1): if a
+  //   concurrent submit already moved the item out of a ready state, the
+  //   write matches nothing and the caller gets a 409 instead of the loser's
+  //   lines silently replacing the winner's.
   const linesJson = JSON.stringify(lines);
   const actorName = getSessionName(c) || session.email;
   let assignedNo = item.voucher_no ? String(item.voucher_no) : '';
@@ -1305,7 +1437,8 @@ export async function handleApprovalVoucher(c: AppContext) {
         assignedNo = next;
       }
       try {
-        await c.env.DB.batch([
+        const changed = await applyTransition(
+          c,
           c.env.DB.prepare(
             `UPDATE approval_items
                 SET voucher_no = ?, voucher_date = ?, voucher_lines = ?,
@@ -1313,12 +1446,18 @@ export async function handleApprovalVoucher(c: AppContext) {
                     status = 'finance_check', rejected_stage = NULL,
                     finance_decision_by = NULL, finance_decision_at = NULL, finance_rejection_reason = NULL,
                     updated_at = datetime('now')
-              WHERE id = ?`,
+              WHERE id = ? AND (status = 'purchase_approved' OR (status = 'rejected' AND rejected_stage = 'finance'))`,
           ).bind(assignedNo, voucherDate, linesJson, actorName, Number(id)),
           c.env.DB.prepare(
             'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)',
           ).bind(Number(id), 'voucher_submitted', session.email, actorName, `voucher_no=${assignedNo}; resubmitted=${isResubmission ? 1 : 0}`),
-        ]);
+        );
+        if (!changed) {
+          return c.json(
+            { success: false, error_code: 'CONFLICT', message: 'Item is no longer ready for a voucher. It may have been submitted or actioned already.' },
+            409,
+          );
+        }
         saved = true;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -1391,7 +1530,8 @@ export async function handleFinanceApprove(c: AppContext) {
   try {
     // Name for the voucher's "Payment approved by" line; audit keeps email.
     const deciderName = getSessionName(c) || email;
-    const res = await c.env.DB.batch([
+    const changed = await applyTransition(
+      c,
       c.env.DB.prepare(
         `UPDATE approval_items
             SET status = 'finance_approved', finance_decision_by = ?, finance_decision_at = datetime('now'), updated_at = datetime('now')
@@ -1399,10 +1539,9 @@ export async function handleFinanceApprove(c: AppContext) {
       ).bind(deciderName, Number(id)),
       c.env.DB.prepare(
         'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, NULL)',
-      ).bind(Number(id), 'finance_approved', email, getSessionName(c) || email),
-    ]);
-    const changes = Number((res[0].meta as { changes?: number } | undefined)?.changes ?? 0);
-    if (changes === 0) {
+      ).bind(Number(id), 'finance_approved', email, deciderName),
+    );
+    if (!changed) {
       return c.json(
         { success: false, error_code: 'CONFLICT', message: 'Item is not awaiting a finance decision. It may have been actioned already.' },
         409,
@@ -1470,7 +1609,8 @@ export async function handleFinanceReject(c: AppContext) {
 
   try {
     const deciderName = getSessionName(c) || email;
-    const res = await c.env.DB.batch([
+    const changed = await applyTransition(
+      c,
       c.env.DB.prepare(
         `UPDATE approval_items
             SET status = 'rejected', rejected_stage = 'finance', finance_rejection_reason = ?,
@@ -1479,10 +1619,9 @@ export async function handleFinanceReject(c: AppContext) {
       ).bind(reason, deciderName, Number(id)),
       c.env.DB.prepare(
         'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)',
-      ).bind(Number(id), 'finance_rejected', email, getSessionName(c) || email, reason),
-    ]);
-    const changes = Number((res[0].meta as { changes?: number } | undefined)?.changes ?? 0);
-    if (changes === 0) {
+      ).bind(Number(id), 'finance_rejected', email, deciderName, reason),
+    );
+    if (!changed) {
       return c.json(
         { success: false, error_code: 'CONFLICT', message: 'Item is not awaiting a finance decision. It may have been actioned already.' },
         409,
@@ -1536,15 +1675,8 @@ export async function handleApprovalPaid(c: AppContext) {
     return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: `Record who made the payment (1–${MAX_PAID_BY_LENGTH} characters).` }, 400);
   }
   const paidDate = typeof body['paidDate'] === 'string' ? body['paidDate'].trim() : '';
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(paidDate)) {
+  if (!isRealDate(paidDate)) {
     return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Payment date must be a valid date (YYYY-MM-DD).' }, 400);
-  }
-  {
-    const [y, mo, d] = paidDate.split('-').map(Number);
-    const check = new Date(Date.UTC(y, mo - 1, d));
-    if (check.getUTCFullYear() !== y || check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== d) {
-      return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Payment date must be a valid date (YYYY-MM-DD).' }, 400);
-    }
   }
   const paymentMethod = typeof body['paymentMethod'] === 'string' ? body['paymentMethod'].trim() : '';
   if (!(PAYMENT_METHODS as readonly string[]).includes(paymentMethod)) {
@@ -1570,7 +1702,8 @@ export async function handleApprovalPaid(c: AppContext) {
   try {
     const actorName = getSessionName(c) || session.email;
     const auditNote = `paid_by=${paidBy}; method=${paymentMethod}` + (paymentReference ? `; ref=${paymentReference}` : '');
-    const res = await c.env.DB.batch([
+    const changed = await applyTransition(
+      c,
       c.env.DB.prepare(
         `UPDATE approval_items
             SET status = 'paid', paid_by = ?, paid_at = ?, payment_method = ?, payment_reference = ?, updated_at = datetime('now')
@@ -1583,9 +1716,8 @@ export async function handleApprovalPaid(c: AppContext) {
         actorName,
         auditNote,
       ),
-    ]);
-    const changes = Number((res[0].meta as { changes?: number } | undefined)?.changes ?? 0);
-    if (changes === 0) {
+    );
+    if (!changed) {
       return c.json(
         { success: false, error_code: 'CONFLICT', message: 'Only finance-approved items can be marked as paid.' },
         409,

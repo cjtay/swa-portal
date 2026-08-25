@@ -419,6 +419,31 @@ describe('GET /api/approvals — list and counts', () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it('supports offset/limit paging and reports a total', async () => {
+    for (let i = 0; i < 5; i++) {
+      const form = new FormData();
+      form.append('category', 'quotation');
+      form.append('title', `Paged item ${i}`);
+      await SELF.fetch('https://example.com/api/approvals', { method: 'POST', headers: { Cookie: await adminCookie() }, body: form });
+    }
+    const page = await SELF.fetch('https://example.com/api/approvals?limit=2&offset=2', {
+      headers: { Cookie: await purchaseCookie() },
+    });
+    expect(page.status).toBe(200);
+    const body = await page.json<{ items: Array<{ title: string }>; total: number }>();
+    expect(body.items.length).toBe(2);
+    expect(body.total).toBe(5);
+  });
+
+  it('rejects invalid paging parameters', async () => {
+    for (const qs of ['limit=-1', 'limit=abc', 'offset=99999999']) {
+      const res = await SELF.fetch(`https://example.com/api/approvals?${qs}`, {
+        headers: { Cookie: await purchaseCookie() },
+      });
+      expect(res.status).toBe(400);
+    }
+  });
 });
 
 describe('GET /api/approvals/:id — detail and attachments', () => {
@@ -551,6 +576,18 @@ describe('POST /api/approvals/:id/approve — purchase stage', () => {
       headers: { Cookie: await purchaseCookie() },
     });
     expect(second.status).toBe(409);
+  });
+
+  it('a lost racing approve writes no false audit row', async () => {
+    const id = await seedPendingItem();
+    await SELF.fetch(`https://example.com/api/approvals/${id}/approve`, { method: 'POST', headers: { Cookie: await purchaseCookie() } });
+    const second = await SELF.fetch(`https://example.com/api/approvals/${id}/approve`, { method: 'POST', headers: { Cookie: await purchaseCookie() } });
+    expect(second.status).toBe(409);
+    const auditCount = await env.DB
+      .prepare("SELECT COUNT(*) AS n FROM approval_audit_log WHERE item_id = ? AND action = 'purchase_approved'")
+      .bind(id)
+      .first<{ n: number }>();
+    expect(auditCount?.n).toBe(1);
   });
 
   it('finance approver and plain admin cannot approve (403)', async () => {
@@ -1018,7 +1055,7 @@ describe('POST /api/approvals/:id/finance-approve and finance-reject', () => {
     expect(item?.finance_rejection_reason).toBe('Deposit line is missing');
   });
 
-  it('item-edit resubmit of a finance-rejected item goes straight back to finance_check', async () => {
+  it('editing a finance-rejected item is a 409 - fields freeze once purchase approved (gap 4); correction is via the voucher', async () => {
     const id = await seedFinanceCheckItem();
     await SELF.fetch(`https://example.com/api/approvals/${id}/finance-reject`, {
       method: 'POST',
@@ -1033,9 +1070,11 @@ describe('POST /api/approvals/:id/finance-approve and finance-reject', () => {
       headers: { Cookie: await adminCookie() },
       body: form,
     });
-    expect(res.status).toBe(200);
-    const body = await res.json<{ status: string }>();
-    expect(body.status).toBe('finance_check');
+    expect(res.status).toBe(409);
+
+    // Correcting the voucher is still allowed through the voucher endpoint.
+    const voucherRes = await submitVoucher(id, '2026-08-20', [{ no: 1, date: '2026-08-10', description: 'Corrected line', amount: 24000 }]);
+    expect(voucherRes.status).toBe(200);
   });
 
   it('remind works at the finance stage with a stage=finance audit note', async () => {

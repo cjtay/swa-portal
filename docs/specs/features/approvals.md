@@ -42,7 +42,7 @@ Entry gate (middleware 7c): all `/api/approvals*` methods require admin, purchas
 | `POST /api/approvals/:id/paid` | POST | Item creator | Records who/date/method/reference; → paid |
 | `GET /api/approvals/audit/export?from=YYYY-MM-DD&to=YYYY-MM-DD` | GET | IT admin only (owner decision 24-08-2026) | Audit CSV for the required date range (both days inclusive, UTC; oldest first, ≤5000 rows, injection-guarded). Missing/inverted ranges → 400. Reached from the Settings page card — no approvals-page UI |
 
-Rate limits (per email): approve/reject at both stages 20/hour; create/edit/voucher 10 per 15 min; remind 5/hour.
+Rate limits (per email): approve/reject at both stages 20/hour; create/edit/voucher 10 per 15 min; remind 5/hour; read endpoints (board list, item detail, attachment streaming, audit CSV) 60 per minute.
 
 ## 4. Workflow
 
@@ -57,8 +57,9 @@ Rate limits (per email): approve/reject at both stages 20/hour; create/edit/vouc
 
 **Rules**:
 - **Recurring items** (office maintenance, vendor payment, payroll) start at `purchase_approved` with `approval_required = 0`; they never email or wait for the purchase approvers; the printed voucher shows "No approval required". Any category default can be flipped per item at creation.
-- **Rejection is never final**: the creator edits and resubmits; purchase-stage → `pending`, finance-stage → straight to `finance_check` — never back to a decision already made.
-- **Decisions are atomic** (`UPDATE … WHERE status = …`): two approvers clicking at once cannot both decide; the loser gets a 409.
+- **Rejection is never final**: purchase-stage rejection returns the item to `pending` for an edit + resubmit; finance-stage rejection returns it to `finance_check` through the **voucher** resubmit only — never back to a decision already made.
+- **Fields freeze at purchase approval**: once purchase has approved an item, its title, payee, amount and attachments are locked. Corrections after a finance rejection go through the voucher editor, not the item edit form.
+- **Decisions are atomic** (`UPDATE … WHERE status = …`): two approvers clicking at once cannot both decide; the loser gets a 409. The audit row is written only when the state change wins, so a lost race never records a false decision.
 - **Voucher numbering** `PV<YY>-<MM><NN>` from the voucher's own month (e.g. `PV26-0801`), assigned at first submission, survives rejection unchanged; UNIQUE-index retry on races; two digits cap at 99/month. Lines may carry negative amounts (deposits) and note-only rows (bank details).
 - **Documents**: PDF/JPG/PNG/WebP/HEIC/HEIF, 10 MB each, 10 files per item; HTML and SVG always rejected. Files accumulate across multiple picker visits; viewed inline (iframe for PDFs).
 - **Comparison table**: rows typed by the creator, each linking to one attached document.
@@ -76,7 +77,7 @@ Rate limits (per email): approve/reject at both stages 20/hour; create/edit/vouc
 | Approve / Reject | Item `pending` AND `is_purchase_approver` |
 | Approve voucher / Reject voucher | Item `finance_check` AND `is_finance_approver` |
 | Prepare voucher / Edit voucher & resubmit | `is_admin` AND (`purchase_approved`, or `rejected` at finance stage) |
-| Edit (fields) + resubmit | `is_admin` AND (`pending` or `rejected`) |
+| Edit (fields) + resubmit | `is_admin` AND (`pending`, or `rejected` at the purchase stage) |
 | Send reminder | `is_admin` AND (`pending` or `finance_check`) |
 | Record payment | `is_admin` AND `finance_approved` |
 | View voucher link | `finance_approved` or `paid` AND voucher exists |
