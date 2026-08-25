@@ -12,6 +12,48 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-25 (session 10) — Approvals board UX + audit export date range
+
+Owner decisions: the table leads the approvals page (form behind a button),
+and audit exports must be bounded by a date range.
+
+### Done
+- **Board (`src/pages/approvals.astro`)**:
+  - "New request" form collapses behind a New request button (admin only);
+    opens on click, collapses on Cancel or successful submit (fields cleared,
+    "Request raised." shown at the button). Default view = table.
+  - Browser-side pagination: 20 rows/page, Prev/numbered/Next with ellipsis,
+    "Showing X–Y of N"; resets to page 1 on tab or sort change. No API change.
+  - Column sorting on all eight data columns (click to sort, click again to
+    reverse; dates start newest-first, text A→Z; empty values sink last;
+    Amount numeric, Voucher No natural order via localeCompare numeric).
+  - Default tab changed from "For approval" to "All". Default sort
+    (created_at desc) matches the API order so rows never jump on load.
+- **Audit export** (`approvals.ts` + Settings card): `from`/`to`
+  (YYYY-MM-DD) are required query params — missing/malformed/inverted → 400.
+  SQL filters `created_at` between `<from> 00:00:00` and `<to> 23:59:59`
+  (UTC, both days inclusive); filename carries the range. Settings page now
+  has From/To date boxes; the Export button enables only when both are
+  filled and From ≤ To (inline error otherwise).
+- **Tests**: +2 (range filtering excludes out-of-window rows; 400 on
+  missing/half/malformed/inverted params). Count 220 → 222.
+
+Also (not code): local `.dev.vars` held a placeholder `RESEND_API_KEY`
+(`re_dumm…`) — every approval email silently failed with Resend 401, logged
+as RESEND_NOTIFY in `error_log`. Owner replaced it with the real key and
+reminder emails now send locally.
+
+### Verification
+- `npm run test:run` 222 passed. typecheck + typecheck:worker + build clean
+  (26 pages).
+- Browser smoke (dev:worker, admin identity): form open/cancel/collapse,
+  field clearing, default All tab, numeric Amount sort, Voucher No natural
+  sort with empties last in both directions, pagination bar, Settings export
+  disabled → error → enabled flow, API 200 (filtered, ranged filename) and
+  400 (inverted, missing).
+
+---
+
 ## 2026-08-24 (session 9) — Audit export restricted to IT admin + page button
 
 Owner decision: the approval audit CSV is IT-admin eyes only. D1-category

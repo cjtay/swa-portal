@@ -1599,17 +1599,37 @@ export async function handleApprovalPaid(c: AppContext) {
 }
 
 /* ----------------------------------------------------
-   GET /api/approvals/audit/export  (Phase 5)
+   GET /api/approvals/audit/export?from=YYYY-MM-DD&to=YYYY-MM-DD
    IT admin only (owner decision 24-08-2026). Enforced by the
    middleware IT_ADMIN_ONLY_API set; the role check below stays
-   as belt-and-braces. CSV of the whole audit log,
-   oldest first, capped at 5000 rows (plan §12). Reuses
-   the shared formula-injection-guarded csvEscape.
+   as belt-and-braces. The date range is required (owner
+   decision 25-08-2026) so exports stay small. created_at is
+   UTC 'YYYY-MM-DD HH:MM:SS', so a padded text-range compare
+   is exact and includes both end days. CSV oldest first,
+   capped at 5000 rows (plan §12). Reuses the shared
+   formula-injection-guarded csvEscape.
    ---------------------------------------------------- */
 export async function handleApprovalAuditExport(c: AppContext) {
   const endpoint = 'approvals-audit-export';
   if (getSessionRole(c) !== 'admin') {
     return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Admin access required.' }, 403);
+  }
+
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  const validDate = (s: string): boolean => dateRe.test(s) && !Number.isNaN(Date.parse(s));
+  const from = (c.req.query('from') || '').trim();
+  const to = (c.req.query('to') || '').trim();
+  if (!validDate(from) || !validDate(to)) {
+    return c.json(
+      { success: false, error_code: 'VALIDATION_ERROR', message: 'A from and to date (YYYY-MM-DD) are required.' },
+      400,
+    );
+  }
+  if (from > to) {
+    return c.json(
+      { success: false, error_code: 'VALIDATION_ERROR', message: 'The from date must be on or before the to date.' },
+      400,
+    );
   }
 
   let rows: Array<Record<string, unknown>>;
@@ -1618,9 +1638,12 @@ export async function handleApprovalAuditExport(c: AppContext) {
       `SELECT a.created_at, a.item_id, i.voucher_no, a.action, a.actor_name, a.actor_email, a.note
          FROM approval_audit_log a
          LEFT JOIN approval_items i ON i.id = a.item_id
+        WHERE a.created_at >= ? AND a.created_at <= ?
         ORDER BY a.id ASC
         LIMIT 5000`,
-    ).all();
+    )
+      .bind(`${from} 00:00:00`, `${to} 23:59:59`)
+      .all();
     rows = (res.results || []) as Array<Record<string, unknown>>;
   } catch (err) {
     return handleApiError(c, endpoint, err, 'Could not load the audit log.', {
@@ -1641,11 +1664,10 @@ export async function handleApprovalAuditExport(c: AppContext) {
   }
 
   const csv = '\uFEFF' + lines.join('\n');
-  const stamp = new Date().toISOString().slice(0, 10);
   return new Response(csv, {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="approval-audit-${stamp}.csv"`,
+      'Content-Disposition': `attachment; filename="approval-audit-${from}_to_${to}.csv"`,
     },
   });
 }

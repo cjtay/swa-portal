@@ -1170,12 +1170,12 @@ describe('GET /api/approvals/audit/export', () => {
       "INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, 'item_edited', 'x@example.com', 'X', '=SUM(A1:A9)')",
     ).bind(id).run();
 
-    const res = await SELF.fetch('https://example.com/api/approvals/audit/export', {
+    const res = await SELF.fetch('https://example.com/api/approvals/audit/export?from=2020-01-01&to=2099-12-31', {
       headers: { Cookie: await itAdminCookie() },
     });
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('text/csv; charset=utf-8');
-    expect(res.headers.get('content-disposition') || '').toContain('approval-audit-');
+    expect(res.headers.get('content-disposition') || '').toContain('approval-audit-2020-01-01_to_2099-12-31.csv');
 
     const csv = await res.text();
     const lines = csv.split('\n');
@@ -1189,5 +1189,44 @@ describe('GET /api/approvals/audit/export', () => {
     expect(csv).toContain("'=SUM(A1:A9)");
     // The BOM leads the file so Excel opens UTF-8 correctly.
     expect(csv.charCodeAt(0)).toBe(0xfeff);
+  });
+
+  it('excludes rows outside the requested date range (both end days inclusive)', async () => {
+    // A row stamped 2020 sits outside the 2026 window.
+    const id = await seedFinanceApprovedItem();
+    await env.DB.prepare(
+      "INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note, created_at) VALUES (?, 'item_edited', 'old@example.com', 'Old', 'outside-range-marker', '2020-01-01 00:00:00')",
+    ).bind(id).run();
+
+    const res = await SELF.fetch('https://example.com/api/approvals/audit/export?from=2026-01-01&to=2026-12-31', {
+      headers: { Cookie: await itAdminCookie() },
+    });
+    expect(res.status).toBe(200);
+    const csv = await res.text();
+    expect(csv).not.toContain('outside-range-marker');
+    expect(csv).not.toContain('2020-01-01');
+    // The 2026 rows created by the seed are still inside the window.
+    expect(csv).toContain('item_created');
+  });
+
+  it('rejects a missing, malformed, or inverted date range with 400', async () => {
+    const cookie = { Cookie: await itAdminCookie() };
+    const missing = await SELF.fetch('https://example.com/api/approvals/audit/export', { headers: cookie });
+    expect(missing.status).toBe(400);
+
+    const halfMissing = await SELF.fetch('https://example.com/api/approvals/audit/export?from=2026-01-01', {
+      headers: cookie,
+    });
+    expect(halfMissing.status).toBe(400);
+
+    const malformed = await SELF.fetch('https://example.com/api/approvals/audit/export?from=25-08-2026&to=2026-08-25', {
+      headers: cookie,
+    });
+    expect(malformed.status).toBe(400);
+
+    const inverted = await SELF.fetch('https://example.com/api/approvals/audit/export?from=2026-12-31&to=2026-01-01', {
+      headers: cookie,
+    });
+    expect(inverted.status).toBe(400);
   });
 });

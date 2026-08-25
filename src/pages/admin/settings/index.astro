@@ -41,10 +41,22 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     <h2>Approvals — Audit Log</h2>
     <p style="color:var(--text-muted);font-size:0.85rem;">
       Every approval action (raised, edited, decided, voucher, paid) is recorded in an
-      insert-only audit log. Export the full history as a CSV, oldest first, capped at
-      5,000 rows. IT Admin access only.
+      insert-only audit log. Pick a date range and export it as a CSV, oldest first,
+      capped at 5,000 rows. The log stores UTC timestamps, so a Singapore date matches
+      log entries from 08:00 that day to 07:59 the next. IT Admin access only.
     </p>
-    <a class="btn btn-secondary" href="/api/approvals/audit/export">Export audit log (CSV)</a>
+    <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+      <label style="font-size:0.85rem;display:inline-flex;align-items:center;gap:0.4rem;">
+        From
+        <input type="date" id="audit-from" class="form-input" style="width:auto;" />
+      </label>
+      <label style="font-size:0.85rem;display:inline-flex;align-items:center;gap:0.4rem;">
+        To
+        <input type="date" id="audit-to" class="form-input" style="width:auto;" />
+      </label>
+      <button type="button" class="btn btn-secondary" id="audit-export" disabled>Export audit log (CSV)</button>
+    </div>
+    <p id="audit-export-msg" style="margin:0.5rem 0 0;font-size:0.8rem;color:#b3261e;" hidden></p>
   </div>
 
   <div class="card steps-card" style="margin-top:1.5rem;">
@@ -91,4 +103,36 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   }
 
   loadItAdmins();
+
+  // Audit log export — a date range is required first (owner decision
+  // 25-08-2026) so the CSV stays small. The button enables only when both
+  // dates are filled and From is on or before To.
+  function auditRange(): { from: string; to: string } {
+    return {
+      from: (document.getElementById('audit-from') as HTMLInputElement | null)?.value || '',
+      to: (document.getElementById('audit-to') as HTMLInputElement | null)?.value || '',
+    };
+  }
+
+  function syncAuditExport(): void {
+    const { from, to } = auditRange();
+    const btn = document.getElementById('audit-export') as HTMLButtonElement | null;
+    const msg = document.getElementById('audit-export-msg');
+    if (!btn) return;
+    let error = '';
+    if (from && to && from > to) error = 'The From date must be on or before the To date.';
+    btn.disabled = Boolean(!from || !to || error);
+    if (msg) {
+      msg.textContent = error;
+      msg.hidden = !error;
+    }
+  }
+
+  document.getElementById('audit-from')?.addEventListener('change', syncAuditExport);
+  document.getElementById('audit-to')?.addEventListener('change', syncAuditExport);
+  document.getElementById('audit-export')?.addEventListener('click', () => {
+    const { from, to } = auditRange();
+    if (!from || !to || from > to) return;
+    window.location.href = `/api/approvals/audit/export?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  });
 </script>

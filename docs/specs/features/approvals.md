@@ -40,7 +40,7 @@ Entry gate (middleware 7c): all `/api/approvals*` methods require admin, purchas
 | `POST /api/approvals/:id/finance-approve` | POST | Finance approver only | Atomic finance_check → finance_approved; emails creator |
 | `POST /api/approvals/:id/finance-reject` | POST | Finance approver only | Reason required; resubmission returns to finance_check |
 | `POST /api/approvals/:id/paid` | POST | Item creator | Records who/date/method/reference; → paid |
-| `GET /api/approvals/audit/export` | GET | IT admin only (owner decision 24-08-2026) | Audit CSV (oldest first, ≤5000 rows, injection-guarded). Reached from the Settings page card — no approvals-page UI |
+| `GET /api/approvals/audit/export?from=YYYY-MM-DD&to=YYYY-MM-DD` | GET | IT admin only (owner decision 24-08-2026) | Audit CSV for the required date range (both days inclusive, UTC; oldest first, ≤5000 rows, injection-guarded). Missing/inverted ranges → 400. Reached from the Settings page card — no approvals-page UI |
 
 Rate limits (per email): approve/reject at both stages 20/hour; create/edit/voucher 10 per 15 min; remind 5/hour.
 
@@ -69,8 +69,10 @@ Rate limits (per email): approve/reject at both stages 20/hour; create/edit/vouc
 | Element | Visible When |
 |---------|-------------|
 | Page itself + Approvals nav item | `is_admin` OR either approver flag (else redirect `/`) |
-| Status tabs with count badges | Always (For approval, Approved, In finance check, Finance approved, Rejected, Paid, All) |
-| New request form (incl. comparison builder) | `is_admin` only |
+| Status tabs with count badges | Always (For approval, Approved, In finance check, Finance approved, Rejected, Paid, All). Default tab: **All** |
+| "New request" button | `is_admin` only. The board table leads the page; the form opens on demand and collapses on Cancel or successful submit (owner decision 25-08-2026) |
+| Column sorting | Every data column header clicks to sort (again to reverse; dates start newest-first, text A→Z). Browser-side; empty values always sink last |
+| Pagination | Browser-side, 20 rows per page, under the table; resets to page 1 on tab or sort change |
 | Approve / Reject | Item `pending` AND `is_purchase_approver` |
 | Approve voucher / Reject voucher | Item `finance_check` AND `is_finance_approver` |
 | Prepare voucher / Edit voucher & resubmit | `is_admin` AND (`purchase_approved`, or `rejected` at finance stage) |
@@ -116,4 +118,4 @@ Rate limits (per email): approve/reject at both stages 20/hour; create/edit/vouc
 
 ## 8. Tests
 
-`src/worker/api/__tests__/approvals.test.ts` (integration: role gates, create validation, comparison mapping, numbering + 99-cap, race 409s, resubmit routing, IT-admin-excluded-from-finance proof, paid step, CSV) and `src/worker/lib/__tests__/email-approval.test.ts` (builders). The csv-guard tripwire watches the audit exporter.
+`src/worker/api/__tests__/approvals.test.ts` (integration: role gates, create validation, comparison mapping, numbering + 99-cap, race 409s, resubmit routing, IT-admin-excluded-from-finance proof, paid step, CSV with date-range filter + 400 guards) and `src/worker/lib/__tests__/email-approval.test.ts` (builders). The csv-guard tripwire watches the audit exporter.
