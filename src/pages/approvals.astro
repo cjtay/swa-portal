@@ -51,7 +51,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
         </label>
         <label class="ap-field">
           <span>Requested amount (S$, optional)</span>
-          <input type="number" id="ap-amount" class="form-input" min="0" max="10000000" step="0.01" placeholder="0.00" />
+          <input type="number" id="ap-amount" class="form-input" min="0" max="10000000" step="0.01" inputmode="decimal" placeholder="0.00" />
         </label>
       </div>
 
@@ -70,7 +70,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
         <input type="file" id="ap-files" class="form-input" multiple accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" />
       </label>
       <div id="ap-files-list" aria-live="polite"></div>
-      <p id="ap-files-msg" style="margin:0.25rem 0 0;font-size:0.8rem;color:#b3261e;" hidden></p>
+      <p id="ap-files-msg" role="status" aria-live="polite" style="margin:0.25rem 0 0;font-size:0.8rem;color:#b3261e;" hidden></p>
 
       <!-- Comparison opt-in: appears only when files are chosen. A single
            quotation may span several uploads (PDF + photos of the same
@@ -93,7 +93,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       <div style="display:flex;align-items:center;gap:0.75rem;margin-top:1rem;flex-wrap:wrap;">
         <button type="submit" class="btn btn-primary" id="ap-create-submit">Raise request</button>
         <button type="button" class="btn btn-secondary" id="ap-create-cancel">Cancel</button>
-        <span id="ap-create-msg" style="font-size:0.85rem;color:var(--text-muted);"></span>
+        <span id="ap-create-msg" role="status" aria-live="polite" style="font-size:0.85rem;color:var(--text-muted);"></span>
       </div>
     </form>
   </div>
@@ -106,15 +106,15 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       <table class="data-table" id="ap-board-table">
         <thead>
           <tr>
-            <th class="ap-sortable" data-sort="voucher_no">Voucher No</th>
-            <th class="ap-sortable" data-sort="voucher_date">Date</th>
-            <th class="ap-sortable" data-sort="title">Title</th>
-            <th class="ap-sortable" data-sort="payee">Payee</th>
-            <th class="ap-sortable" data-sort="category">Category</th>
-            <th class="ap-sortable" data-sort="requested_amount">Amount</th>
-            <th class="ap-sortable" data-sort="status">Status</th>
-            <th class="ap-sortable" data-sort="created_at">Created (SG)</th>
-            <th></th>
+            <th scope="col" class="ap-sortable" data-sort="voucher_no">Voucher No</th>
+            <th scope="col" class="ap-sortable" data-sort="voucher_date">Date</th>
+            <th scope="col" class="ap-sortable" data-sort="title">Title</th>
+            <th scope="col" class="ap-sortable" data-sort="payee">Payee</th>
+            <th scope="col" class="ap-sortable" data-sort="category">Category</th>
+            <th scope="col" class="ap-sortable" data-sort="requested_amount">Amount</th>
+            <th scope="col" class="ap-sortable" data-sort="status">Status</th>
+            <th scope="col" class="ap-sortable" data-sort="created_at">Created (SG)</th>
+            <th scope="col"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Actions</span></th>
           </tr>
         </thead>
         <tbody id="ap-list"></tbody>
@@ -153,6 +153,13 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   }
   .ap-tab:hover { border-color: var(--swa-3); color: var(--swa-2); }
   .ap-tab.active { background: var(--swa-1); border-color: var(--swa-1); color: #fff; }
+  .ap-tab:focus-visible,
+  .ap-page-btn:focus-visible,
+  .row-view-btn:focus-visible,
+  .drawer-close:focus-visible {
+    outline: 2px solid var(--swa-3);
+    outline-offset: 2px;
+  }
   .ap-tab-count {
     background: var(--swa-4);
     color: var(--swa-2);
@@ -174,18 +181,71 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     margin-bottom: 0.5rem;
   }
   .ap-field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
+  .ap-field > span { font-weight: 500; color: var(--text); }
   .ap-check { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
   /* display:flex would override the hidden attribute (same class of bug as
      the 2026-07-05 drawer fix) — restore it explicitly. */
   .ap-check[hidden] { display: none; }
 
+  /* Brand-coloured checkboxes and file pickers (approvals page only). */
+  #ap-create-card input[type="checkbox"],
+  #ap-drawer input[type="checkbox"] {
+    accent-color: var(--swa-1);
+    width: 1rem;
+    height: 1rem;
+  }
+  #ap-create-card input[type="file"].form-input,
+  #ap-drawer input[type="file"].form-input {
+    padding: 0.45rem 0.6rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  #ap-create-card input[type="file"]::file-selector-button,
+  #ap-drawer input[type="file"]::file-selector-button {
+    margin-right: 0.75rem;
+    padding: 0.35rem 0.85rem;
+    border: 1px solid var(--swa-3);
+    border-radius: 0.375rem;
+    background: var(--bg);
+    color: var(--swa-2);
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #ap-create-card input[type="file"]::file-selector-button:hover,
+  #ap-drawer input[type="file"]::file-selector-button:hover {
+    background: var(--swa-4);
+  }
+
+  /* Action and form messages become visible banners once they have text.
+     The script sets the text colour inline (red for errors, green for
+     success); the tint below follows that colour automatically. */
+  #ap-act-msg:not(:empty),
+  #ap-create-msg:not(:empty) {
+    flex-basis: 100%;
+    padding: 0.5rem 0.75rem;
+    border-left: 3px solid currentColor;
+    border-radius: 0 0.3rem 0.3rem 0;
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    font-weight: 500;
+  }
+  #ap-files-msg:not([hidden]) {
+    padding: 0.45rem 0.75rem;
+    border-left: 3px solid currentColor;
+    border-radius: 0 0.3rem 0.3rem 0;
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    font-weight: 500;
+  }
+
   .ap-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
   .ap-actions a.btn { text-decoration: none; display: inline-flex; align-items: center; }
-  #ap-reject-box, #ap-edit-form, #ap-voucher-form, #ap-paid-form {
+  #ap-reject-box, #ap-finance-reject-box, #ap-edit-form, #ap-voucher-form, #ap-paid-form {
     border: 1px solid var(--border);
     border-radius: 0.4rem;
     padding: 0.75rem;
     background: #fafafa;
+    margin-top: 0.75rem;
   }
 
   .ap-vline-row {
@@ -235,7 +295,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     display: inline-block;
     padding: 0.15rem 0.6rem;
     border-radius: 9999px;
-    font-size: 0.75rem;
+    font-size: 0.78rem;
     font-weight: 600;
     white-space: nowrap;
   }
@@ -267,6 +327,22 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   #ap-board-table th.ap-sortable:hover { color: var(--swa-2); }
   #ap-board-table th.ap-sort-asc::after { content: ' \2191'; }
   #ap-board-table th.ap-sort-desc::after { content: ' \2193'; }
+  #ap-board-table th.ap-sort-asc,
+  #ap-board-table th.ap-sort-desc { color: var(--swa-2); }
+
+  /* Column polish: amounts right-aligned with tabular figures so digits
+     line up; identifiers and dates stay on one line instead of wrapping. */
+  #ap-board-table th:nth-child(6),
+  #ap-board-table td:nth-child(6) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  #ap-board-table td:nth-child(1),
+  #ap-board-table td:nth-child(2),
+  #ap-board-table td:nth-child(7),
+  #ap-board-table td:nth-child(8) {
+    white-space: nowrap;
+  }
 
   /* Pagination bar under the board table (browser-side, 20 rows per page). */
   .ap-pagination {
@@ -336,19 +412,31 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
 
   .ap-detail-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    /* Two columns at the 760px drawer width, so long values such as email
+       addresses fit on one line instead of wrapping mid-word. */
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 0.6rem 1.25rem;
   }
   .ap-detail-item { font-size: 0.85rem; }
-  .ap-detail-item dt { color: var(--text-muted); margin: 0 0 0.15rem; }
-  .ap-detail-item dd { margin: 0; font-weight: 500; word-break: break-word; }
+  .ap-detail-item dt {
+    color: var(--text-muted);
+    margin: 0 0 0.15rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  /* overflow-wrap (not word-break) only splits a word when it truly cannot
+     fit; long rows marked wide span both columns and never wrap. */
+  .ap-detail-item dd { margin: 0; font-weight: 500; font-size: 0.9rem; overflow-wrap: break-word; }
+  .ap-detail-item--wide { grid-column: 1 / -1; }
 
   .ap-note {
     border-left: 3px solid #b3261e;
     background: #fdecea;
     padding: 0.6rem 0.8rem;
     border-radius: 0 0.3rem 0.3rem 0;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
   }
 
   .ap-attachment {
@@ -382,6 +470,17 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     vertical-align: top;
   }
   .ap-comparison-table th { background: #f5f0f8; color: var(--swa-2); }
+  /* Voucher table in the drawer: keep No/Date/Amount on one line and line
+     up the amount digits. */
+  .ap-voucher .ap-comparison-table td { font-variant-numeric: tabular-nums; }
+  .ap-voucher .ap-comparison-table th:nth-child(1),
+  .ap-voucher .ap-comparison-table td:nth-child(1),
+  .ap-voucher .ap-comparison-table th:nth-child(2),
+  .ap-voucher .ap-comparison-table td:nth-child(2),
+  .ap-voucher .ap-comparison-table th:nth-child(4),
+  .ap-voucher .ap-comparison-table td:nth-child(4) {
+    white-space: nowrap;
+  }
 </style>
 
 <script>
@@ -501,6 +600,16 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       hour: '2-digit',
       minute: '2-digit',
     });
+  }
+
+  // Date-only fields (voucher_date is stored as YYYY-MM-DD) render like the
+  // other dates on the page: 24 Aug 2026.
+  function fmtDateOnly(iso: string | null): string {
+    if (!iso) return '';
+    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return iso;
+    const date = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+    return date.toLocaleDateString('en-GB', { timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric' });
   }
 
   function fmtSize(bytes: number): string {
@@ -675,15 +784,15 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     tbody.innerHTML = pageItems
       .map(
         (item) => `<tr>
-          <td>${esc(item.voucher_no || '')}</td>
-          <td>${esc(item.voucher_date || '')}</td>
+          <td>${esc(item.voucher_no || '—')}</td>
+          <td>${esc(fmtDateOnly(item.voucher_date) || '—')}</td>
           <td>${esc(item.title)}</td>
-          <td>${esc(item.payee || '')}</td>
+          <td>${esc(item.payee || '—')}</td>
           <td>${esc(CATEGORY_LABELS[item.category] || item.category)}</td>
-          <td>${esc(fmtMoney(item.requested_amount))}</td>
+          <td>${esc(fmtMoney(item.requested_amount) || '—')}</td>
           <td>${chip(item.status)}</td>
           <td>${esc(fmtDateSg(item.created_at))}</td>
-          <td><button type="button" class="row-view-btn" data-id="${item.id}">View</button></td>
+          <td><button type="button" class="row-view-btn" data-id="${item.id}" aria-label="View ${esc(item.title)}">View</button></td>
         </tr>`,
       )
       .join('');
@@ -727,23 +836,25 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     const attachments = data.attachments || [];
     title.textContent = item.title;
 
-    const detailRows: Array<[string, string]> = [
+    // Third tuple element marks rows whose values can be long (emails,
+    // payment references) — they span both grid columns and never wrap.
+    const detailRows: Array<[string, string, boolean?]> = [
       ['Status', chip(item.status)],
       ['Category', esc(CATEGORY_LABELS[item.category] || item.category)],
       ['Approval required', item.approval_required === 1 ? 'Yes' : 'No'],
       ['Payable to', esc(item.payee || '')],
       ['Requested amount', esc(fmtMoney(item.requested_amount))],
       ['Voucher No', esc(item.voucher_no || '')],
-      ['Voucher date', esc(item.voucher_date || '')],
-      ['Raised by', esc(item.created_by)],
+      ['Voucher date', esc(fmtDateOnly(item.voucher_date))],
+      ['Raised by', esc(item.created_by), true],
       ['Raised at (SG)', esc(fmtDateSg(item.created_at))],
       ...(item.paid_by
         ? ([
-            ['Paid by', esc(item.paid_by)],
-            ['Paid on', esc(item.paid_at || '')],
+            ['Paid by', esc(item.paid_by), true],
+            ['Paid on', esc(fmtDateSg(item.paid_at))],
             ['Payment method', esc(PAYMENT_METHOD_LABELS[item.payment_method || ''] || item.payment_method || '')],
-            ['Payment reference', esc(item.payment_reference || '')],
-          ] as Array<[string, string]>)
+            ['Payment reference', esc(item.payment_reference || ''), true],
+          ] as Array<[string, string, boolean?]>)
         : []),
     ];
 
@@ -824,7 +935,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
             ${showVoucherLink ? `<a class="btn btn-secondary" href="/approvals/voucher?id=${item.id}" target="_blank" rel="noopener noreferrer">View voucher</a>` : ''}
             ${canRemind ? '<button type="button" class="btn btn-secondary" id="ap-act-remind">Send reminder</button>' : ''}
             ${canEdit ? '<button type="button" class="btn btn-secondary" id="ap-act-edit">Edit</button>' : ''}
-            <span id="ap-act-msg" style="font-size:0.85rem;"></span>
+            <span id="ap-act-msg" role="status" aria-live="polite" style="font-size:0.85rem;"></span>
           </div>
           <div id="ap-reject-box" hidden>
             <label class="ap-field" style="display:block;">
@@ -889,7 +1000,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
               <label class="ap-field"><span>Payable to</span>
                 <input type="text" id="ap-edit-payee" class="form-input" maxlength="300" value="${esc(item.payee || '')}" /></label>
               <label class="ap-field"><span>Requested amount (S$)</span>
-                <input type="number" id="ap-edit-amount" class="form-input" min="0" max="10000000" step="0.01" value="${item.requested_amount ?? ''}" /></label>
+                <input type="number" id="ap-edit-amount" class="form-input" min="0" max="10000000" step="0.01" inputmode="decimal" value="${item.requested_amount ?? ''}" /></label>
             </div>
             <label class="ap-field" style="display:block;margin-top:0.75rem;"><span>Description</span>
               <textarea id="ap-edit-description" class="form-input" rows="4" maxlength="4000">${esc(item.description || '')}</textarea></label>
@@ -911,7 +1022,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
         : `<div class="ap-voucher">
             <h3 style="font-size:1rem;margin:0 0 0.5rem;">Payment voucher</h3>
             <p style="margin:0 0 0.5rem;font-size:0.85rem;">
-              <strong>${esc(item.voucher_no || '')}</strong> — ${esc(item.voucher_date || '')} — payable to ${esc(item.payee || '—')}
+              <strong>${esc(item.voucher_no || '')}</strong> — ${esc(fmtDateOnly(item.voucher_date))} — payable to ${esc(item.payee || '—')}
             </p>
             <table class="ap-comparison-table">
               <thead><tr><th style="width:2.5rem;">No</th><th style="width:6rem;">Date</th><th>Description</th><th style="width:8rem; text-align:right;">Amount (S$)</th></tr></thead>
@@ -943,7 +1054,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       ${notesHtml}
       ${actionsHtml}
       <dl class="ap-detail-grid">
-        ${detailRows.map(([label, value]) => `<div class="ap-detail-item"><dt>${label}</dt><dd>${value || '—'}</dd></div>`).join('')}
+        ${detailRows.map(([label, value, wide]) => `<div class="ap-detail-item${wide ? ' ap-detail-item--wide' : ''}"><dt>${label}</dt><dd>${value || '—'}</dd></div>`).join('')}
       </dl>
       ${item.description ? `<div><h3 style="font-size:1rem;margin:0 0 0.5rem;">Description</h3><p style="margin:0;font-size:0.9rem;white-space:pre-wrap;word-break:break-word;">${esc(item.description)}</p></div>` : ''}
       ${voucherHtml}
@@ -1066,7 +1177,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
         <input type="text" class="form-input ap-vline-no" placeholder="No" value="${line?.no ?? ''}" maxlength="2" style="width:3rem;" />
         <input type="date" class="form-input ap-vline-date" value="${esc(line?.date || '')}" style="width:9rem;" />
         <input type="text" class="form-input ap-vline-desc" placeholder="Description" maxlength="500" style="flex:1;min-width:180px;" value="${esc(line?.description || '')}" />
-        <input type="number" class="form-input ap-vline-amount" placeholder="Amount" step="0.01" style="width:9rem;" value="${line?.amount ?? ''}" />
+        <input type="number" class="form-input ap-vline-amount" placeholder="Amount" step="0.01" inputmode="decimal" style="width:9rem;" value="${line?.amount ?? ''}" />
         <button type="button" class="ap-file-remove ap-vline-remove" aria-label="Remove line">Remove</button>`;
       row.querySelector('.ap-vline-remove')?.addEventListener('click', () => {
         row.remove();

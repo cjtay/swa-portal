@@ -12,6 +12,58 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-25 (session 11) — Approvals UI polish (CSS + micro-fixes)
+
+Owner requested a visual polish of the approval pages — typography, spacing,
+alignment, form controls and error visibility — with no layout or workflow
+change. No database or API changes.
+
+### Done
+- **Shared (`src/styles/admin.css`)**: `.form-input` now sets `font-family:
+  inherit`, so inputs/textareas/selects match the surrounding Inter text
+  instead of the browser default (badly monospace-looking placeholders).
+
+- **Board (`src/pages/approvals.astro`)**:
+  - Amount column right-aligned with tabular figures; Voucher No/Date/Status/
+    Created columns nowrap so dates no longer wrap to two lines.
+  - Empty Voucher No/Date/Payee/Amount cells show an em dash (was blank).
+  - Active sort header coloured (swa-2); `scope="col"` on all headers;
+    View buttons get an aria-label with the item title.
+  - Chips bumped to 0.78rem; `:focus-visible` outlines added to tabs, page
+    buttons, View buttons and the drawer close (keyboard focus was invisible).
+
+- **Drawer detail grid**: three columns (200px) → two columns (260px), so long
+  emails fit on one line; labels now uppercase/tiny/muted with values at
+  0.9rem for clear hierarchy. "Raised by", "Paid by" and "Payment reference"
+  rows span both columns and never wrap. `word-break: break-word` replaced
+  with `overflow-wrap: break-word` (only breaks when a word truly cannot fit).
+  Voucher date formatted like other dates (25 Aug 2026) instead of raw ISO.
+
+- **Forms**: field labels weight 500; checkboxes get `accent-color` (brand
+  purple); file inputs get a branded `::file-selector-button`; sub-form panels
+  (reject box, voucher form, paid form, edit form) got consistent margin-top
+  and the finance-reject box was added to the panel style.
+
+- **Error/success visibility**: `#ap-act-msg`, `#ap-create-msg` and
+  `#ap-files-msg` render as full-width banners (left border + tint from
+  `color-mix(currentColor)`), so errors read red-on-pink and successes
+  green-on-mint automatically. Added `role="status"` + `aria-live="polite"`
+  so screen readers announce them. Amount inputs got `inputmode="decimal"`.
+
+- **Voucher print page** (`approvals/voucher.astro`): tabular figures on
+  amounts, Date column nowrap. Kept its Arial print font (deliberate for PDF).
+
+### Verification
+- `npm run build` clean (26 pages).
+- Browser smoke (dev:worker, admin identity): board (alignment, em dashes,
+  one-line dates), paid drawer (email + payment reference on one line,
+  formatted voucher date), create form (Inter placeholders, branded file
+  button, purple checkbox), reject-inline error banner, members page
+  unaffected by the shared font change, 390px mobile (horizontal scroll on
+  the table still works).
+
+---
+
 ## 2026-08-25 (session 10) — Approvals board UX + audit export date range
 
 Owner decisions: the table leads the approvals page (form behind a button),
