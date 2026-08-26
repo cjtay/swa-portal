@@ -34,6 +34,7 @@ import {
 } from '../ai-comparison';
 
 const ADMIN_EMAIL = 'ai-test-admin@example.com';
+const PURCHASE_EMAIL = 'approval@singaporewomenassociation.org';
 const FINANCE_EMAIL = 'finance@singaporewomenassociation.org';
 const AI_CONFIG_KEY = 'swa:ai_config';
 const FX_CACHE_KEY = 'swa:ai_fx_cache';
@@ -112,6 +113,7 @@ function fakeEnv(ai: AiBinding): Env {
 beforeAll(async () => {
   await applyMigrations(env.DB);
   await seedMember(env.DB, { name: 'AI Test Admin', email: ADMIN_EMAIL, category: 'admin' });
+  await seedMember(env.DB, { name: 'Purchase Approver', email: PURCHASE_EMAIL, category: 'committee' });
   await seedMember(env.DB, { name: 'Finance Approver', email: FINANCE_EMAIL, category: 'committee' });
 });
 
@@ -421,6 +423,44 @@ describe('AI analyse endpoints — guards', () => {
       headers: { Cookie: await mintCookie(ADMIN_EMAIL, 'admin') },
     });
     expect(res.status).toBe(400);
+  });
+
+  it('analyse on a purchase-approved item is a 409 — changes must go through edit (owner decision 26-08-2026)', async () => {
+    const form = new FormData();
+    form.append('category', 'quotation');
+    form.append('title', 'Frozen after approval');
+    form.append('files', new File(['%PDF-1.4 a'], 'a.pdf', { type: 'application/pdf' }));
+    form.append('files', new File(['%PDF-1.4 b'], 'b.pdf', { type: 'application/pdf' }));
+    form.append(
+      'comparison',
+      JSON.stringify([
+        { file: 'a.pdf', description: 'Vendor A quote' },
+        { file: 'b.pdf', description: 'Vendor B quote' },
+      ]),
+    );
+    const createRes = await SELF.fetch('https://example.com/api/approvals', {
+      method: 'POST',
+      headers: { Cookie: await mintCookie(ADMIN_EMAIL, 'admin') },
+      body: form,
+    });
+    const created = (await createRes.json()) as { success: boolean; id: number };
+    expect(created.success).toBe(true);
+
+    const approveRes = await SELF.fetch(`https://example.com/api/approvals/${created.id}/approve`, {
+      method: 'POST',
+      headers: { Cookie: await mintCookie(PURCHASE_EMAIL, 'committee') },
+    });
+    expect(approveRes.status).toBe(200);
+
+    // Fields (and the AI comparison derived from them) freeze at purchase
+    // approval — the endpoint refuses even though comparison rows exist.
+    const res = await SELF.fetch(`https://example.com/api/approvals/${created.id}/analyse`, {
+      method: 'POST',
+      headers: { Cookie: await mintCookie(ADMIN_EMAIL, 'admin') },
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error_code?: string };
+    expect(body.error_code).toBe('CONFLICT');
   });
 });
 

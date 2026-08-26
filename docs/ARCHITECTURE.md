@@ -247,7 +247,8 @@ path returns 404 in production. See AGENTS.md, "Local dev login".
   The AI quotation comparison (2026-08-26) adds two admin-only analyse
   endpoints behind the same entry gate — `POST /api/approvals/analyse-preview`
   (form-time, stores nothing) and `POST /api/approvals/:id/analyse`
-  (regenerate, stores `ai_comparison` + audit row) — served by
+  (regeneration, reachable only from the edit form and only while the item is
+  editable; stores `ai_comparison` + audit row) — served by
   `src/worker/lib/ai-comparison.ts`. Guards: an IT-admin kill-switch
   (`swa:ai_config` in SWA_CONFIG, surfaced as `ai_comparison_enabled` on
   `/api/session`), a 10/hour per-email rate bucket, and a portal-wide daily

@@ -508,6 +508,32 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     color: var(--swa-2);
   }
   .ap-ai-meta { margin: 0.5rem 0 0; font-size: 0.75rem; color: var(--text-muted); }
+
+  /* Rotating ring shown beside the working message while an AI analysis runs.
+     Pure CSS — no image, no emoji, respects prefers-reduced-motion. */
+  .ap-spinner {
+    display: inline-block;
+    width: 1.15em;
+    height: 1.15em;
+    vertical-align: -0.15em;
+    margin-right: 0.45rem;
+    border: 3px solid rgba(112, 48, 140, 0.25);
+    border-top-color: var(--swa-1);
+    border-radius: 50%;
+    animation: ap-spin 0.7s linear infinite;
+  }
+  @keyframes ap-spin {
+    to { transform: rotate(360deg); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ap-spinner {
+      animation: ap-pulse 1.2s ease-in-out infinite;
+      border-color: var(--swa-1);
+    }
+    @keyframes ap-pulse {
+      50% { opacity: 0.25; }
+    }
+  }
   .ap-ai-preview .ap-comparison-table td:nth-child(4),
   .ap-ai-preview .ap-comparison-table td:nth-child(5),
   .ap-ai-preview .ap-comparison-table th:nth-child(4),
@@ -988,16 +1014,15 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
             </table>
           </div>`;
 
-    // ---- Stored AI analysis (shown to every approver; regenerate is admin
-    //      only and hidden while the kill-switch is off, plan §4.5/§4.6) ----
+    // ---- Stored AI analysis (read-only for everyone; regeneration happens
+    //      through the edit form's Analyse button — owner decision 26-08-2026) ----
     const aiAnalysis = item.ai_comparison && typeof item.ai_comparison === 'object' ? (item.ai_comparison as AiAnalysis) : null;
+    const aiEditAvailable =
+      !!sessionData?.is_admin && sessionData?.ai_comparison_enabled !== false && comparisonRows.length >= 2;
     let aiHtml = '';
     if (aiAnalysis) {
-      const canRegenerateAi =
-        !!sessionData?.is_admin && sessionData?.ai_comparison_enabled !== false && comparisonRows.length >= 2;
       aiHtml = `<div class="ap-ai-block">
         ${renderAiAnalysisBlock(aiAnalysis)}
-        ${canRegenerateAi ? '<button type="button" class="btn btn-secondary" id="ap-act-ai-regenerate" style="margin-top:0.6rem;">Regenerate AI comparison</button>' : ''}
       </div>`;
     }
 
@@ -1095,6 +1120,17 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
               <textarea id="ap-edit-description" class="form-input" rows="4" maxlength="4000">${esc(item.description || '')}</textarea></label>
             <label class="ap-field" style="display:block;margin-top:0.75rem;"><span>Add documents (optional)</span>
               <input type="file" id="ap-edit-files" class="form-input" multiple accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" /></label>
+            ${aiEditAvailable
+              ? `<div style="margin-top:0.75rem;border:1px solid var(--swa-3);border-radius:0.4rem;padding:0.6rem 0.75rem;background:#faf7fc;">
+                  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+                    <button type="button" class="btn btn-secondary" id="ap-edit-ai-run">Analyse with AI</button>
+                    <span id="ap-edit-ai-msg" role="status" aria-live="polite" style="font-size:0.8rem;color:var(--text-muted);"></span>
+                  </div>
+                  <p style="margin:0.4rem 0 0;font-size:0.75rem;color:var(--text-muted);">
+                    Re-reads the ticked comparison quotations and updates the AI comparison stored on this item.
+                  </p>
+                </div>`
+              : ''}
             ${item.status === 'rejected'
               ? `<label class="ap-check" style="margin-top:0.75rem;"><input type="checkbox" id="ap-edit-resubmit" checked /><span>Resubmit for approval (returns to the stage that rejected it)</span></label>`
               : ''}
@@ -1359,24 +1395,35 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       }
     });
 
-    // ---- AI comparison regenerate (admin, explicit click only) ----
-    document.getElementById('ap-act-ai-regenerate')?.addEventListener('click', async () => {
-      const btn = document.getElementById('ap-act-ai-regenerate') as HTMLButtonElement | null;
-      if (!btn || btn.disabled) return;
-      btn.disabled = true;
-      msg('Reading the quotations… this can take up to a minute.');
+    // ---- AI comparison from the edit form (the only regeneration path —
+    //      owner decision 26-08-2026) ----
+    const editAiBtn = document.getElementById('ap-edit-ai-run') as HTMLButtonElement | null;
+    const editAiMsg = (text: string, ok = false, busy = false): void => {
+      const el = document.getElementById('ap-edit-ai-msg');
+      if (!el) return;
+      if (busy) {
+        el.innerHTML = `<span class="ap-spinner" aria-hidden="true"></span>${esc(text)}`;
+      } else {
+        el.textContent = text;
+      }
+      el.style.color = busy ? 'var(--text-muted)' : ok ? '#1b7f3b' : '#b3261e';
+    };
+    editAiBtn?.addEventListener('click', async () => {
+      if (editAiBtn.disabled) return;
+      editAiBtn.disabled = true;
+      editAiMsg('Reading the quotations… this can take up to a minute.', false, true);
       try {
         const res = await fetch(`/api/approvals/${item.id}/analyse`, { method: 'POST' });
         const body = (await res.json()) as { success: boolean; message?: string };
         if (body.success) {
           await refreshAfterAction(item.id);
         } else {
-          msg(body.message || 'The analysis failed.');
-          btn.disabled = false;
+          editAiMsg(body.message || 'The analysis failed.');
+          editAiBtn.disabled = false;
         }
       } catch {
-        msg('Network error.');
-        btn.disabled = false;
+        editAiMsg('Network error.');
+        editAiBtn.disabled = false;
       }
     });
 
@@ -1535,10 +1582,14 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     setAiMsg(reason || '', 'var(--text-muted)');
   }
 
-  function setAiMsg(text: string, color = 'var(--text-muted)'): void {
+  function setAiMsg(text: string, color = 'var(--text-muted)', busy = false): void {
     const el = document.getElementById('ap-ai-msg');
     if (!el) return;
-    el.textContent = text;
+    if (busy) {
+      el.innerHTML = `<span class="ap-spinner" aria-hidden="true"></span>${esc(text)}`;
+    } else {
+      el.textContent = text;
+    }
     el.style.color = color;
   }
 
@@ -1764,7 +1815,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     }
     // In-flight lock (plan §4.6 layer 1): one click, one paid run.
     btn.disabled = true;
-    setAiMsg('Reading the quotations… this can take up to a minute.');
+    setAiMsg('Reading the quotations… this can take up to a minute.', 'var(--text-muted)', true);
     const form = new FormData();
     for (const file of files) form.append('files', file);
     try {

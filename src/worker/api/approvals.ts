@@ -744,12 +744,16 @@ export async function handleApprovalAnalysePreview(c: AppContext) {
 }
 
 /* ----------------------------------------------------
-   POST /api/approvals/:id/analyse  (regenerate, drawer)
-   Admin only. Reads the item's ticked comparison
-   attachments from R2, runs the same pipeline, stores the
-   result in approval_items.ai_comparison and writes an
-   ai_comparison_generated audit row. Works at any status —
-   the analysis never changes the workflow state.
+   POST /api/approvals/:id/analyse  (regenerate)
+   Admin only, reached from the edit form (owner decision
+   26-08-2026 — the drawer Regenerate button was removed).
+   Only while the item is editable (pending, or rejected at
+   the purchase stage): fields freeze at purchase approval,
+   and the AI comparison derives from those fields. Reads
+   the item's ticked comparison attachments from R2, runs
+   the same pipeline, stores the result in
+   approval_items.ai_comparison and writes an
+   ai_comparison_generated audit row.
    ---------------------------------------------------- */
 export async function handleApprovalAnalyseItem(c: AppContext) {
   const endpoint = 'approvals-analyse-item';
@@ -770,7 +774,7 @@ export async function handleApprovalAnalyseItem(c: AppContext) {
 
   let item: Record<string, unknown> | null = null;
   try {
-    item = await c.env.DB.prepare('SELECT id, title, comparison FROM approval_items WHERE id = ?')
+    item = await c.env.DB.prepare('SELECT id, title, status, rejected_stage, comparison FROM approval_items WHERE id = ?')
       .bind(Number(id))
       .first<Record<string, unknown>>();
   } catch (err) {
@@ -778,6 +782,19 @@ export async function handleApprovalAnalyseItem(c: AppContext) {
   }
   if (!item) {
     return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
+  }
+  const status = String(item.status);
+  const rejectedStage = item.rejected_stage ? String(item.rejected_stage) : '';
+  const editable = status === 'pending' || (status === 'rejected' && rejectedStage === 'purchase');
+  if (!editable) {
+    return c.json(
+      {
+        success: false,
+        error_code: 'CONFLICT',
+        message: 'AI comparison can only be regenerated while the item is editable (pending, or rejected at the purchase stage). Fields freeze at purchase approval.',
+      },
+      409,
+    );
   }
 
   // Which attachments are quotations comes from the ticked comparison rows —

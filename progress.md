@@ -12,6 +12,72 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-26 (session 18) — AI analyse button: animated loading spinner
+
+Owner asked for a visual progress cue while an AI analysis runs, instead of
+the static "may take up to a minute" text alone.
+
+### Done
+- New pure-CSS `.ap-spinner` (rotating ring, brand purple) in approvals.astro,
+  with a `prefers-reduced-motion` fallback that pulses opacity instead of
+  spinning. No images, no emoji.
+- Both working messages (create-form `#ap-ai-msg` and edit-form
+  `#ap-edit-ai-msg`) render the spinner beside the text while a run is in
+  flight; success/error messages replace it with plain text as before.
+  Spinner is `aria-hidden` — the message spans are already `role="status"`.
+
+### Verification
+- `npm run typecheck` 0 errors. `npm run build` clean (26 pages). Frontend
+  only — no test changes needed.
+
+---
+
+## 2026-08-26 (session 17) — AI regeneration moved into the edit form
+
+Owner decision: the drawer's "Regenerate AI comparison" button duplicated
+the edit path — any change to a request must start from the Edit button, and
+the AI comparison must never change otherwise.
+
+### Done
+- Removed the drawer Regenerate button; the stored AI block in the drawer is
+  now read-only for every role.
+- Added an "Analyse with AI" button inside the drawer's edit form (visible
+  for admins on editable items with ≥2 comparison rows while the kill-switch
+  is off-hidden). Clicking it re-reads the ticked quotations and updates the
+  stored analysis, then refreshes the drawer.
+- Server-side enforcement: `POST /api/approvals/:id/analyse` now returns 409
+  unless the item is editable (pending, or rejected at the purchase stage) —
+  the same freeze rule as the item fields, so the rule holds for direct API
+  calls, not just the UI.
+- Regression test: purchase-approved item + analyse → 409. 260 total tests.
+- Docs updated: features/approvals.md (API table, UI rules), ARCHITECTURE.md.
+
+### Verification
+- `npm run test:run` 260 passed (16 files). `npm run typecheck` 0 errors.
+  `npm run typecheck:worker` clean. `npm run build` clean.
+
+---
+
+## 2026-08-26 (session 16) — Local re-test: analysis works; migration 011 applied locally
+
+Owner re-tested locally after the session 15 fixes: the previously failing
+PDF now analyses correctly end to end. Submitting the request then failed
+with "Could not create the approval item" — the create INSERT writes the new
+`ai_comparison` column, and the local D1 database predated migration 011.
+
+### Done
+- Diagnosed with a schema check (`PRAGMA table_info`): `ai_comparison` was
+  missing from the local `approval_items` table.
+- Applied `migrations/011_ai_comparison.sql` with `wrangler d1 execute
+  --local`. Create now works; no code change was needed.
+
+### Deployment reminder (before the next production deploy)
+- Run `npx wrangler d1 execute swa-portal --remote
+  --file=migrations/011_ai_comparison.sql` first, or production creates will
+  fail the same way the local ones did.
+
+---
+
 ## 2026-08-26 (session 15) — AI comparison: live-service fixes after local test
 
 Owner tested locally with two real vendor PDFs; both failed with "extraction

@@ -41,12 +41,12 @@ Entry gate (middleware 7c): all `/api/approvals*` methods require admin, purchas
 | `POST /api/approvals/:id/finance-reject` | POST | Finance approver only | Reason required; resubmission returns to finance_check |
 | `POST /api/approvals/:id/paid` | POST | Item creator | Records who/date/method/reference; → paid |
 | `POST /api/approvals/analyse-preview` | POST | Item creator | Form-time AI comparison of the ticked quotation files (multipart). Stores nothing; the result is replayed to `POST /api/approvals` as `aiComparison`. Guards: kill-switch 503, daily cap 429, ≥2 files, same MIME allowlist |
-| `POST /api/approvals/:id/analyse` | POST | Item creator | Regenerates the AI comparison from the item's ticked comparison attachments (R2), stores it in `ai_comparison`, writes an `ai_comparison_generated` audit row. Same guards; works at any status |
+| `POST /api/approvals/:id/analyse` | POST | Item creator | Regenerates the AI comparison from the item's ticked comparison attachments (R2), stores it in `ai_comparison`, writes an `ai_comparison_generated` audit row. Reached only from the edit form (owner decision 26-08-2026 — the drawer Regenerate button was removed); refuses non-editable items with 409, matching the fields-freeze rule. Same guards |
 | `GET /api/approvals/audit/export?from=YYYY-MM-DD&to=YYYY-MM-DD` | GET | IT admin only (owner decision 24-08-2026) | Audit CSV for the required date range (both days inclusive, UTC; oldest first, ≤5000 rows, injection-guarded). Missing/inverted ranges → 400. Reached from the Settings page card — no approvals-page UI |
 
 Rate limits (per email): approve/reject at both stages 20/hour; create/edit/voucher 10 per 15 min; remind 5/hour; AI analyse (both endpoints) 10/hour plus a portal-wide cap of 50 analyses/day (KV counter, resets 00:00 UTC with the free Workers AI allowance); read endpoints (board list, item detail, attachment streaming, audit CSV) 60 per minute.
 
-AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, served by `POST /api/admin/settings`). Missing key = enabled. Both analyse endpoints return 503 `FEATURE_DISABLED` while off, and `/api/session` reports `ai_comparison_enabled: false` so the page hides the Analyse/Regenerate buttons and shows a "disabled by IT admin" note. Creating a request never calls AI, so submission works while the feature is off.
+AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, served by `POST /api/admin/settings`). Missing key = enabled. Both analyse endpoints return 503 `FEATURE_DISABLED` while off, and `/api/session` reports `ai_comparison_enabled: false` so the page hides the Analyse buttons and shows a "disabled by IT admin" note. Creating a request never calls AI, so submission works while the feature is off.
 
 ## 4. Workflow
 
@@ -87,8 +87,8 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 | Record payment | `is_admin` AND `finance_approved` |
 | View voucher link | `finance_approved` or `paid` AND voucher exists |
 | Analyse with AI (form) | Comparison builder visible AND ≥2 ticked quotations AND `ai_comparison_enabled`. Button locks while a run is in flight; any change to the chosen files or ticks invalidates the preview |
-| AI comparison block (drawer) | Stored analysis exists (any role can read it) |
-| Regenerate AI comparison (drawer) | `is_admin` AND ≥2 comparison rows AND `ai_comparison_enabled` |
+| AI comparison block (drawer) | Stored analysis exists — read-only for every role |
+| Analyse with AI (edit form, the only regeneration path) | `is_admin` AND item editable (pending, or rejected at purchase stage) AND ≥2 comparison rows AND `ai_comparison_enabled` |
 | AI toggle card (Settings) | IT admin only |
 
 `?item=<id>` deep link opens the drawer (the emails' target). The voucher export page is standalone — no AdminLayout, own noindex meta, print button hides when printing.
