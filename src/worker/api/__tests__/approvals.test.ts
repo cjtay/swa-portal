@@ -385,6 +385,82 @@ describe('POST /api/approvals — create', () => {
   });
 });
 
+describe('POST /api/approvals — AI comparison replay', () => {
+  const validAnalysis = JSON.stringify({
+    version: 1,
+    generatedAt: '2026-08-26T10:00:00.000Z',
+    generatedBy: 'approvals-test-admin1@example.com',
+    models: { extract: '@cf/meta/llama-4-scout-17b-16e-instruct', compare: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
+    fx: { date: '2026-08-26', source: 'open.er-api.com' },
+    files: [
+      { filename: 'a.pdf', status: 'ok', note: null },
+      { filename: 'b.pdf', status: 'ok', note: null },
+    ],
+    quotes: [
+      { filename: 'a.pdf', vendor: 'A Pte Ltd', totalPrice: 1000, currency: 'SGD', totalPriceSgd: 1000 },
+      { filename: 'b.pdf', vendor: 'B Sdn Bhd', totalPrice: 150, currency: 'USD', totalPriceSgd: 200 },
+    ],
+    summary: 'A is cheaper after conversion.',
+    recommendation: 'Choose A Pte Ltd.',
+  });
+
+  it('stores a replayed analysis and returns it parsed in the detail view', async () => {
+    const form = new FormData();
+    form.append('category', 'quotation');
+    form.append('title', 'AI comparison replay');
+    form.append('aiComparison', validAnalysis);
+    const res = await SELF.fetch('https://example.com/api/approvals', {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json<{ id: number }>();
+
+    const stored = await env.DB.prepare('SELECT ai_comparison FROM approval_items WHERE id = ?')
+      .bind(body.id)
+      .first<{ ai_comparison: string | null }>();
+    expect(stored?.ai_comparison).toContain('A Pte Ltd');
+
+    const detail = await SELF.fetch(`https://example.com/api/approvals/${body.id}`, {
+      headers: { Cookie: await financeCookie() },
+    });
+    const detailBody = await detail.json<{ item: { ai_comparison: { version: number; quotes: Array<{ vendor: string }> } } }>();
+    expect(detailBody.item.ai_comparison.version).toBe(1);
+    expect(detailBody.item.ai_comparison.quotes).toHaveLength(2);
+  });
+
+  it('rejects a malformed analysis payload', async () => {
+    const form = new FormData();
+    form.append('category', 'quotation');
+    form.append('title', 'Bad AI payload');
+    form.append('aiComparison', '{"version":1,"not":"the agreed shape"}');
+    const res = await SELF.fetch('https://example.com/api/approvals', {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('omits the column entirely when no analysis is sent', async () => {
+    const form = new FormData();
+    form.append('category', 'quotation');
+    form.append('title', 'No AI analysis');
+    const res = await SELF.fetch('https://example.com/api/approvals', {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json<{ id: number }>();
+    const stored = await env.DB.prepare('SELECT ai_comparison FROM approval_items WHERE id = ?')
+      .bind(body.id)
+      .first<{ ai_comparison: string | null }>();
+    expect(stored?.ai_comparison).toBeNull();
+  });
+});
+
 describe('GET /api/approvals — list and counts', () => {
   it('returns items with per-status counts, and honours the status filter', async () => {
     const formA = new FormData();

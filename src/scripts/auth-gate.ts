@@ -8,6 +8,9 @@ export interface SessionResponse {
   is_it_admin: boolean;
   is_purchase_approver: boolean;
   is_finance_approver: boolean;
+  // IT-admin kill-switch for the approvals AI quotation comparison. False
+  // hides the Analyse/Regenerate buttons (server also returns 503).
+  ai_comparison_enabled: boolean;
 }
 
 interface AuthGateOptions {

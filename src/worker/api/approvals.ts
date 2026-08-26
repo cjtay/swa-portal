@@ -18,6 +18,14 @@ import {
   isPurchaseApprover,
   isFinanceApprover,
 } from '../../constants/portal';
+import {
+  isAiComparisonEnabled,
+  consumeDailyAnalysisQuota,
+  runAiComparison,
+  parseAiComparisonJson,
+  type AiComparison,
+  type AiComparisonInput,
+} from '../lib/ai-comparison';
 
 // Approval workflow API — docs/plans/Approval-Workflow-Implementation-Plan.md §8.
 //
@@ -474,15 +482,31 @@ export async function handleApprovalsCreate(c: AppContext) {
     }
   }
 
+  // --- Optional AI analysis produced by /api/approvals/analyse-preview ---
+  //     Treated as untrusted form input: strict shape validation + hard caps
+  //     in parseAiComparisonJson. Stored verbatim (normalised) on the item.
+  let aiComparisonJson: string | null = null;
+  const aiRaw = typeof form['aiComparison'] === 'string' ? form['aiComparison'].trim() : '';
+  if (aiRaw.length > 0) {
+    const parsedAnalysis = parseAiComparisonJson(aiRaw);
+    if (!parsedAnalysis) {
+      return c.json(
+        { success: false, error_code: 'VALIDATION_ERROR', message: 'The AI comparison data is malformed. Run the analysis again.' },
+        400,
+      );
+    }
+    aiComparisonJson = JSON.stringify(parsedAnalysis);
+  }
+
   // --- 1. Insert the item (comparison stored after attachment ids exist) ---
   const status = approvalRequired ? 'pending' : 'purchase_approved';
   let itemId: number;
   try {
     const res = await c.env.DB.prepare(
-      `INSERT INTO approval_items (category, title, payee, description, requested_amount, approval_required, status, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO approval_items (category, title, payee, description, requested_amount, approval_required, status, created_by, ai_comparison)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-      .bind(category.key, title, payeeRaw || null, descriptionRaw || null, requestedAmount, approvalRequired ? 1 : 0, status, session.email)
+      .bind(category.key, title, payeeRaw || null, descriptionRaw || null, requestedAmount, approvalRequired ? 1 : 0, status, session.email, aiComparisonJson)
       .run();
     itemId = Number(res.meta?.last_row_id);
     if (!itemId) throw new Error('Failed to get item ID from insert');
@@ -630,6 +654,232 @@ export async function handleApprovalsCreate(c: AppContext) {
 }
 
 /* ----------------------------------------------------
+   POST /api/approvals/analyse-preview  (multipart, form-time)
+   Docs/plans/AI-Quotation-Comparison-Plan.md §4.3.
+   Admin only (item-creator tier). Reads the ticked
+   quotation files with Workers AI and returns the
+   analysis JSON; stores nothing. The form replays it to
+   POST /api/approvals as the aiComparison field.
+
+   Guard order: role → kill-switch → daily circuit breaker
+   → validation, so no AI quota is spent on a request that
+   cannot run. Rate limit: approvals:analyse:post (10/hour
+   per email) in middleware gate 8.
+   ---------------------------------------------------- */
+export async function handleApprovalAnalysePreview(c: AppContext) {
+  const endpoint = 'approvals-analyse-preview';
+  const session = { email: getSessionEmail(c), role: getSessionRole(c) };
+  if (!canRaiseApprovalItem(session)) {
+    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Only the office admin can analyse quotations.' }, 403);
+  }
+  if (!(await isAiComparisonEnabled(c.env.SWA_CONFIG))) {
+    return c.json({ success: false, error_code: 'FEATURE_DISABLED', message: 'AI comparison is disabled by an IT administrator.' }, 503);
+  }
+  if (!(await consumeDailyAnalysisQuota(c.env.SWA_SESSION))) {
+    return c.json({ success: false, error_code: 'RATE_LIMITED', message: 'The portal-wide daily AI analysis limit is exhausted. Try again tomorrow.' }, 429);
+  }
+
+  let form: Record<string, unknown>;
+  try {
+    form = await c.req.parseBody({ all: true });
+  } catch {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid request body.' }, 400);
+  }
+
+  const filesRaw = form['files'];
+  const fileList: File[] = [];
+  if (Array.isArray(filesRaw)) {
+    for (const f of filesRaw) if (f instanceof File && f.size > 0) fileList.push(f);
+  } else if (filesRaw instanceof File && filesRaw.size > 0) {
+    fileList.push(filesRaw);
+  }
+
+  if (fileList.length < 2) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Select at least two quotation documents to compare.' }, 400);
+  }
+  if (fileList.length > APPROVAL_MAX_FILES_PER_ITEM) {
+    return c.json(
+      { success: false, error_code: 'VALIDATION_ERROR', message: `At most ${APPROVAL_MAX_FILES_PER_ITEM} files per item.` },
+      400,
+    );
+  }
+  for (const file of fileList) {
+    if (!ALLOWED_ATTACHMENT_MIME.has(file.type)) {
+      return c.json(
+        {
+          success: false,
+          error_code: 'VALIDATION_ERROR',
+          message: `"${file.name}" is not an accepted type. Only PDF, JPG, PNG, WebP, HEIC and HEIF files are allowed.`,
+        },
+        400,
+      );
+    }
+    if (file.size > APPROVAL_MAX_FILE_BYTES) {
+      return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: `"${file.name}" is larger than 10 MB.` }, 400);
+    }
+  }
+
+  const inputs: AiComparisonInput[] = [];
+  for (const file of fileList) {
+    inputs.push({ filename: file.name, mime: file.type, bytes: await file.arrayBuffer() });
+  }
+
+  let analysis: AiComparison;
+  try {
+    analysis = await runAiComparison(c.env, inputs, session.email);
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'The AI analysis failed. Please try again in a moment.', {
+      error_type: 'AI_RUN',
+      http_status: 502,
+    });
+  }
+  if (analysis.quotes.length === 0) {
+    const reasons = analysis.files.map((f) => `${f.filename}: ${f.note || 'could not be read'}`).join('; ');
+    return c.json(
+      { success: false, error_code: 'AI_READ_FAILED', message: `None of the documents could be read. ${reasons}` },
+      502,
+    );
+  }
+  return c.json({ success: true, analysis });
+}
+
+/* ----------------------------------------------------
+   POST /api/approvals/:id/analyse  (regenerate, drawer)
+   Admin only. Reads the item's ticked comparison
+   attachments from R2, runs the same pipeline, stores the
+   result in approval_items.ai_comparison and writes an
+   ai_comparison_generated audit row. Works at any status —
+   the analysis never changes the workflow state.
+   ---------------------------------------------------- */
+export async function handleApprovalAnalyseItem(c: AppContext) {
+  const endpoint = 'approvals-analyse-item';
+  const session = { email: getSessionEmail(c), role: getSessionRole(c) };
+  if (!canRaiseApprovalItem(session)) {
+    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Only the office admin can analyse quotations.' }, 403);
+  }
+  if (!(await isAiComparisonEnabled(c.env.SWA_CONFIG))) {
+    return c.json({ success: false, error_code: 'FEATURE_DISABLED', message: 'AI comparison is disabled by an IT administrator.' }, 503);
+  }
+  if (!(await consumeDailyAnalysisQuota(c.env.SWA_SESSION))) {
+    return c.json({ success: false, error_code: 'RATE_LIMITED', message: 'The portal-wide daily AI analysis limit is exhausted. Try again tomorrow.' }, 429);
+  }
+  const id = c.req.param('id') || '';
+  if (!/^\d+$/.test(id)) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid item id.' }, 400);
+  }
+
+  let item: Record<string, unknown> | null = null;
+  try {
+    item = await c.env.DB.prepare('SELECT id, title, comparison FROM approval_items WHERE id = ?')
+      .bind(Number(id))
+      .first<Record<string, unknown>>();
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not load the item.', { error_type: 'D1_SELECT_APPROVAL_ANALYSE', http_status: 500 });
+  }
+  if (!item) {
+    return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
+  }
+
+  // Which attachments are quotations comes from the ticked comparison rows —
+  // the same set the form-time preview analysed.
+  let comparisonRows: Array<{ attachmentId: number }> = [];
+  if (typeof item.comparison === 'string' && item.comparison.length > 0) {
+    try {
+      const parsed = JSON.parse(item.comparison);
+      if (Array.isArray(parsed)) {
+        comparisonRows = parsed
+          .map((row) => Number((row as Record<string, unknown>)?.attachmentId))
+          .filter((attachmentId) => Number.isInteger(attachmentId) && attachmentId > 0)
+          .map((attachmentId) => ({ attachmentId }));
+      }
+    } catch {
+      comparisonRows = [];
+    }
+  }
+  if (comparisonRows.length < 2) {
+    return c.json(
+      {
+        success: false,
+        error_code: 'VALIDATION_ERROR',
+        message: 'Tick at least two quotations in the comparison table first, then analyse again.',
+      },
+      400,
+    );
+  }
+
+  const wantedIds = new Set(comparisonRows.map((r) => r.attachmentId));
+  const attRows = await c.env.DB.prepare(
+    'SELECT id, r2_key, filename, mime_type FROM approval_attachments WHERE item_id = ?',
+  )
+    .bind(Number(id))
+    .all<{ id: number; r2_key: string; filename: string; mime_type: string }>();
+  const attachments = (attRows.results || []).filter((a) => wantedIds.has(Number(a.id)));
+
+  // Fetch from R2 and buffer. Quotation sets are small (2–10 files); the
+  // 10-file cap bounds memory well under the isolate limit.
+  const inputs: AiComparisonInput[] = [];
+  const missing: Array<{ filename: string; status: 'error'; note: string }> = [];
+  const byId = new Map(attachments.map((a) => [Number(a.id), a]));
+  for (const wanted of wantedIds) {
+    const att = byId.get(wanted);
+    if (!att) {
+      missing.push({ filename: `attachment ${wanted}`, status: 'error', note: 'Attachment record missing.' });
+      continue;
+    }
+    const obj = await c.env.R2_BUCKET.get(att.r2_key);
+    if (!obj) {
+      missing.push({ filename: att.filename, status: 'error', note: 'Attachment missing from storage.' });
+      continue;
+    }
+    inputs.push({ filename: att.filename, mime: att.mime_type, bytes: await obj.arrayBuffer() });
+  }
+
+  let analysis: AiComparison;
+  try {
+    analysis = await runAiComparison(c.env, inputs, session.email);
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'The AI analysis failed. Please try again in a moment.', {
+      error_type: 'AI_RUN',
+      http_status: 502,
+    });
+  }
+  analysis.files = [...missing, ...analysis.files];
+  if (analysis.quotes.length === 0) {
+    const reasons = analysis.files.map((f) => `${f.filename}: ${f.note || 'could not be read'}`).join('; ');
+    return c.json({ success: false, error_code: 'AI_READ_FAILED', message: `None of the documents could be read. ${reasons}` }, 502);
+  }
+
+  // Store the analysis; the audit row is best-effort (the state column is the
+  // source of truth — same philosophy as applyTransition).
+  try {
+    await c.env.DB.prepare("UPDATE approval_items SET ai_comparison = ?, updated_at = datetime('now') WHERE id = ?")
+      .bind(JSON.stringify(analysis), Number(id))
+      .run();
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not save the analysis.', {
+      error_type: 'D1_UPDATE_APPROVAL_AI_COMPARISON',
+      http_status: 500,
+    });
+  }
+  const okCount = analysis.files.filter((f) => f.status === 'ok').length;
+  try {
+    await c.env.DB.prepare('INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)')
+      .bind(Number(id), 'ai_comparison_generated', session.email, getSessionName(c) || session.email, `read=${okCount} of ${analysis.files.length}`)
+      .run();
+  } catch (err) {
+    await logError(c.env, {
+      endpoint: 'approvals-analyse-audit',
+      error_type: 'D1_AUDIT',
+      error_message: `ai comparison audit insert failed: ${err instanceof Error ? err.message : String(err)}`,
+      http_status: 500,
+      user_email: session.email,
+    });
+  }
+
+  return c.json({ success: true, analysis });
+}
+
+/* ----------------------------------------------------
    GET /api/approvals/:id
    Detail: item fields, attachments, parsed comparison.
    ---------------------------------------------------- */
@@ -646,7 +896,7 @@ export async function handleApprovalDetail(c: AppContext) {
         'purchase_decision_by, purchase_decision_at, rejection_reason, ' +
         'voucher_no, voucher_date, voucher_lines, voucher_submitted_by, voucher_submitted_at, ' +
         'finance_decision_by, finance_decision_at, finance_rejection_reason, ' +
-        'paid_by, paid_at, payment_method, payment_reference, created_by, comparison, created_at, updated_at ' +
+        'paid_by, paid_at, payment_method, payment_reference, created_by, comparison, ai_comparison, created_at, updated_at ' +
         'FROM approval_items WHERE id = ?',
     )
       .bind(Number(id))
@@ -672,9 +922,18 @@ export async function handleApprovalDetail(c: AppContext) {
       }
     }
 
+    let aiComparison: unknown = null;
+    if (typeof item.ai_comparison === 'string' && item.ai_comparison.length > 0) {
+      try {
+        aiComparison = JSON.parse(item.ai_comparison);
+      } catch {
+        aiComparison = null;
+      }
+    }
+
     return c.json({
       success: true,
-      item: { ...item, comparison },
+      item: { ...item, comparison, ai_comparison: aiComparison },
       attachments: attachmentsResult.results || [],
     });
   } catch (err) {

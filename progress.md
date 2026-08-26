@@ -12,6 +12,71 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-26 (session 14) — AI quotation comparison (approvals)
+
+Implemented `docs/plans/AI-Quotation-Comparison-Plan.md` in full. Workers AI
+reads the ticked quotations when the office admin raises a request, extracts
+the common fields, converts prices to S$ in code, and writes a summary plus a
+one-line recommendation, saved with the request for approvers to see.
+
+### Done
+- **Binding + types**: `"ai": { "binding": "AI" }` in wrangler.jsonc; minimal
+  structural `AiBinding` interface in src/worker/types.ts (run + toMarkdown)
+  so worker code never depends on the generated runtime-types file.
+  Regenerated worker-configuration.d.ts.
+- **Pipeline (new `src/worker/lib/ai-comparison.ts`)**: PDF text via
+  `AI.toMarkdown`; photos + field extraction via llama-4-scout (vision);
+  summary + value-based recommendation via llama-3.3-70b-fp8. S$ conversion
+  in CODE from a daily FX table (open.er-api.com, free, cached 24 h in
+  SWA_CONFIG `swa:ai_fx_cache`). Unreadable files get honest per-file notes.
+  30 s timeout per AI call; single-attempt calls, no retry loops anywhere.
+- **Endpoints**: `POST /api/approvals/analyse-preview` (form-time, stores
+  nothing) and `POST /api/approvals/:id/analyse` (regenerate from the ticked
+  comparison attachments in R2, stores the result, writes an
+  `ai_comparison_generated` audit row). Guard order in both: role →
+  kill-switch 503 → daily breaker 429 → validation, so no AI quota is spent
+  on a request that cannot run. `POST /api/approvals` accepts the replayed
+  analysis as `aiComparison` (strict shape validation, 128 KB cap) and never
+  calls AI itself.
+- **Abuse safeguards (plan §4.6)**: per-email rate bucket
+  `approvals:analyse:post` (10/hour), portal-wide KV counter capping 50
+  analyses/day, in-flight button lock in the UI, preview invalidation when
+  quotations change, no auto-retries, per-call timeouts.
+- **Kill-switch**: `swa:ai_config` in SWA_CONFIG written by the Settings page
+  through the existing IT-admin-only `/api/admin/settings` (new allowlist
+  entry + boolean validator). Missing key = enabled. Session exposes
+  `ai_comparison_enabled`; page hides Analyse/Regenerate and shows a note
+  while off.
+- **Migration 011** + schema.sql: nullable `ai_comparison` TEXT column on
+  approval_items.
+- **UI (approvals.astro)**: "Analyse with AI" button + preview in the create
+  form (with the disclaimer label, S$ table, FX date, skip notes); stored
+  analysis block + "Regenerate AI comparison" in the drawer; HEIC photos
+  converted to JPEG in the browser at pick time (canvas pattern from the
+  membership page; browsers that cannot decode HEIC keep the file and the
+  analysis notes it as unread).
+- **Tests**: new ai-comparison.test.ts (24 tests: pipeline against a fake AI
+  binding, JSON extraction, FX maths, kill-switch default, breaker, endpoint
+  guards that return before any AI call, settings key) + 3 replay tests in
+  approvals.test.ts. No test spends real AI quota.
+
+### Verification
+- `npm run test:run` 252 passed (16 files). `npm run typecheck` 0 errors
+  (16 pre-existing hints). `npm run typecheck:worker` clean. `npm run build`
+  clean (26 pages).
+- Manual run in `npm run dev:worker` with real quotations still to do before
+  production (the plan's verification section lists the sample set: text PDF,
+  photo, HEIC, scanned PDF).
+
+### Notes
+- Local testing consumes real Workers AI quota — wrangler dev proxies AI
+  binding calls to the live service. At ~10 analyses/month the usage sits
+  far inside the free 10,000 Neurons/day.
+- Word (.docx) support deliberately deferred (owner decision); the machinery
+  supports it later with one allowlist line.
+
+---
+
 ## 2026-08-26 (session 13) — AI quotation comparison: planning only
 
 Owner asked whether the approvals "multiple quotations to compare" tick could

@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import type { Env, AppContext } from '../types';
 import { IT_ADMIN_EMAILS, SESSION_COOKIE_NAME, DEV_LOGOUT_COOKIE_NAME, isPurchaseApprover, isFinanceApprover } from '../../constants/portal';
+import { isAiComparisonEnabled } from '../lib/ai-comparison';
 import { verifyHmac, base64urlDecode } from '../lib/crypto';
 import { revalidateSession } from '../lib/session-revalidation';
 import { sessionCookieHeader, clearedSessionCookieHeader, type SessionPayload } from '../lib/session-cookie';
@@ -157,7 +158,7 @@ export async function handleSession(c: AppContext) {
     const revalidated = await revalidateSession(c.env.DB, c.env.SESSION_SECRET, realSession);
     if (revalidated.status === 'invalid') {
       c.header('Set-Cookie', clearedSessionCookieHeader(), { append: true });
-      return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false, is_purchase_approver: false, is_finance_approver: false });
+      return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false, is_purchase_approver: false, is_finance_approver: false, ai_comparison_enabled: false });
     }
     if (revalidated.newCookie) {
       c.header(
@@ -177,6 +178,7 @@ export async function handleSession(c: AppContext) {
       is_it_admin: (IT_ADMIN_EMAILS as readonly string[]).includes(s.email),
       is_purchase_approver: isPurchaseApprover(s.email),
       is_finance_approver: isFinanceApprover(s.email),
+      ai_comparison_enabled: await isAiComparisonEnabled(c.env.SWA_CONFIG),
     });
   }
 
@@ -200,10 +202,11 @@ export async function handleSession(c: AppContext) {
       is_it_admin: (IT_ADMIN_EMAILS as readonly string[]).includes(s.email),
       is_purchase_approver: isPurchaseApprover(s.email),
       is_finance_approver: isFinanceApprover(s.email),
+      ai_comparison_enabled: await isAiComparisonEnabled(c.env.SWA_CONFIG),
     });
   }
 
-  return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false, is_purchase_approver: false, is_finance_approver: false });
+  return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false, is_purchase_approver: false, is_finance_approver: false, ai_comparison_enabled: false });
 }
 
 export async function handleLogout(c: AppContext) {

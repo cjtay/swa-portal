@@ -94,6 +94,7 @@ handler. Each entry is called a binding: a pre-connected handle to a Cloudflare 
 | `SWA_SESSION` | KV (key–value store) | OTP codes, rate-limit counters, session bookkeeping |
 | `SWA_CONFIG` | KV | Event and form configuration: open/closed flags, notify emails, table layouts |
 | `R2_BUCKET` | R2 (file storage) | Uploaded images: PayNow screenshots, signatures, card photos |
+| `AI` | Workers AI | Approvals AI quotation comparison: reads PDFs (`toMarkdown`) and photos (vision model), writes the comparison summary. All usage inside `src/worker/lib/ai-comparison.ts` |
 
 D1 is a real database you can query, join and count. KV is a fast dictionary that only does
 key → value lookups. KV is eventually consistent (a write can take a moment to appear
@@ -243,6 +244,16 @@ path returns 404 in production. See AGENTS.md, "Local dev login".
   export (admin tier only, injection-guarded, oldest first, 5,000-row cap).
   Decision columns store the session name for the printed voucher; the audit
   log keeps emails. See `docs/plans/Approval-Workflow-Implementation-Plan.md`.
+  The AI quotation comparison (2026-08-26) adds two admin-only analyse
+  endpoints behind the same entry gate — `POST /api/approvals/analyse-preview`
+  (form-time, stores nothing) and `POST /api/approvals/:id/analyse`
+  (regenerate, stores `ai_comparison` + audit row) — served by
+  `src/worker/lib/ai-comparison.ts`. Guards: an IT-admin kill-switch
+  (`swa:ai_config` in SWA_CONFIG, surfaced as `ai_comparison_enabled` on
+  `/api/session`), a 10/hour per-email rate bucket, and a portal-wide daily
+  cap of 50 analyses (KV counter). S$ conversion happens in code from a
+  KV-cached daily FX table, never by the model. See
+  `docs/plans/AI-Quotation-Comparison-Plan.md`.
 
 Handlers sometimes double-check roles as well (defence in depth). For example,
 `api/members.ts` re-checks the session role before revealing a member's dependencies.
@@ -361,7 +372,7 @@ All 69 routes registered in `src/worker/index.ts`, verified 23-08-2026.
 | `GET /api/admin/forms/laughter-yoga`, `GET …/export` (2) | Laughter-yoga submissions |
 | `GET /api/admin/forms/membership`, `GET …/export`, `GET …/image/:id/:kind`, `POST …/:id/approve`, `POST …/:id/reject` (5) | Membership submissions + approvals |
 | `GET/POST /api/namecards`, `POST /api/namecards/bulk`, `GET /api/namecards/me`, `GET/PATCH/DELETE /api/namecards/:id`, `PATCH …/:id/slug`, `PATCH …/:id/toggle`, `POST/DELETE …/:id/photo` (11) | Namecard admin + self-service |
-| `GET /api/approvals`, `POST /api/approvals`, `GET /api/approvals/:id`, `GET /api/approvals/:id/attachment/:attId`, `POST …/:id/approve`, `POST …/:id/reject`, `POST …/:id/edit`, `POST …/:id/remind`, `POST …/:id/voucher`, `POST …/:id/finance-approve`, `POST …/:id/finance-reject`, `POST …/:id/paid`, `GET /api/approvals/audit/export` (13; audit export IT-admin only) | Approval workflow, complete: board + create + attachments (Phase 2); purchase stage (Phase 3); voucher + finance stage (Phase 4); paid step + audit CSV (Phase 5) |
+| `GET /api/approvals`, `POST /api/approvals`, `POST /api/approvals/analyse-preview`, `GET /api/approvals/:id`, `GET /api/approvals/:id/attachment/:attId`, `POST …/:id/approve`, `POST …/:id/reject`, `POST …/:id/edit`, `POST …/:id/remind`, `POST …/:id/voucher`, `POST …/:id/analyse`, `POST …/:id/finance-approve`, `POST …/:id/finance-reject`, `POST …/:id/paid`, `GET /api/approvals/audit/export` (15; audit export IT-admin only; analyse routes admin only + kill-switch + daily cap) | Approval workflow, complete: board + create + attachments (Phase 2); purchase stage (Phase 3); voucher + finance stage (Phase 4); paid step + audit CSV (Phase 5); AI quotation comparison (2026-08-26) |
 
 Totals: 19 public + 58 authenticated = 77.
 

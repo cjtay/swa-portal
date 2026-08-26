@@ -6,9 +6,22 @@ import { IT_ADMIN_EMAILS, IT_ADMIN_NAMES } from '../../constants/portal';
 // 'swa:it_admins' is a read-only pseudo-key: it is served from the code
 // constant IT_ADMIN_EMAILS (not KV) and cannot be written via POST. This
 // powers the read-only IT Administrators panel on the Settings page.
-const KNOWN_KEYS = ['swa:reg_tables_config', 'swa:it_admins'] as const;
+// 'swa:ai_config' is the AI quotation comparison kill-switch
+// (docs/plans/AI-Quotation-Comparison-Plan.md §4.5). A missing key means the
+// feature is ON; only {"enabled": false} turns it off.
+const KNOWN_KEYS = ['swa:reg_tables_config', 'swa:it_admins', 'swa:ai_config'] as const;
 type KnownKey = (typeof KNOWN_KEYS)[number];
 const READ_ONLY_KEYS = ['swa:it_admins'] as const;
+
+function validateAiConfig(value: unknown): { valid: true; data: Record<string, unknown> } | { valid: false; errors: string[] } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { valid: false, errors: ['Value must be a JSON object.'] };
+  }
+  if (typeof (value as Record<string, unknown>)['enabled'] !== 'boolean') {
+    return { valid: false, errors: ['enabled must be true or false.'] };
+  }
+  return { valid: true, data: { enabled: (value as Record<string, unknown>)['enabled'] } };
+}
 
 function validateRegTablesConfig(value: unknown): { valid: true; data: Record<string, unknown> } | { valid: false; errors: string[] } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -68,6 +81,8 @@ function validateValue(key: KnownKey, value: unknown): { valid: true; data: Reco
   switch (key) {
     case 'swa:reg_tables_config':
       return validateRegTablesConfig(value);
+    case 'swa:ai_config':
+      return validateAiConfig(value);
     default:
       return { valid: false, errors: [`Unknown settings key: ${key}`] };
   }

@@ -90,6 +90,17 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
         <div id="ap-comparison-rows"></div>
       </div>
 
+      <!-- AI analysis (docs/plans/AI-Quotation-Comparison-Plan.md §4.6): the
+           button only spends AI quota on an explicit click; the stored
+           analysis is replayed with the form on submit. -->
+      <div id="ap-ai-box" hidden style="margin-top:1rem;">
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary" id="ap-ai-run">Analyse with AI</button>
+          <span id="ap-ai-msg" role="status" aria-live="polite" style="font-size:0.85rem;color:var(--text-muted);"></span>
+        </div>
+        <div id="ap-ai-preview" class="ap-ai-preview" hidden></div>
+      </div>
+
       <div style="display:flex;align-items:center;gap:0.75rem;margin-top:1rem;flex-wrap:wrap;">
         <button type="submit" class="btn btn-primary" id="ap-create-submit">Raise request</button>
         <button type="button" class="btn btn-secondary" id="ap-create-cancel">Cancel</button>
@@ -470,6 +481,41 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     vertical-align: top;
   }
   .ap-comparison-table th { background: #f5f0f8; color: var(--swa-2); }
+
+  /* AI analysis preview + drawer block. The tinted border separates the
+     AI-generated content from the human-typed comparison table above it. */
+  .ap-ai-preview {
+    margin-top: 0.75rem;
+    border: 1px solid var(--swa-3);
+    border-radius: 0.4rem;
+    padding: 0.75rem;
+    background: #faf7fc;
+    font-size: 0.85rem;
+  }
+  .ap-ai-preview h4, .ap-ai-block h4 { margin: 0 0 0.4rem; font-size: 0.9rem; color: var(--swa-2); }
+  .ap-ai-disclaimer {
+    display: block;
+    margin: 0.5rem 0 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+  .ap-ai-reco {
+    margin: 0.6rem 0 0;
+    padding: 0.45rem 0.6rem;
+    background: var(--swa-4);
+    border-radius: 0.3rem;
+    font-weight: 600;
+    color: var(--swa-2);
+  }
+  .ap-ai-meta { margin: 0.5rem 0 0; font-size: 0.75rem; color: var(--text-muted); }
+  .ap-ai-preview .ap-comparison-table td:nth-child(4),
+  .ap-ai-preview .ap-comparison-table td:nth-child(5),
+  .ap-ai-preview .ap-comparison-table th:nth-child(4),
+  .ap-ai-preview .ap-comparison-table th:nth-child(5) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
   /* Voucher table in the drawer: keep No/Date/Amount on one line and line
      up the amount digits. */
   .ap-voucher .ap-comparison-table td { font-variant-numeric: tabular-nums; }
@@ -513,6 +559,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     created_at: string;
     updated_at: string;
     comparison?: Array<{ attachmentId: number; description: string }> | null;
+    ai_comparison?: AiAnalysis | null;
   }
 
   interface VoucherLine {
@@ -528,6 +575,35 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     mime_type: string;
     size: number;
     created_at: string;
+  }
+
+  // AI quotation comparison (docs/plans/AI-Quotation-Comparison-Plan.md).
+  // Shape mirrors AiComparison in src/worker/lib/ai-comparison.ts.
+  interface AiQuote {
+    filename: string;
+    vendor: string | null;
+    itemName: string | null;
+    description: string | null;
+    unitPrice: number | null;
+    totalPrice: number | null;
+    currency: string | null;
+    gst: string | null;
+    validity: string | null;
+    leadTime: string | null;
+    unitPriceSgd: number | null;
+    totalPriceSgd: number | null;
+  }
+
+  interface AiAnalysis {
+    version: 1;
+    generatedAt: string;
+    generatedBy: string;
+    models: { extract: string; compare: string };
+    fx: { date: string; source: string } | null;
+    files: Array<{ filename: string; status: 'ok' | 'skipped' | 'error'; note: string | null }>;
+    quotes: AiQuote[];
+    summary: string | null;
+    recommendation: string | null;
   }
 
   const STATUS_LABELS: Record<string, string> = {
@@ -912,6 +988,19 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
             </table>
           </div>`;
 
+    // ---- Stored AI analysis (shown to every approver; regenerate is admin
+    //      only and hidden while the kill-switch is off, plan §4.5/§4.6) ----
+    const aiAnalysis = item.ai_comparison && typeof item.ai_comparison === 'object' ? (item.ai_comparison as AiAnalysis) : null;
+    let aiHtml = '';
+    if (aiAnalysis) {
+      const canRegenerateAi =
+        !!sessionData?.is_admin && sessionData?.ai_comparison_enabled !== false && comparisonRows.length >= 2;
+      aiHtml = `<div class="ap-ai-block">
+        ${renderAiAnalysisBlock(aiAnalysis)}
+        ${canRegenerateAi ? '<button type="button" class="btn btn-secondary" id="ap-act-ai-regenerate" style="margin-top:0.6rem;">Regenerate AI comparison</button>' : ''}
+      </div>`;
+    }
+
     // ---- Stage-appropriate actions (plan §11) ----
     const voucherLines = parseVoucherLines(item.voucher_lines);
     const hasVoucher = !!item.voucher_no;
@@ -1063,6 +1152,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
         ${attachmentsHtml}
       </div>
       ${comparisonHtml}
+      ${aiHtml}
     `;
 
     wireDrawerActions(item);
@@ -1269,6 +1359,27 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       }
     });
 
+    // ---- AI comparison regenerate (admin, explicit click only) ----
+    document.getElementById('ap-act-ai-regenerate')?.addEventListener('click', async () => {
+      const btn = document.getElementById('ap-act-ai-regenerate') as HTMLButtonElement | null;
+      if (!btn || btn.disabled) return;
+      btn.disabled = true;
+      msg('Reading the quotations… this can take up to a minute.');
+      try {
+        const res = await fetch(`/api/approvals/${item.id}/analyse`, { method: 'POST' });
+        const body = (await res.json()) as { success: boolean; message?: string };
+        if (body.success) {
+          await refreshAfterAction(item.id);
+        } else {
+          msg(body.message || 'The analysis failed.');
+          btn.disabled = false;
+        }
+      } catch {
+        msg('Network error.');
+        btn.disabled = false;
+      }
+    });
+
     document.getElementById('ap-act-approve')?.addEventListener('click', async () => {
       const btn = document.getElementById('ap-act-approve') as HTMLButtonElement | null;
       if (!btn) return;
@@ -1403,6 +1514,57 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   // keyed by name|size so adding or removing a file keeps the others' text.
   const comparisonDraft = new Map<string, { include: boolean; desc: string }>();
 
+  // ---- AI analysis state (form-time preview) -----------------------------
+  // aiPreview holds the analysis the analyse-preview endpoint returned; it is
+  // replayed with the form on submit and invalidated whenever the chosen
+  // quotations change (plan §4.6 layer 5: reuse, never re-run silently).
+  let aiPreview: AiAnalysis | null = null;
+
+  function invalidateAiPreview(reason?: string): void {
+    if (!aiPreview) {
+      const box = document.getElementById('ap-ai-preview');
+      if (box) box.hidden = true;
+      return;
+    }
+    aiPreview = null;
+    const box = document.getElementById('ap-ai-preview');
+    if (box) {
+      box.hidden = true;
+      box.innerHTML = '';
+    }
+    setAiMsg(reason || '', 'var(--text-muted)');
+  }
+
+  function setAiMsg(text: string, color = 'var(--text-muted)'): void {
+    const el = document.getElementById('ap-ai-msg');
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = color;
+  }
+
+  // HEIC photos (iPhone) cannot be read by the vision model, so they are
+  // converted to JPEG in the browser at pick time — same canvas pattern as
+  // the membership register page. If the browser cannot decode HEIC (e.g.
+  // Chrome), the file is kept as-is and the analysis reports it as unread.
+  async function maybeConvertHeic(file: File): Promise<File> {
+    if (file.type !== 'image/heic' && file.type !== 'image/heif') return file;
+    try {
+      const bitmap = await createImageBitmap(file);
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return file;
+      ctx.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+      if (!blob) return file;
+      return new File([blob], file.name.replace(/\.hei[cf]$/i, '.jpg'), { type: 'image/jpeg' });
+    } catch {
+      return file;
+    }
+  }
+
   function keyOf(file: File): string {
     return `${file.name}|${file.size}`;
   }
@@ -1436,6 +1598,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
         const index = Number(btn.dataset.index);
         const [removed] = chosenFiles.splice(index, 1);
         if (removed) comparisonDraft.delete(keyOf(removed));
+        invalidateAiPreview('Quotations changed — run the analysis again.');
         showFilesMsg('');
         renderFilesList();
         renderComparisonBuilder();
@@ -1443,11 +1606,12 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     });
   }
 
-  fileInput?.addEventListener('change', () => {
+  fileInput?.addEventListener('change', async () => {
     if (!fileInput) return;
     const picked = Array.from(fileInput.files || []);
     fileInput.value = '';
-    for (const file of picked) {
+    for (const raw of picked) {
+      const file = await maybeConvertHeic(raw);
       if (chosenFiles.some((f) => keyOf(f) === keyOf(file))) {
         showFilesMsg(`"${file.name}" is already in the list.`);
         continue;
@@ -1460,6 +1624,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
         showFilesMsg(`At most ${MAX_FILES} files per item.`);
         break;
       }
+      invalidateAiPreview('Quotations changed — run the analysis again.');
       chosenFiles.push(file);
     }
     renderFilesList();
@@ -1476,21 +1641,37 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
 
   function renderComparisonBuilder(): void {
     if (!comparisonRows || !comparisonBuilder || !comparisonToggleWrap || !comparisonToggle) return;
+    const aiBox = document.getElementById('ap-ai-box');
+    const aiRun = document.getElementById('ap-ai-run') as HTMLButtonElement | null;
     if (chosenFiles.length === 0) {
       // No files: hide everything comparison-related and clear the toggle.
       comparisonToggleWrap.hidden = true;
       comparisonToggle.checked = false;
       comparisonBuilder.hidden = true;
       comparisonRows.innerHTML = '';
+      if (aiBox) aiBox.hidden = true;
       return;
     }
     comparisonToggleWrap.hidden = false;
     if (!comparisonToggle.checked) {
       comparisonBuilder.hidden = true;
       comparisonRows.innerHTML = '';
+      if (aiBox) aiBox.hidden = true;
       return;
     }
     comparisonBuilder.hidden = false;
+    // The AI box appears with the builder when the feature is on. Disabled
+    // still shows a short note (owner decision: visible off-state, no button).
+    if (aiBox) {
+      aiBox.hidden = false;
+      if (sessionData && sessionData.ai_comparison_enabled === false) {
+        if (aiRun) aiRun.hidden = true;
+        setAiMsg('AI comparison is disabled by an IT administrator.');
+      } else {
+        if (aiRun) aiRun.hidden = false;
+        if (!aiPreview) setAiMsg('Optional: let AI read the ticked quotations and compare them.');
+      }
+    }
     comparisonRows.innerHTML = chosenFiles
       .map((file, index) => {
         const draft = comparisonDraft.get(keyOf(file));
@@ -1505,13 +1686,15 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       .join('');
 
     // Persist edits into the drafts so the next re-render (a file added or
-    // removed) restores what was typed.
+    // removed) restores what was typed. Any edit invalidates a stale AI
+    // preview — the analysis must always match the ticked set.
     comparisonRows.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((box) => {
       box.addEventListener('change', () => {
         const key = box.dataset.key || '';
         const draft = comparisonDraft.get(key) || { include: true, desc: '' };
         draft.include = box.checked;
         comparisonDraft.set(key, draft);
+        invalidateAiPreview('Quotations changed — run the analysis again.');
       });
     });
     comparisonRows.querySelectorAll<HTMLInputElement>('input[data-desc]').forEach((inp) => {
@@ -1524,7 +1707,86 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     });
   }
 
-  comparisonToggle?.addEventListener('change', renderComparisonBuilder);
+  comparisonToggle?.addEventListener('change', () => {
+    invalidateAiPreview();
+    renderComparisonBuilder();
+  });
+
+  // ---- AI analysis: run + preview + replay on submit ----------------------
+
+  function tickedQuotationFiles(): File[] {
+    if (!comparisonToggle?.checked || !comparisonRows) return [];
+    const files: File[] = [];
+    comparisonRows.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((box) => {
+      if (!box.checked) return;
+      const file = chosenFiles.find((f) => keyOf(f) === (box.dataset.key || ''));
+      if (file) files.push(file);
+    });
+    return files;
+  }
+
+  function renderAiAnalysisBlock(analysis: AiAnalysis): string {
+    const rows = analysis.quotes
+      .map((q) => {
+        const original = q.totalPrice !== null ? `${q.currency || ''} ${q.totalPrice.toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim() : '—';
+        return `<tr>
+          <td>${esc(q.vendor || '—')}</td>
+          <td>${esc(q.itemName || q.filename)}</td>
+          <td>${esc(original)}</td>
+          <td>${q.totalPriceSgd !== null ? esc(fmtMoney(q.totalPriceSgd)) : '—'}</td>
+          <td>${esc(q.gst || '—')}</td>
+          <td>${esc(q.leadTime || '—')}</td>
+        </tr>`;
+      })
+      .join('');
+    const problemFiles = analysis.files
+      .filter((f) => f.status !== 'ok')
+      .map((f) => `<li>${esc(f.filename)} — ${esc(f.note || 'could not be read')}</li>`)
+      .join('');
+    return `<h4>AI comparison <span style="font-weight:400;font-size:0.75rem;color:var(--text-muted);">(generated ${esc(fmtDateSg(analysis.generatedAt))})</span></h4>
+      <table class="ap-comparison-table">
+        <thead><tr><th>Vendor</th><th>Item</th><th>Quoted total</th><th>Total (S$)</th><th>GST</th><th>Lead time</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      ${analysis.summary ? `<p style="margin:0.6rem 0 0;">${esc(analysis.summary)}</p>` : ''}
+      ${analysis.recommendation ? `<p class="ap-ai-reco">Recommendation: ${esc(analysis.recommendation)}</p>` : ''}
+      ${problemFiles ? `<ul style="margin:0.6rem 0 0;padding-left:1.1rem;color:var(--text-muted);font-size:0.78rem;">${problemFiles}</ul>` : ''}
+      <p class="ap-ai-meta">FX rates dated ${esc(analysis.fx?.date || 'unavailable')}${analysis.fx ? ' via open.er-api.com' : ' — amounts not converted'}. AI-generated — verify against the original documents.</p>`;
+  }
+
+  document.getElementById('ap-ai-run')?.addEventListener('click', async () => {
+    const btn = document.getElementById('ap-ai-run') as HTMLButtonElement | null;
+    if (!btn || btn.disabled) return;
+    const files = tickedQuotationFiles();
+    if (files.length < 2) {
+      setAiMsg('Tick at least two quotations to compare.', '#b3261e');
+      return;
+    }
+    // In-flight lock (plan §4.6 layer 1): one click, one paid run.
+    btn.disabled = true;
+    setAiMsg('Reading the quotations… this can take up to a minute.');
+    const form = new FormData();
+    for (const file of files) form.append('files', file);
+    try {
+      const res = await fetch('/api/approvals/analyse-preview', { method: 'POST', body: form });
+      const body = (await res.json()) as { success: boolean; analysis?: AiAnalysis; message?: string };
+      if (res.ok && body.success && body.analysis) {
+        aiPreview = body.analysis;
+        const box = document.getElementById('ap-ai-preview');
+        if (box) {
+          box.innerHTML = renderAiAnalysisBlock(aiPreview);
+          box.hidden = false;
+        }
+        setAiMsg('The analysis will be saved with the request.', '#1b7f3b');
+      } else {
+        setAiMsg(body.message || 'The analysis failed. Please try again.', '#b3261e');
+      }
+    } catch {
+      setAiMsg('Network error. Please try again.', '#b3261e');
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   // ---- Create-form toggle ----------------------------------------------
   // The board table leads the page (owner decision 25-08-2026): the form
@@ -1542,6 +1804,13 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     form?.reset();
     chosenFiles = [];
     comparisonDraft.clear();
+    aiPreview = null;
+    const previewBox = document.getElementById('ap-ai-preview');
+    if (previewBox) {
+      previewBox.hidden = true;
+      previewBox.innerHTML = '';
+    }
+    setAiMsg('');
     showFilesMsg('');
     renderFilesList();
     renderComparisonBuilder();
@@ -1594,6 +1863,9 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       });
     }
     if (comparison.length > 0) form.append('comparison', JSON.stringify(comparison));
+    // Replay the previewed AI analysis with the request (plan §4.3): the
+    // create endpoint never calls AI itself.
+    if (aiPreview && comparison.length > 0) form.append('aiComparison', JSON.stringify(aiPreview));
 
     submit.disabled = true;
     try {

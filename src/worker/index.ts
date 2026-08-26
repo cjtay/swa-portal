@@ -46,6 +46,8 @@ import {
 import {
   handleApprovalsList,
   handleApprovalsCreate,
+  handleApprovalAnalysePreview,
+  handleApprovalAnalyseItem,
   handleApprovalDetail,
   handleApprovalAttachment,
   handleApprovalPurchaseApprove,
@@ -200,11 +202,13 @@ app.delete('/api/namecards/:id/photo', handleNamecardPhoto);
 //
 // Entry gated by middleware gate 7c: admin, purchase approver, or finance
 // approver for all methods. Handlers enforce the finer rules.
-// NOTE: /api/approvals/audit/export is registered BEFORE the /:id routes —
-// Hono matches in order (the Phase 2 comment anticipated this).
+// NOTE: /api/approvals/audit/export and /api/approvals/analyse-preview are
+// registered BEFORE the /:id routes — Hono matches in order (the Phase 2
+// comment anticipated this).
 app.get('/api/approvals/audit/export', handleApprovalAuditExport);
 app.get('/api/approvals', handleApprovalsList);
 app.post('/api/approvals', handleApprovalsCreate);
+app.post('/api/approvals/analyse-preview', handleApprovalAnalysePreview);
 app.get('/api/approvals/:id', handleApprovalDetail);
 app.get('/api/approvals/:id/attachment/:attId', handleApprovalAttachment);
 app.post('/api/approvals/:id/approve', handleApprovalPurchaseApprove);
@@ -212,6 +216,7 @@ app.post('/api/approvals/:id/reject', handleApprovalPurchaseReject);
 app.post('/api/approvals/:id/edit', handleApprovalEdit);
 app.post('/api/approvals/:id/remind', handleApprovalRemind);
 app.post('/api/approvals/:id/voucher', handleApprovalVoucher);
+app.post('/api/approvals/:id/analyse', handleApprovalAnalyseItem);
 app.post('/api/approvals/:id/finance-approve', handleFinanceApprove);
 app.post('/api/approvals/:id/finance-reject', handleFinanceReject);
 app.post('/api/approvals/:id/paid', handleApprovalPaid);

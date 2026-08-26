@@ -37,6 +37,9 @@ const ENDPOINT_LIMITS: Record<string, EndpointLimit> = {
   // share one per-email bucket so one logged-in approver cannot loop the R2
   // attachment route. Generous enough for a five-person finance board.
   'approvals:read:get': { windowSeconds: 60, maxRequests: 60 },
+  // AI quotation analysis — each call spends Workers AI quota, so it gets the
+  // tightest approvals bucket (plan §4.3: about 10 per hour per user).
+  'approvals:analyse:post': { windowSeconds: 60 * 60, maxRequests: 10 },
 };
 
 export function getEndpointLimit(endpointKey: string): EndpointLimit {
@@ -99,6 +102,7 @@ export function getEndpointKey(path: string, method: string): string | null {
     // Approval workflow — specific actions first, then every remaining POST
     // under /api/approvals (create, edit, voucher, paid, attachments).
     if (/^\/api\/approvals\/[^/]+\/remind$/.test(path)) return 'approvals:remind:post';
+    if (/^\/api\/approvals\/(analyse-preview|[^/]+\/analyse)$/.test(path)) return 'approvals:analyse:post';
     if (/^\/api\/approvals\/[^/]+\/(approve|reject|finance-approve|finance-reject)$/.test(path)) {
       return 'approvals:review:post';
     }

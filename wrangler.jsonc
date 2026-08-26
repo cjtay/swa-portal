@@ -34,6 +34,11 @@
       "bucket_name": "swa-portal-uploads"
     }
   ],
+  // Workers AI — reads quotation documents (PDF text + photo vision) for the
+  // approvals AI comparison. Docs/plans/AI-Quotation-Comparison-Plan.md §4.1.
+  "ai": {
+    "binding": "AI"
+  },
   "limits": {
     "max_request_body_size": 20971520
   },

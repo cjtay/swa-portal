@@ -40,9 +40,13 @@ Entry gate (middleware 7c): all `/api/approvals*` methods require admin, purchas
 | `POST /api/approvals/:id/finance-approve` | POST | Finance approver only | Atomic finance_check → finance_approved; emails creator |
 | `POST /api/approvals/:id/finance-reject` | POST | Finance approver only | Reason required; resubmission returns to finance_check |
 | `POST /api/approvals/:id/paid` | POST | Item creator | Records who/date/method/reference; → paid |
+| `POST /api/approvals/analyse-preview` | POST | Item creator | Form-time AI comparison of the ticked quotation files (multipart). Stores nothing; the result is replayed to `POST /api/approvals` as `aiComparison`. Guards: kill-switch 503, daily cap 429, ≥2 files, same MIME allowlist |
+| `POST /api/approvals/:id/analyse` | POST | Item creator | Regenerates the AI comparison from the item's ticked comparison attachments (R2), stores it in `ai_comparison`, writes an `ai_comparison_generated` audit row. Same guards; works at any status |
 | `GET /api/approvals/audit/export?from=YYYY-MM-DD&to=YYYY-MM-DD` | GET | IT admin only (owner decision 24-08-2026) | Audit CSV for the required date range (both days inclusive, UTC; oldest first, ≤5000 rows, injection-guarded). Missing/inverted ranges → 400. Reached from the Settings page card — no approvals-page UI |
 
-Rate limits (per email): approve/reject at both stages 20/hour; create/edit/voucher 10 per 15 min; remind 5/hour; read endpoints (board list, item detail, attachment streaming, audit CSV) 60 per minute.
+Rate limits (per email): approve/reject at both stages 20/hour; create/edit/voucher 10 per 15 min; remind 5/hour; AI analyse (both endpoints) 10/hour plus a portal-wide cap of 50 analyses/day (KV counter, resets 00:00 UTC with the free Workers AI allowance); read endpoints (board list, item detail, attachment streaming, audit CSV) 60 per minute.
+
+AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, served by `POST /api/admin/settings`). Missing key = enabled. Both analyse endpoints return 503 `FEATURE_DISABLED` while off, and `/api/session` reports `ai_comparison_enabled: false` so the page hides the Analyse/Regenerate buttons and shows a "disabled by IT admin" note. Creating a request never calls AI, so submission works while the feature is off.
 
 ## 4. Workflow
 
@@ -63,6 +67,7 @@ Rate limits (per email): approve/reject at both stages 20/hour; create/edit/vouc
 - **Voucher numbering** `PV<YY>-<MM><NN>` from the voucher's own month (e.g. `PV26-0801`), assigned at first submission, survives rejection unchanged; UNIQUE-index retry on races; two digits cap at 99/month. Lines may carry negative amounts (deposits) and note-only rows (bank details).
 - **Documents**: PDF/JPG/PNG/WebP/HEIC/HEIF, 10 MB each, 10 files per item; HTML and SVG always rejected. Files accumulate across multiple picker visits; viewed inline (iframe for PDFs).
 - **Comparison table**: rows typed by the creator, each linking to one attached document.
+- **AI quotation comparison** (2026-08-26, `docs/plans/AI-Quotation-Comparison-Plan.md`): Workers AI reads the ticked quotations (PDF text via `toMarkdown`, photos via a vision model), extracts vendor/item/prices/currency/GST/validity/lead time per document, converts prices to S$ **in code** from a daily KV-cached FX table (open.er-api.com), then a text model writes a 3–4 sentence summary and a one-line value-based recommendation. Unreadable files (scanned PDFs, unsupported types) get per-file notes, never silent skips. HEIC photos are converted to JPEG in the browser at pick time. Every result carries the label "AI-generated — verify against the original documents". Single-attempt AI calls with 30 s timeouts; no automatic retries anywhere.
 - **Export**: standalone `/approvals/voucher?id=` renders the June-sample voucher layout for browser "Save as PDF" — no PDF library. "Prepared by" / "Payment approved by" print session names.
 
 ## 5. UI rules (`/approvals`)
@@ -81,10 +86,14 @@ Rate limits (per email): approve/reject at both stages 20/hour; create/edit/vouc
 | Send reminder | `is_admin` AND (`pending` or `finance_check`) |
 | Record payment | `is_admin` AND `finance_approved` |
 | View voucher link | `finance_approved` or `paid` AND voucher exists |
+| Analyse with AI (form) | Comparison builder visible AND ≥2 ticked quotations AND `ai_comparison_enabled`. Button locks while a run is in flight; any change to the chosen files or ticks invalidates the preview |
+| AI comparison block (drawer) | Stored analysis exists (any role can read it) |
+| Regenerate AI comparison (drawer) | `is_admin` AND ≥2 comparison rows AND `ai_comparison_enabled` |
+| AI toggle card (Settings) | IT admin only |
 
 `?item=<id>` deep link opens the drawer (the emails' target). The voucher export page is standalone — no AdminLayout, own noindex meta, print button hides when printing.
 
-## 6. Data model (migrations 009 + 010, backported into `schema.sql`)
+## 6. Data model (migrations 009 + 010 + 011, backported into `schema.sql`)
 
 **`approval_items`** — one row per request:
 
@@ -105,10 +114,11 @@ Rate limits (per email): approve/reject at both stages 20/hour; create/edit/vouc
 | `paid_by`, `paid_at`, `payment_method`, `payment_reference` | TEXT | The paid step |
 | `created_by` | TEXT | Creator email |
 | `comparison` | TEXT | JSON `[{attachmentId, description}]` |
+| `ai_comparison` | TEXT | Nullable JSON: the AI analysis (version, generated at/by, models, FX date, per-file status notes, extracted quotations with S$ conversions, summary, recommendation). Added migration 011 |
 
 **`approval_attachments`** — `item_id` FK, UNIQUE `r2_key` under `approvals/<itemId>/`, filename/mime/size. Add-only in v1; caps 10 files × 10 MB.
 
-**`approval_audit_log`** — insert-only (no UPDATE/DELETE path exists). `item_id`, `action`, `actor_email`, `actor_name`, `note`. Actions: item_created, purchase_approved/rejected, item_edited, item_resubmitted, attachments_added, voucher_submitted, finance_approved/rejected, paid_recorded, reminder_sent.
+**`approval_audit_log`** — insert-only (no UPDATE/DELETE path exists). `item_id`, `action`, `actor_email`, `actor_name`, `note`. Actions: item_created, purchase_approved/rejected, item_edited, item_resubmitted, attachments_added, voucher_submitted, finance_approved/rejected, paid_recorded, reminder_sent, ai_comparison_generated.
 
 ## 7. Emails (`src/worker/lib/email-approval.ts`, Resend, non-blocking)
 
@@ -119,4 +129,4 @@ Rate limits (per email): approve/reject at both stages 20/hour; create/edit/vouc
 
 ## 8. Tests
 
-`src/worker/api/__tests__/approvals.test.ts` (integration: role gates, create validation, comparison mapping, numbering + 99-cap, race 409s, resubmit routing, IT-admin-excluded-from-finance proof, paid step, CSV with date-range filter + 400 guards) and `src/worker/lib/__tests__/email-approval.test.ts` (builders). The csv-guard tripwire watches the audit exporter.
+`src/worker/api/__tests__/approvals.test.ts` (integration: role gates, create validation, comparison mapping, numbering + 99-cap, race 409s, resubmit routing, IT-admin-excluded-from-finance proof, paid step, CSV with date-range filter + 400 guards, AI-analysis replay at create) and `src/worker/lib/__tests__/ai-comparison.test.ts` (pipeline against a fake AI binding — JSON extraction, S$ conversion maths, kill-switch default, daily breaker, per-file skip/error notes, endpoint guards that return before any AI call). The csv-guard tripwire watches the audit exporter.

@@ -138,10 +138,37 @@ Follows the existing `swa:reg_tables_config` pattern exactly:
    Added in `session.ts`, `dev-login.ts` and the `SessionResponse` interface
    in `auth-gate.ts`. The page already fetches the session on load, so no
    extra request.
-5. When disabled: the approvals page hides the "Analyse with AI" and
+ 5. When disabled: the approvals page hides the "Analyse with AI" and
    "Regenerate" buttons and shows a small "Disabled by IT admin" note, and
    both analyse endpoints return 503 `FEATURE_DISABLED`. Enforcement is
    server-side, not just hidden buttons.
+
+### 4.6 Abuse safeguards against retries and runaways
+
+The login gate, the per-user rate limit, the kill-switch and the free-plan
+daily ceiling (section 3) are the first four layers. Five more close the
+retry-shaped gaps:
+
+1. **In-flight lock.** The Analyse/Regenerate button disables itself while an
+   analysis runs (10 to 30 seconds), so an impatient second click cannot
+   start a second paid run.
+2. **No automatic retries in worker code.** Every AI call is a single
+   attempt. An error surfaces as a per-file note or a 502 response. There is
+   no retry loop silently multiplying Neurons.
+3. **Timeout per AI call, about 30 seconds.** A hanging model call fails fast
+   instead of stacking up and holding the worker open.
+4. **Global daily circuit breaker.** A KV counter (key under `swa:rl:` in
+   `SWA_SESSION`, alongside the existing rate-limit entries) allows at most
+   50 analyses per day across all users combined, returning 429. This caps
+   total spend no matter how many user accounts exist, independent of any
+   per-user limit, and resets at the same time as the free Neuron allowance.
+5. **Reuse, never re-run.** The drawer renders the stored `ai_comparison`
+   JSON. Page views never trigger AI; regeneration only happens on an
+   explicit click.
+
+Worst case with every layer in place: 50 runs/day at ~3,000 Neurons each is
+150,000 Neurons, about US$1.54/day and only on the paid plan. Expected real
+usage is roughly 1% of that.
 
 ## 5. Files to create or edit
 
@@ -171,11 +198,18 @@ Follows the existing `swa:reg_tables_config` pattern exactly:
 ## 6. Verification plan
 
 - Vitest with a mocked AI binding: prompt building, JSON parsing, FX maths,
-  unreadable-file fallbacks, auth gates, rate limit, 503 when disabled.
+  unreadable-file fallbacks, auth gates, rate limit, 503 when disabled,
+  429 when the daily circuit breaker trips.
 - `npm run typecheck`, `npm run typecheck:worker`, `npm run test:run`,
   `npm run build`.
 - Manual run in `npm run dev:worker` with sample quotations: a text PDF, a
   photo, an HEIC photo, and a scanned PDF (expected per-file skip note).
+  **Local testing consumes real Workers AI quota**: `wrangler dev` cannot
+  simulate GPUs, so AI binding calls are proxied to the live Cloudflare
+  service on your logged-in account. Each local analysis counts against the
+  same free 10,000 Neurons/day as production. No separate environment
+  exists, which is fine given the cost analysis in section 3. Automated
+  tests cost nothing because the AI binding is mocked.
 - Toggle check: disable in Settings, confirm buttons hide and both endpoints
   return 503, confirm a new request without analysis still submits.
 
