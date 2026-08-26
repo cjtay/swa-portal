@@ -29,6 +29,15 @@ const ADMIN_EMAILS = [
   'approvals-test-admin10@example.com',
   'approvals-test-admin11@example.com',
   'approvals-test-admin12@example.com',
+  // Extended 26-08-2026: the AI-text-edit tests added four more creates, and
+  // the fixed-email voucher seeders later in this file share the same
+  // approvals:write:post bucket (10 per 15 min per email).
+  'approvals-test-admin13@example.com',
+  'approvals-test-admin14@example.com',
+  'approvals-test-admin15@example.com',
+  'approvals-test-admin16@example.com',
+  'approvals-test-admin17@example.com',
+  'approvals-test-admin18@example.com',
 ];
 const PURCHASE_EMAIL = 'approval@singaporewomenassociation.org';
 const FINANCE_EMAIL = 'finance@singaporewomenassociation.org';
@@ -458,6 +467,141 @@ describe('POST /api/approvals — AI comparison replay', () => {
       .bind(body.id)
       .first<{ ai_comparison: string | null }>();
     expect(stored?.ai_comparison).toBeNull();
+  });
+
+  it('stores the analysis even with NO typed comparison rows (regression 27-08-2026: the AI preview must not be silently dropped when per-file descriptions are empty)', async () => {
+    const form = new FormData();
+    form.append('category', 'quotation');
+    form.append('title', 'AI without manual comparison');
+    // Deliberately NO `comparison` field and no descriptions.
+    form.append('aiComparison', validAnalysis);
+    const res = await SELF.fetch('https://example.com/api/approvals', {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json<{ id: number }>();
+    const stored = await env.DB.prepare('SELECT comparison, ai_comparison FROM approval_items WHERE id = ?')
+      .bind(body.id)
+      .first<{ comparison: string | null; ai_comparison: string | null }>();
+    expect(stored?.comparison).toBeNull();
+    expect(stored?.ai_comparison).toContain('A Pte Ltd');
+
+    // And the detail view returns it parsed, so the drawer renders the block.
+    const detail = await SELF.fetch(`https://example.com/api/approvals/${body.id}`, {
+      headers: { Cookie: await financeCookie() },
+    });
+    const detailBody = await detail.json<{ item: { ai_comparison: { quotes: unknown[] } | null } }>();
+    expect(detailBody.item.ai_comparison?.quotes).toHaveLength(2);
+  });
+
+  it('edits the stored AI summary/recommendation like any other field; empty clears to null', async () => {
+    const form = new FormData();
+    form.append('category', 'quotation');
+    form.append('title', 'AI text edit');
+    form.append('aiComparison', validAnalysis);
+    const res = await SELF.fetch('https://example.com/api/approvals', {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json<{ id: number }>();
+
+    const editForm = new FormData();
+    editForm.append('aiSummary', 'Hand-edited summary after checking both quotes.');
+    editForm.append('aiRecommendation', '');
+    const editRes = await SELF.fetch(`https://example.com/api/approvals/${body.id}/edit`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: editForm,
+    });
+    expect(editRes.status).toBe(200);
+
+    const stored = await env.DB.prepare('SELECT ai_comparison FROM approval_items WHERE id = ?')
+      .bind(body.id)
+      .first<{ ai_comparison: string | null }>();
+    const parsed = JSON.parse(stored?.ai_comparison || '{}') as { summary: string | null; recommendation: string | null; vendor?: string };
+    expect(parsed.summary).toBe('Hand-edited summary after checking both quotes.');
+    expect(parsed.recommendation).toBeNull();
+  });
+
+  it('rejects AI text edits when the item has no stored analysis (400)', async () => {
+    const form = new FormData();
+    form.append('category', 'quotation');
+    form.append('title', 'No analysis to edit');
+    const res = await SELF.fetch('https://example.com/api/approvals', {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    const body = await res.json<{ id: number }>();
+
+    const editForm = new FormData();
+    editForm.append('aiSummary', 'There is nothing to edit.');
+    const editRes = await SELF.fetch(`https://example.com/api/approvals/${body.id}/edit`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: editForm,
+    });
+    expect(editRes.status).toBe(400);
+  });
+
+  it('rejects an AI summary over the 4000-character cap (400)', async () => {
+    const form = new FormData();
+    form.append('category', 'quotation');
+    form.append('title', 'Cap test');
+    form.append('aiComparison', validAnalysis);
+    const res = await SELF.fetch('https://example.com/api/approvals', {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    const body = await res.json<{ id: number }>();
+
+    const editForm = new FormData();
+    editForm.append('aiSummary', 'x'.repeat(4001));
+    const editRes = await SELF.fetch(`https://example.com/api/approvals/${body.id}/edit`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: editForm,
+    });
+    expect(editRes.status).toBe(400);
+  });
+
+  it('AI text edits freeze with the other fields once purchase-approved (409)', async () => {
+    const form = new FormData();
+    form.append('category', 'quotation');
+    form.append('title', 'Frozen AI texts');
+    form.append('aiComparison', validAnalysis);
+    const res = await SELF.fetch('https://example.com/api/approvals', {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    const body = await res.json<{ id: number }>();
+
+    const approveRes = await SELF.fetch(`https://example.com/api/approvals/${body.id}/approve`, {
+      method: 'POST',
+      headers: { Cookie: await purchaseCookie() },
+    });
+    expect(approveRes.status).toBe(200);
+
+    const editForm = new FormData();
+    editForm.append('aiSummary', 'Too late.');
+    const editRes = await SELF.fetch(`https://example.com/api/approvals/${body.id}/edit`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: editForm,
+    });
+    expect(editRes.status).toBe(409);
+
+    const stored = await env.DB.prepare('SELECT ai_comparison FROM approval_items WHERE id = ?')
+      .bind(body.id)
+      .first<{ ai_comparison: string | null }>();
+    const parsed = JSON.parse(stored?.ai_comparison || '{}') as { summary: string | null };
+    expect(parsed.summary).toBe('A is cheaper after conversion.'); // unchanged
   });
 });
 

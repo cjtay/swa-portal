@@ -568,6 +568,8 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     approval_required: number;
     status: string;
     rejected_stage: string | null;
+    purchase_decision_by: string | null;
+    purchase_decision_at: string | null;
     rejection_reason: string | null;
     finance_rejection_reason: string | null;
     voucher_no: string | null;
@@ -946,6 +948,12 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       ['Approval required', item.approval_required === 1 ? 'Yes' : 'No'],
       ['Payable to', esc(item.payee || '')],
       ['Requested amount', esc(fmtMoney(item.requested_amount))],
+      ...(item.purchase_decision_by
+        ? ([
+            ['Purchase approved by', esc(item.purchase_decision_by)],
+            ['Approved at (SG)', esc(fmtDateSg(item.purchase_decision_at))],
+          ] as Array<[string, string, boolean?]>)
+        : []),
       ['Voucher No', esc(item.voucher_no || '')],
       ['Voucher date', esc(fmtDateOnly(item.voucher_date))],
       ['Raised by', esc(item.created_by), true],
@@ -1130,6 +1138,12 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
                     Re-reads the ticked comparison quotations and updates the AI comparison stored on this item.
                   </p>
                 </div>`
+              : ''}
+            ${aiAnalysis
+              ? `<label class="ap-field" style="display:block;margin-top:0.75rem;"><span>AI summary (editable until submitted for approval)</span>
+                  <textarea id="ap-edit-ai-summary" class="form-input" rows="4" maxlength="4000">${esc(aiAnalysis.summary || '')}</textarea></label>
+                <label class="ap-field" style="display:block;margin-top:0.5rem;"><span>AI recommendation</span>
+                  <textarea id="ap-edit-ai-reco" class="form-input" rows="2" maxlength="1000">${esc(aiAnalysis.recommendation || '')}</textarea></label>`
               : ''}
             ${item.status === 'rejected'
               ? `<label class="ap-check" style="margin-top:0.75rem;"><input type="checkbox" id="ap-edit-resubmit" checked /><span>Resubmit for approval (returns to the stage that rejected it)</span></label>`
@@ -1509,6 +1523,13 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       form.append('description', (document.getElementById('ap-edit-description') as HTMLTextAreaElement).value.trim());
       const filesInput = document.getElementById('ap-edit-files') as HTMLInputElement | null;
       for (const file of Array.from(filesInput?.files || [])) form.append('files', file);
+      // AI text edits (owner decision 26-08-2026): the textareas exist only
+      // when the item has a stored analysis; the server freezes them with the
+      // other fields once the item leaves the editable states.
+      const aiSummaryEl = document.getElementById('ap-edit-ai-summary') as HTMLTextAreaElement | null;
+      const aiRecoEl = document.getElementById('ap-edit-ai-reco') as HTMLTextAreaElement | null;
+      if (aiSummaryEl) form.append('aiSummary', aiSummaryEl.value);
+      if (aiRecoEl) form.append('aiRecommendation', aiRecoEl.value);
       const resubmit = document.getElementById('ap-edit-resubmit') as HTMLInputElement | null;
       if (resubmit?.checked) form.append('resubmit', 'true');
       try {
@@ -1776,7 +1797,12 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     return files;
   }
 
-  function renderAiAnalysisBlock(analysis: AiAnalysis): string {
+  // editable=true renders the summary/recommendation as textareas (create
+  // form preview + edit form — owner decision 26-08-2026: the AI texts are
+  // fields like any other, editable until the item is submitted for approval,
+  // frozen after). editable=false renders read-only text (drawer).
+  function renderAiAnalysisBlock(analysis: AiAnalysis, opts?: { summaryId?: string; recoId?: string }): string {
+    const editable = Boolean(opts?.summaryId);
     const rows = analysis.quotes
       .map((q) => {
         const original = q.totalPrice !== null ? `${q.currency || ''} ${q.totalPrice.toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim() : '—';
@@ -1794,13 +1820,23 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       .filter((f) => f.status !== 'ok')
       .map((f) => `<li>${esc(f.filename)} — ${esc(f.note || 'could not be read')}</li>`)
       .join('');
+    const summaryHtml = editable
+      ? `<label class="ap-field" style="margin:0.6rem 0 0;">
+          <span>Summary (editable until submitted for approval)</span>
+          <textarea id="${esc(opts!.summaryId!)}" class="form-input" rows="4" maxlength="4000">${esc(analysis.summary || '')}</textarea>
+        </label>
+        <label class="ap-field" style="margin:0.5rem 0 0;">
+          <span>Recommendation</span>
+          <textarea id="${esc(opts!.recoId!)}" class="form-input" rows="2" maxlength="1000">${esc(analysis.recommendation || '')}</textarea>
+        </label>`
+      : `${analysis.summary ? `<p style="margin:0.6rem 0 0;">${esc(analysis.summary)}</p>` : ''}
+        ${analysis.recommendation ? `<p class="ap-ai-reco">Recommendation: ${esc(analysis.recommendation)}</p>` : ''}`;
     return `<h4>AI comparison <span style="font-weight:400;font-size:0.75rem;color:var(--text-muted);">(generated ${esc(fmtDateSg(analysis.generatedAt))})</span></h4>
       <table class="ap-comparison-table">
         <thead><tr><th>Vendor</th><th>Item</th><th>Quoted total</th><th>Total (S$)</th><th>GST</th><th>Lead time</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-      ${analysis.summary ? `<p style="margin:0.6rem 0 0;">${esc(analysis.summary)}</p>` : ''}
-      ${analysis.recommendation ? `<p class="ap-ai-reco">Recommendation: ${esc(analysis.recommendation)}</p>` : ''}
+      ${summaryHtml}
       ${problemFiles ? `<ul style="margin:0.6rem 0 0;padding-left:1.1rem;color:var(--text-muted);font-size:0.78rem;">${problemFiles}</ul>` : ''}
       <p class="ap-ai-meta">FX rates dated ${esc(analysis.fx?.date || 'unavailable')}${analysis.fx ? ' via open.er-api.com' : ' — amounts not converted'}. AI-generated — verify against the original documents.</p>`;
   }
@@ -1825,7 +1861,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
         aiPreview = body.analysis;
         const box = document.getElementById('ap-ai-preview');
         if (box) {
-          box.innerHTML = renderAiAnalysisBlock(aiPreview);
+          box.innerHTML = renderAiAnalysisBlock(aiPreview, { summaryId: 'ap-ai-summary', recoId: 'ap-ai-reco' });
           box.hidden = false;
         }
         setAiMsg('The analysis will be saved with the request.', '#1b7f3b');
@@ -1915,8 +1951,18 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     }
     if (comparison.length > 0) form.append('comparison', JSON.stringify(comparison));
     // Replay the previewed AI analysis with the request (plan §4.3): the
-    // create endpoint never calls AI itself.
-    if (aiPreview && comparison.length > 0) form.append('aiComparison', JSON.stringify(aiPreview));
+    // create endpoint never calls AI itself. The summary/recommendation
+    // textareas carry any manual edits made to the AI text. Saved whenever a
+    // preview exists — the typed comparison table (which needs per-file
+    // descriptions) is independent; with AI doing the comparing, empty
+    // descriptions must not silently drop the analysis (bug 27-08-2026).
+    if (aiPreview) {
+      const summaryEl = document.getElementById('ap-ai-summary') as HTMLTextAreaElement | null;
+      const recoEl = document.getElementById('ap-ai-reco') as HTMLTextAreaElement | null;
+      if (summaryEl) aiPreview.summary = summaryEl.value.trim() || null;
+      if (recoEl) aiPreview.recommendation = recoEl.value.trim() || null;
+      form.append('aiComparison', JSON.stringify(aiPreview));
+    }
 
     submit.disabled = true;
     try {

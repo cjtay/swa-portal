@@ -75,6 +75,8 @@ const MAX_PAYEE_LENGTH = 300;
 const MAX_DESCRIPTION_LENGTH = 4000;
 const MAX_COMPARISON_ROWS = 20;
 const MAX_COMPARISON_DESCRIPTION_LENGTH = 500;
+const MAX_AI_SUMMARY_LENGTH = 4000;
+const MAX_AI_RECOMMENDATION_LENGTH = 1000;
 const MAX_REJECTION_REASON_LENGTH = 1000;
 const MAX_REQUESTED_AMOUNT = 10_000_000;
 const MAX_VOUCHER_LINES = 50;
@@ -1187,7 +1189,7 @@ export async function handleApprovalEdit(c: AppContext) {
   let item: Record<string, unknown> | null = null;
   try {
     item = await c.env.DB.prepare(
-      'SELECT id, status, rejected_stage, approval_required, category, created_by FROM approval_items WHERE id = ?',
+      'SELECT id, status, rejected_stage, approval_required, category, created_by, ai_comparison FROM approval_items WHERE id = ?',
     )
       .bind(Number(id))
       .first<Record<string, unknown>>();
@@ -1254,6 +1256,52 @@ export async function handleApprovalEdit(c: AppContext) {
     } else {
       updates.push('requested_amount = ?');
       params.push(null);
+    }
+  }
+
+  // --- AI analysis text edits (owner decision 26-08-2026) ---
+  //     The summary/recommendation are editable fields like the others:
+  //     changeable while the item is editable (the UPDATE's WHERE clause
+  //     re-checks that), frozen after purchase approval. Undefined = field
+  //     not sent (form hides the textareas when no analysis exists); empty
+  //     string = cleared (stores null).
+  let aiSummary: string | null | undefined;
+  if (form['aiSummary'] !== undefined) {
+    const v = String(form['aiSummary']).trim();
+    if (v.length > MAX_AI_SUMMARY_LENGTH) {
+      return c.json(
+        { success: false, error_code: 'VALIDATION_ERROR', message: `AI summary must be ${MAX_AI_SUMMARY_LENGTH} characters or fewer.` },
+        400,
+      );
+    }
+    aiSummary = v.length === 0 ? null : v;
+  }
+  let aiRecommendation: string | null | undefined;
+  if (form['aiRecommendation'] !== undefined) {
+    const v = String(form['aiRecommendation']).trim();
+    if (v.length > MAX_AI_RECOMMENDATION_LENGTH) {
+      return c.json(
+        { success: false, error_code: 'VALIDATION_ERROR', message: `AI recommendation must be ${MAX_AI_RECOMMENDATION_LENGTH} characters or fewer.` },
+        400,
+      );
+    }
+    aiRecommendation = v.length === 0 ? null : v;
+  }
+  if ((aiSummary !== undefined || aiRecommendation !== undefined) && (typeof item.ai_comparison !== 'string' || item.ai_comparison.length === 0)) {
+    return c.json(
+      { success: false, error_code: 'VALIDATION_ERROR', message: 'This item has no AI analysis to edit. Run Analyse with AI first.' },
+      400,
+    );
+  }
+  let aiComparisonUpdate: string | null = null;
+  if (aiSummary !== undefined || aiRecommendation !== undefined) {
+    try {
+      const storedAnalysis = JSON.parse(String(item.ai_comparison)) as Record<string, unknown>;
+      if (aiSummary !== undefined) storedAnalysis['summary'] = aiSummary;
+      if (aiRecommendation !== undefined) storedAnalysis['recommendation'] = aiRecommendation;
+      aiComparisonUpdate = JSON.stringify(storedAnalysis);
+    } catch {
+      return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'The stored AI analysis is unreadable and cannot be edited. Re-run Analyse with AI.' }, 400);
     }
   }
 
@@ -1422,6 +1470,10 @@ export async function handleApprovalEdit(c: AppContext) {
     if (form['comparison'] !== undefined) {
       setClauses.push('comparison = ?');
       bindParams.push(comparisonJson);
+    }
+    if (aiComparisonUpdate !== null) {
+      setClauses.push('ai_comparison = ?');
+      bindParams.push(aiComparisonUpdate);
     }
     const auditActions: Array<{ action: string; note: string | null }> = [];
 

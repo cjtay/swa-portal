@@ -12,6 +12,84 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-27 (session 21) — Drawer: show who approved at the purchase stage
+
+Owner noticed the drawer showed no approver while an item sits In finance
+check. The API already returned `purchase_decision_by`/`purchase_decision_at`;
+the drawer simply never rendered them.
+
+### Done
+- approvals.astro: two conditional detail-grid rows ("Purchase approved by",
+  "Approved at (SG)") appear whenever a purchase decision exists — covering
+  purchase_approved, finance_check, finance_approved and paid. Fields added
+  to the ApprovalItem interface (they were already in the API SELECT).
+- Finance approval keeps its existing "Payment approved by" line inside the
+  voucher block, so both stages are now visible in the drawer.
+
+### Verification
+- `npm run typecheck` 0 errors. `npm run build` clean. Verified in the
+  browser against the live In-finance-check item. Frontend only — no API or
+  test changes.
+
+---
+
+## 2026-08-27 (session 20) — Bug: AI analysis silently dropped at create
+
+Owner's fresh submission (tick files, run AI, edit the recommendation,
+submit) produced an item with NO AI block in the drawer. D1 showed both
+`comparison` and `ai_comparison` NULL on the new item.
+
+### Root cause
+The create-form submit only appended `aiComparison` when the typed
+comparison table had rows, and those rows only count with a per-file
+description. With AI doing the comparing, the owner ticked files without
+typing descriptions — so `comparison.length === 0` silently discarded the
+analysis (and its edited recommendation) she had just reviewed.
+
+### Done
+- approvals.astro submit now appends `aiComparison` whenever a preview
+  exists; the typed comparison table stays independent.
+- Regression test: create with `aiComparison` and deliberately NO
+  `comparison` field stores the analysis and returns it parsed in the detail
+  view. 265 total.
+- Verified end to end after a dev-server restart; owner confirmed working.
+
+### Verification
+- `npm run test:run` 265 passed (16 files). `npm run typecheck` 0 errors.
+  `npm run build` clean.
+
+---
+
+## 2026-08-26 (session 19) — AI summary/recommendation became editable fields
+
+Owner decision: the AI analysis texts are fields like any other — editable
+until the request is submitted for approval, frozen after, changeable again
+only through the Edit button.
+
+### Done
+- Create form: the preview's summary and recommendation now render as
+  textareas; whatever the admin leaves in them is what gets stored on submit.
+- Edit form: textareas pre-filled from the stored analysis appear whenever an
+  analysis exists; "Save changes" persists them via two new optional form
+  fields (`aiSummary`, `aiRecommendation`, caps 4000/1000, empty clears to
+  null).
+- The edit endpoint updates the texts inside the same guarded UPDATE as the
+  other fields, so the purchase-approval freeze covers them with no extra
+  rule. Sending the fields without a stored analysis returns 400; an
+  unreadable stored analysis returns 400 telling the admin to re-run Analyse.
+- Drawer display stays read-only for every role.
+- Tests +4 (edit persists + clears, 400 without analysis, 400 over cap, 409
+  after purchase approval with the stored text unchanged). 264 total. The
+  admin rotation pool in approvals.test.ts grew 12→20 emails because the new
+  creates exhausted the shared write rate-limit bucket (the file's own
+  documented pattern).
+
+### Verification
+- `npm run test:run` 264 passed (16 files). `npm run typecheck` 0 errors.
+  `npm run typecheck:worker` clean. `npm run build` clean.
+
+---
+
 ## 2026-08-26 (session 18) — AI analyse button: animated loading spinner
 
 Owner asked for a visual progress cue while an AI analysis runs, instead of

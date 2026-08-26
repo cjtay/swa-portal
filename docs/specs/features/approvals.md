@@ -34,7 +34,7 @@ Entry gate (middleware 7c): all `/api/approvals*` methods require admin, purchas
 | `GET /api/approvals/:id/attachment/:attId` | GET | — | Stream attachment (`?download=1`); nosniff + sanitised filename |
 | `POST /api/approvals/:id/approve` | POST | Purchase approver | Atomic pending → purchase_approved; emails creator |
 | `POST /api/approvals/:id/reject` | POST | Purchase approver | Reason required; resubmission returns to pending |
-| `POST /api/approvals/:id/edit` | POST | Item creator | Edit fields, add attachments, comparison rebuild, resubmit |
+| `POST /api/approvals/:id/edit` | POST | Item creator | Edit fields, add attachments, comparison rebuild, AI summary/recommendation text edits, resubmit |
 | `POST /api/approvals/:id/remind` | POST | Item creator | Re-send the waiting stage's email (pending or finance_check) |
 | `POST /api/approvals/:id/voucher` | POST | Item creator | Submit/resubmit voucher; assigns PV number; → finance_check |
 | `POST /api/approvals/:id/finance-approve` | POST | Finance approver only | Atomic finance_check → finance_approved; emails creator |
@@ -68,6 +68,7 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 - **Documents**: PDF/JPG/PNG/WebP/HEIC/HEIF, 10 MB each, 10 files per item; HTML and SVG always rejected. Files accumulate across multiple picker visits; viewed inline (iframe for PDFs).
 - **Comparison table**: rows typed by the creator, each linking to one attached document.
 - **AI quotation comparison** (2026-08-26, `docs/plans/AI-Quotation-Comparison-Plan.md`): Workers AI reads the ticked quotations (PDF text via `toMarkdown`, photos via a vision model), extracts vendor/item/prices/currency/GST/validity/lead time per document, converts prices to S$ **in code** from a daily KV-cached FX table (open.er-api.com), then a text model writes a 3–4 sentence summary and a one-line value-based recommendation. Unreadable files (scanned PDFs, unsupported types) get per-file notes, never silent skips. HEIC photos are converted to JPEG in the browser at pick time. Every result carries the label "AI-generated — verify against the original documents". Single-attempt AI calls with 30 s timeouts; no automatic retries anywhere.
+- **AI texts are editable fields** (owner decision 26-08-2026): the summary and recommendation render as textareas in the create-form preview and in the edit form, so the admin can correct the AI wording before approval. They ride the same UPDATE as every other field, so they freeze at purchase approval like title/payee/amount, and the create endpoint stores whatever edited values the form replays.
 - **Export**: standalone `/approvals/voucher?id=` renders the June-sample voucher layout for browser "Save as PDF" — no PDF library. "Prepared by" / "Payment approved by" print session names.
 
 ## 5. UI rules (`/approvals`)
