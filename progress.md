@@ -12,6 +12,38 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-26 (session 13) — AI quotation comparison: planning only
+
+Owner asked whether the approvals "multiple quotations to compare" tick could
+be linked to an LLM that reads the quotation files (PDF or photo), extracts
+common fields, converts prices to S$, and writes a short summary plus a
+one-line recommendation. Answer: yes, using Cloudflare Workers AI. Two
+decisions sessions produced a full plan. **No code was changed this session.**
+
+### Done
+- Verified Workers AI capabilities against current Cloudflare docs (Aug 2026):
+  `toMarkdown` reads PDFs, `.docx` and images; vision models read photos.
+- Cost risk analysis for the owner's volume (about 10 analyses/month): one
+  worst-case analysis costs under ~3,000 Neurons, the free allowance is
+  10,000 Neurons/day, so the feature stays inside what is already free. A
+  spike is capped four ways: login gate, per-user rate limit, IT admin
+  kill-switch, and the free plan's hard daily ceiling.
+- Owner decisions: Cloudflare Workers AI (no new accounts or packages);
+  preview button in the form plus Regenerate in the drawer; existing
+  PDF/image allowlist only (Word deferred); value-based recommendation;
+  IT-admin kill-switch in Settings.
+- **Plan saved to `docs/plans/AI-Quotation-Comparison-Plan.md`.** It covers
+  the pipeline (toMarkdown for PDFs, vision model for photos, browser-side
+  HEIC-to-JPEG, code-side S$ conversion from a KV-cached daily FX rate), two
+  new endpoints, the `ai_comparison` column, the `swa:ai_config` KV
+  kill-switch with server-side 503 enforcement, the full file list, and the
+  verification plan.
+
+### Next
+- Implement the plan when the owner gives the go-ahead.
+
+---
+
 ## 2026-08-25 (session 12) — Approvals hardening: race-safe writes + field freeze
 
 Gap-review against gtw2026's safeguards and the docs/checklist set found six
