@@ -12,6 +12,48 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-26 (session 15) — AI comparison: live-service fixes after local test
+
+Owner tested locally with two real vendor PDFs; both failed with "extraction
+returned unparseable JSON" and the console showed "this model does not support
+pdf input". Diagnosed with throw-away probes against the live Workers AI
+service (never committed), which found three real problems and one latent one.
+
+### Done
+- **Photo path was silently broken (latent bug).** The current runtime drops
+  the legacy top-level `image:` field — the model answered "I'm not capable of
+  processing images" while inventing JSON. Fixed: images now travel as
+  OpenAI-style content parts inside the user message. Probe-verified: the
+  model read "Acme Pte Ltd / S$1234.50" off a rendered image.
+- **toMarkdown embeds runtime notices inside its data.** For image-heavy or
+  scanned PDF pages it writes `ERROR: Cannot read "x.pdf" (this model does
+  not support pdf input). Inform the user.` into the markdown instead of
+  failing — the owner's PDFs hit exactly this, and that garbage became the
+  "document text" fed to extraction. Fixed: notice lines are stripped; the
+  PDF is skipped with an honest "attach a photo instead" note unless real
+  text remains beyond the metadata header and page headings (toMarkdown emits
+  `## Metadata` / `### Page N` even for empty pages).
+- **Response shapes vary.** `run()` returns `response` as a fenced string, or
+  as an already-parsed object when `guided_json` is used, plus a
+  `choices[0].message.content` copy. New `responsePayload()` accepts all
+  three. The comparison call now uses a `guided_json` schema
+  (probe-verified on the 70b model).
+- **End-to-end verified against the live service**: text PDF + photo through
+  the real `runAiComparison` — both read correctly, S$ conversion from the
+  live FX API, summary and recommendation produced.
+- Tests: +7 (notice detection, mixed-text salvage, object-response parsing,
+  responsePayload shapes, heading-only PDF skip). 259 total.
+- Plan doc §4.2 corrected to record the real API shapes.
+
+### Verification
+- `npm run test:run` 259 passed (16 files). `npm run typecheck` 0 errors.
+  `npm run typecheck:worker` clean. `npm run build` clean.
+- Owner to re-test locally with the two Meridian/Crestline PDFs: text PDFs
+  should now extract; scanned/image-only ones will show the honest per-file
+  note.
+
+---
+
 ## 2026-08-26 (session 14) — AI quotation comparison (approvals)
 
 Implemented `docs/plans/AI-Quotation-Comparison-Plan.md` in full. Workers AI

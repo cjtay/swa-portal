@@ -80,23 +80,34 @@ interface in `src/worker/types.ts`, and regenerate
 1. **Read each ticked quotation.**
    - PDF: `AI.toMarkdown()` extracts the real text. Reliable for PDFs with a
      text layer.
-   - JPEG, PNG, WebP photo: sent directly to the vision model
-     (`@cf/meta/llama-4-scout-17b-16e-instruct`), which reads figures from the
-     image.
+   - JPEG, PNG, WebP photo: sent to the vision model
+     (`@cf/meta/llama-4-scout-17b-16e-instruct`) as an OpenAI-style content
+     part inside the user message
+     (`[{type:'text',…},{type:'image_url',image_url:{url:'data:…'}}]`).
+     Live-service probes (2026-08-26) proved the older top-level `image:`
+     field is silently dropped by the current runtime — the model answered as
+     if no image was sent.
    - HEIC (iPhone photos): converted to JPEG in the browser at pick time,
      reusing the canvas pattern already on the membership register page.
-   - Unreadable files (scanned PDFs with no text layer, damaged files) are
-     skipped with a per-file note in the result. Never a silent failure.
-2. **Extract structured JSON per document** using JSON output mode: vendor,
-   item name, description/features, unit price, total price, currency, GST,
-   validity, lead time. Unknown fields stay null.
+   - Unreadable files are skipped with a per-file note in the result, never a
+     silent failure. `toMarkdown` can embed runtime notice lines (for example
+     `ERROR: Cannot read "x.pdf" (this model does not support pdf input)`)
+     inside its markdown data for image-only or scanned pages instead of
+     failing; those lines are stripped and the PDF is skipped unless real
+     text remains beyond the metadata and page headings.
+2. **Extract structured JSON per document**: vendor, item name,
+   description/features, unit price, total price, currency, GST, validity,
+   lead time. Unknown fields stay null. Parsing accepts every response shape
+   the runtime produces: plain string (often fenced JSON), an already-parsed
+   object (guided_json mode), or `choices[0].message.content`.
 3. **Convert to S$ in code, not by the model.** The worker fetches daily
    exchange rates from a free, no-key FX API and caches them for 24 hours in
    the `SWA_CONFIG` KV namespace. The report states the rate and date used.
    Doing the maths in code avoids model arithmetic mistakes.
 4. **Compare.** One pass with `@cf/meta/llama-3.3-70b-instruct-fp8-fast`
-   produces the comparison table (already normalised to S$ by step 3), the
-   short paragraph, and the one-line recommendation.
+   under a `guided_json` schema (probe-verified) produces the comparison
+   table (already normalised to S$ by step 3), the short paragraph, and the
+   one-line recommendation.
 
 ### 4.3 Endpoints
 

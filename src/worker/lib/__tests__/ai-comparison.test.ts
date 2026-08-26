@@ -28,6 +28,7 @@ import {
   isAiComparisonEnabled,
   parseAiComparisonJson,
   parseExtractedQuote,
+  responsePayload,
   runAiComparison,
   type AiComparisonInput,
 } from '../ai-comparison';
@@ -69,24 +70,34 @@ function imageInput(name = 'photo.jpg'): AiComparisonInput {
 }
 
 // The fake binding answers extraction (image vs text) and comparison calls
-// with canned JSON; toMarkdown returns fixed PDF text.
+// with canned JSON; toMarkdown returns fixed PDF text. Image detection follows
+// the REAL payload shape: images travel as OpenAI-style content parts in the
+// last user message (a top-level `image:` field is silently dropped by the
+// runtime — 2026-08-26 probe finding).
 const PDF_TEXT_QUOTE = { vendor: 'Text Vendor Pte Ltd', itemName: 'Foldable tables', totalPrice: 1000, currency: 'SGD' };
 const IMAGE_TEXT_QUOTE = { vendor: 'Photo Vendor Sdn Bhd', itemName: 'Foldable tables', totalPrice: 150, currency: 'USD' };
+
+function isImagePayload(inputs: Record<string, unknown>): boolean {
+  const messages = inputs['messages'] as Array<{ role: string; content: unknown }> | undefined;
+  const last = messages?.[messages.length - 1];
+  return Array.isArray(last?.content);
+}
 
 function makeFakeAi(overrides: Partial<AiBinding> = {}): AiBinding {
   return {
     async run(model, inputs) {
       if (model === AI_MODEL_EXTRACT) {
-        const quote = (inputs as { image?: unknown }).image ? IMAGE_TEXT_QUOTE : PDF_TEXT_QUOTE;
+        const quote = isImagePayload(inputs as Record<string, unknown>) ? IMAGE_TEXT_QUOTE : PDF_TEXT_QUOTE;
         return { response: '```json\n' + JSON.stringify({ ...quote, unitPrice: null, description: null, gst: null, validity: null, leadTime: null }) + '\n```' };
       }
       if (model === AI_MODEL_COMPARE) {
-        return { response: JSON.stringify({ summary: 'Text Vendor is cheaper overall.', recommendation: 'Choose Text Vendor Pte Ltd.' }) };
+        // guided_json mode: the runtime returns an already-parsed object.
+        return { response: { summary: 'Text Vendor is cheaper overall.', recommendation: 'Choose Text Vendor Pte Ltd.' } };
       }
       throw new Error('unexpected model ' + model);
     },
     async toMarkdown() {
-      return { format: 'markdown' as const, data: 'Quotation from Text Vendor Pte Ltd. Total: S$1,000.00.' };
+      return { format: 'markdown' as const, data: '## Metadata\n- x\n\n## Contents\n### Page 1\nQuotation from Text Vendor Pte Ltd. Total: S$1,000.00.' };
     },
     ...overrides,
   };
@@ -120,6 +131,23 @@ describe('extractJson', () => {
   it('returns null for unparseable text', () => {
     expect(extractJson('no json here')).toBeNull();
     expect(extractJson('')).toBeNull();
+  });
+});
+
+describe('responsePayload', () => {
+  it('accepts a fenced string response', () => {
+    expect(responsePayload({ response: '```json\n{"a":1}\n```' })).toEqual({ a: 1 });
+  });
+  it('accepts an already-parsed object response (guided_json shape)', () => {
+    expect(responsePayload({ response: { a: 1 } })).toEqual({ a: 1 });
+  });
+  it('falls back to choices[0].message.content', () => {
+    expect(responsePayload({ choices: [{ message: { content: 'Here: {"a":1}' } }] })).toEqual({ a: 1 });
+  });
+  it('returns null for nothing usable', () => {
+    expect(responsePayload(undefined)).toBeNull();
+    expect(responsePayload({ response: 'no json' })).toBeNull();
+    expect(responsePayload({})).toBeNull();
   });
 });
 
@@ -212,10 +240,10 @@ describe('runAiComparison', () => {
       async run(model, inputs) {
         if (model === AI_MODEL_EXTRACT) {
           // Only the photo (vision) call fails; the PDF text path works.
-          if ((inputs as { image?: unknown }).image) throw new Error('vision exploded');
+          if (isImagePayload(inputs as Record<string, unknown>)) throw new Error('vision exploded');
           return { response: JSON.stringify(PDF_TEXT_QUOTE) };
         }
-        return { response: '{}' };
+        return { response: {} };
       },
     });
     const analysis = await runAiComparison(fakeEnv(failingVision), [
@@ -235,13 +263,63 @@ describe('runAiComparison', () => {
     // A scanned PDF: toMarkdown succeeds but returns no text → honest skip.
     const emptyAi: AiBinding = makeFakeAi({
       async toMarkdown() {
-        return { format: 'markdown' as const, data: '   ' };
+        return { format: 'markdown' as const, data: '## Metadata\n- x\n\n## Contents\n### Page 1\n' };
       },
     });
     const analysis = await runAiComparison(fakeEnv(emptyAi), [pdfInput('blank.pdf')], ADMIN_EMAIL);
     expect(analysis.quotes).toHaveLength(0);
     expect(analysis.summary).toBeNull();
     expect(analysis.files[0].status).toBe('skipped');
+  });
+
+  it('detects the runtime notice toMarkdown embeds for image-only pages (live-service finding 2026-08-26)', async () => {
+    await seedFx();
+    // Real shape observed in production testing: the reader cannot pass an
+    // image-heavy page to its internal model and writes the notice INTO the
+    // markdown data instead of failing.
+    const noticeAi: AiBinding = makeFakeAi({
+      async toMarkdown() {
+        return {
+          format: 'markdown' as const,
+          data: '# scan.pdf\n## Metadata\n- x\n\n## Contents\n### Page 1\nERROR: Cannot read "scan.pdf" (this model does not support pdf input). Inform the user.\n',
+        };
+      },
+    });
+    const analysis = await runAiComparison(fakeEnv(noticeAi), [pdfInput('scan.pdf')], ADMIN_EMAIL);
+    expect(analysis.quotes).toHaveLength(0);
+    expect(analysis.files[0].status).toBe('skipped');
+    expect(analysis.files[0].note).toContain('photo');
+  });
+
+  it('salvages a PDF whose text is partly readable despite an embedded notice line', async () => {
+    await seedFx();
+    const mixedAi: AiBinding = makeFakeAi({
+      async toMarkdown() {
+        return {
+          format: 'markdown' as const,
+          data: '## Contents\n### Page 1\nQuotation from Text Vendor Pte Ltd. Total: S$1,000.00.\n### Page 2\nERROR: Cannot read "mixed.pdf" (this model does not support pdf input). Inform the user.\n',
+        };
+      },
+    });
+    const analysis = await runAiComparison(fakeEnv(mixedAi), [pdfInput('mixed.pdf')], ADMIN_EMAIL);
+    expect(analysis.files[0].status).toBe('ok');
+    expect(analysis.quotes).toHaveLength(1);
+    expect(analysis.quotes[0].vendor).toBe('Text Vendor Pte Ltd');
+  });
+
+  it('accepts an already-parsed object response from run() (guided_json runtime shape)', async () => {
+    await seedFx();
+    const objectAi: AiBinding = makeFakeAi({
+      async run(model) {
+        if (model === AI_MODEL_EXTRACT) {
+          return { response: { ...PDF_TEXT_QUOTE, unitPrice: null, description: null, gst: null, validity: null, leadTime: null } };
+        }
+        return { response: {} };
+      },
+    });
+    const analysis = await runAiComparison(fakeEnv(objectAi), [pdfInput('obj.pdf')], ADMIN_EMAIL);
+    expect(analysis.files[0].status).toBe('ok');
+    expect(analysis.quotes[0].vendor).toBe('Text Vendor Pte Ltd');
   });
 });
 

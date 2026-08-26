@@ -10,7 +10,11 @@ export interface AiChatMessage {
 }
 
 export interface AiRunTextResult {
-  response?: string;
+  // The runtime returns the model text here, OR an already-parsed object when
+  // the call used guided_json (verified against the live service 2026-08-26).
+  response?: string | Record<string, unknown>;
+  // Chat-completions shape (the runtime also returns choices[].message.content).
+  choices?: Array<{ message?: { content?: string | Array<Record<string, unknown>> } }>;
   errors?: unknown[];
 }
 

@@ -11,7 +11,7 @@
 // the global daily circuit breaker, a per-call timeout, and single-attempt
 // AI calls (no automatic retries anywhere).
 
-import type { AiBinding, AiToMarkdownResult, Env } from '../types';
+import type { AiBinding, AiToMarkdownResult, AiRunTextResult, Env } from '../types';
 
 // ── Models (plan §4.2) ─────────────────────────────────────────────────────
 // Scout reads photos AND text, so it serves extraction for both; the 70B
@@ -186,6 +186,27 @@ export function extractJson(text: string): Record<string, unknown> | null {
   return null;
 }
 
+/**
+ * Normalise a run() result into a JSON object, whatever shape the runtime
+ * picked. Verified against the live service (2026-08-26 probes):
+ * - plain calls: response is a string (often fenced JSON),
+ * - guided_json calls: response is an ALREADY-PARSED object,
+ * - both also carry choices[0].message.content as a fallback.
+ */
+export function responsePayload(result: AiRunTextResult | null | undefined): Record<string, unknown> | null {
+  if (!result) return null;
+  const r = result.response;
+  if (r && typeof r === 'object' && !Array.isArray(r)) return r;
+  if (typeof r === 'string' && r.trim().length > 0) return extractJson(r);
+  const content = result.choices?.[0]?.message?.content;
+  if (typeof content === 'string' && content.trim().length > 0) return extractJson(content);
+  if (Array.isArray(content)) {
+    const textPart = content.find((p) => p && typeof p === 'object' && typeof p['text'] === 'string') as { text?: string } | undefined;
+    if (textPart?.text) return extractJson(textPart.text);
+  }
+  return null;
+}
+
 function str(v: unknown, max: number): string | null {
   if (typeof v !== 'string') return null;
   const t = v.trim();
@@ -275,31 +296,78 @@ function dataUriFor(mime: string, bytes: ArrayBuffer): string {
   return `data:${normalised};base64,${arrayBufferToBase64(bytes)}`;
 }
 
-/** Extract quote fields from an already-read image or text document. */
+/** Extract quote fields from an already-read image or text document.
+ *
+ *  Image format note (verified against the live service 2026-08-26): the
+ *  legacy top-level `image:` field is SILENTLY DROPPED by the current
+ *  chat-completions runtime — the model answers as if no image was sent.
+ *  Images must travel as OpenAI-style content parts inside the user message:
+ *  [{type:'text',...},{type:'image_url',image_url:{url:'data:...'}}].
+ *  */
 async function extractQuote(
   ai: AiBinding,
   input: { mime: string; bytes: ArrayBuffer } | { text: string },
 ): Promise<ExtractedQuote> {
-  const base = { messages: [{ role: 'system' as const, content: EXTRACT_SYSTEM_PROMPT }], max_tokens: 1024 };
-  const payload =
-    'text' in input
-      ? { ...base, messages: [...base.messages, { role: 'user' as const, content: `${EXTRACT_USER_PROMPT}\n\n--- DOCUMENT START ---\n${input.text.slice(0, MAX_DOCUMENT_TEXT_CHARS)}\n--- DOCUMENT END ---` }] }
-      : {
-          ...base,
-          // Workers AI vision format (llama-vision tutorial): messages plus an
-          // `image` field holding a data URI.
-          messages: [...base.messages, { role: 'user' as const, content: EXTRACT_USER_PROMPT }],
-          image: dataUriFor(input.mime, input.bytes),
-        };
+  const messages: Array<{ role: 'system' | 'user'; content: unknown }> = [
+    { role: 'system', content: EXTRACT_SYSTEM_PROMPT },
+  ];
+  if ('text' in input) {
+    messages.push({
+      role: 'user',
+      content: `${EXTRACT_USER_PROMPT}\n\n--- DOCUMENT START ---\n${input.text.slice(0, MAX_DOCUMENT_TEXT_CHARS)}\n--- DOCUMENT END ---`,
+    });
+  } else {
+    messages.push({
+      role: 'user',
+      content: [
+        { type: 'text', text: EXTRACT_USER_PROMPT },
+        { type: 'image_url', image_url: { url: dataUriFor(input.mime, input.bytes) } },
+      ],
+    });
+  }
 
-  const result = await withTimeout(ai.run(AI_MODEL_EXTRACT, payload), AI_CALL_TIMEOUT_MS, 'extraction');
-  const parsed = extractJson(String(result?.response || ''));
+  const result = (await withTimeout(
+    ai.run(AI_MODEL_EXTRACT, { messages, max_tokens: 1024 }),
+    AI_CALL_TIMEOUT_MS,
+    'extraction',
+  )) as AiRunTextResult;
+  const parsed = responsePayload(result);
   if (!parsed) throw new Error('extraction returned unparseable JSON');
   return parseExtractedQuote(parsed);
 }
 
-/** PDF (or any toMarkdown-supported file) → markdown text. */
-async function readPdfText(ai: AiBinding, filename: string, bytes: ArrayBuffer, mime: string): Promise<string> {
+/** PDF (or any toMarkdown-supported file) → cleaned markdown text.
+ *
+ *  Two hardening rules, both from live-service findings (2026-08-26):
+ *  1. toMarkdown prefixes a `## Metadata` section; a scanned PDF returns
+ *     metadata + EMPTY page sections, so emptiness must be judged on the
+ *     content AFTER that header.
+ *  2. When the internal converter cannot process a page (image-heavy or
+ *     scanned pages), it embeds a runtime notice line inside the data —
+ *     `ERROR: Cannot read "file.pdf" (this model does not support pdf
+ *     input). Inform the user.` — instead of failing. Those lines are
+ *     stripped here; whether enough real text remains decides readability.
+ */
+const RUNTIME_NOTICE_LINE = /^ERROR:\s*Cannot read/i;
+const METADATA_HEADER = '## Contents';
+
+export interface PdfReadResult {
+  text: string; // cleaned text (notices stripped, metadata header removed)
+  readerError: boolean; // at least one runtime notice was found
+}
+
+/** True when the PDF body has content beyond headings (toMarkdown emits
+ *  `### Page N` section headers even for empty pages — probe 2026-08-26). */
+export function hasMeaningfulPdfText(text: string): boolean {
+  const nonHeading = text
+    .split('\n')
+    .filter((line) => !/^#{1,6}\s/.test(line.trim()))
+    .join('')
+    .trim();
+  return /[A-Za-z0-9$]/.test(nonHeading);
+}
+
+async function readPdfText(ai: AiBinding, filename: string, bytes: ArrayBuffer, mime: string): Promise<PdfReadResult> {
   const results = await withTimeout(
     ai.toMarkdown([{ name: filename, blob: new Blob([bytes], { type: mime }) }]),
     AI_CALL_TIMEOUT_MS,
@@ -309,7 +377,14 @@ async function readPdfText(ai: AiBinding, filename: string, bytes: ArrayBuffer, 
   if (!first || first.format === 'error' || typeof first.data !== 'string') {
     throw new Error(first?.error || 'conversion returned no text');
   }
-  return first.data;
+  const lines = first.data.split('\n');
+  const readerError = lines.some((line) => RUNTIME_NOTICE_LINE.test(line.trim()));
+  const stripped = lines
+    .filter((line) => !RUNTIME_NOTICE_LINE.test(line.trim()) && !/Inform the user/i.test(line))
+    .join('\n');
+  const headerIdx = stripped.indexOf(METADATA_HEADER);
+  const text = headerIdx >= 0 ? stripped.slice(headerIdx + METADATA_HEADER.length) : stripped;
+  return { text, readerError };
 }
 
 // ── The pipeline (plan §4.2) ───────────────────────────────────────────────
@@ -329,10 +404,17 @@ export async function runAiComparison(
     try {
       let quote: ExtractedQuote;
       if (file.mime === 'application/pdf') {
-        const text = await readPdfText(env.AI, file.filename, file.bytes, file.mime);
-        if (text.trim().length === 0) {
-          // A scanned PDF with no text layer. Honest skip, never silent.
-          fileNotes.push({ filename: file.filename, status: 'skipped', note: 'No readable text (a scanned PDF cannot be read; attach a photo of it instead).' });
+        const { text, readerError } = await readPdfText(env.AI, file.filename, file.bytes, file.mime);
+        if (!hasMeaningfulPdfText(text)) {
+          // Honest skip, never silent: a scan (or image-only PDF) has no text
+          // for the reader to extract. The note tells the admin what to do.
+          fileNotes.push({
+            filename: file.filename,
+            status: 'skipped',
+            note: readerError
+              ? 'The document reader could not process this PDF (it appears scanned or image-only). Attach a photo of it instead.'
+              : 'No readable text in this PDF (a scanned PDF cannot be read; attach a photo of it instead).',
+          });
           continue;
         }
         quote = await extractQuote(env.AI, { text });
@@ -359,7 +441,9 @@ export async function runAiComparison(
 
   // Comparison pass: only when at least one quotation was extracted. A model
   // failure here leaves the table intact with a null summary — the rows are
-  // still the valuable part.
+  // still the valuable part. guided_json (probe-verified on this model,
+  // 2026-08-26) constrains the reply to the two fields; responsePayload then
+  // handles the runtime returning an already-parsed object.
   let summary: string | null = null;
   let recommendation: string | null = null;
   if (quotes.length > 0) {
@@ -380,18 +464,26 @@ export async function runAiComparison(
           leadTime: q.leadTime,
         })),
       );
-      const result = await withTimeout(
+      const result = (await withTimeout(
         env.AI.run(AI_MODEL_COMPARE, {
           messages: [
             { role: 'system', content: COMPARE_SYSTEM_PROMPT },
             { role: 'user', content: COMPARE_USER_PROMPT(rowsJson) },
           ],
+          guided_json: {
+            type: 'object',
+            properties: {
+              summary: { type: 'string' },
+              recommendation: { type: 'string' },
+            },
+            required: ['summary', 'recommendation'],
+          },
           max_tokens: 1024,
         }),
         AI_CALL_TIMEOUT_MS,
         'comparison',
-      );
-      const parsed = extractJson(String(result?.response || ''));
+      )) as AiRunTextResult;
+      const parsed = responsePayload(result);
       if (parsed) {
         summary = str(parsed['summary'], 4000);
         recommendation = str(parsed['recommendation'], 1000);
