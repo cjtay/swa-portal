@@ -151,13 +151,13 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
 
   .ap-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
   .ap-tab {
-    padding: 0.4rem 0.8rem;
+    padding: 0.5rem 1rem;
     border: 1px solid var(--border);
     background: var(--bg);
-    color: var(--text-muted);
+    color: #4b5563;
     border-radius: 9999px;
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
@@ -167,7 +167,10 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   .ap-tab:focus-visible,
   .ap-page-btn:focus-visible,
   .row-view-btn:focus-visible,
-  .drawer-close:focus-visible {
+  .drawer-close:focus-visible,
+  .ap-file-remove:focus-visible,
+  #ap-create-card input[type="checkbox"]:focus-visible,
+  #ap-drawer input[type="checkbox"]:focus-visible {
     outline: 2px solid var(--swa-3);
     outline-offset: 2px;
   }
@@ -176,14 +179,40 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     color: var(--swa-2);
     border-radius: 9999px;
     padding: 0 0.5rem;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 600;
     min-width: 1.3rem;
     text-align: center;
   }
   .ap-tab.active .ap-tab-count { background: rgba(255, 255, 255, 0.25); color: #fff; }
 
-  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 0.4rem; }
+  /* Scrolling-shadow hint (Lea Verou technique): the two "local" white
+     layers travel with the content and hide their edge shadow only once
+     that side is fully scrolled, telling readers more columns exist.
+     contain:paint stops the wide table's sideways overflow leaking to the
+     page itself — without it the browser lets the whole page pan right,
+     revealing a band of empty space beside the table (measured 633px on a
+     375px phone). */
+  .table-scroll {
+    overflow-x: auto;
+    contain: paint;
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    background:
+      linear-gradient(to right, var(--bg-card), rgba(255, 255, 255, 0)) left / 3rem 100% no-repeat local,
+      linear-gradient(to left, var(--bg-card), rgba(255, 255, 255, 0)) right / 3rem 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.22), transparent) left / 1.5rem 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.22), transparent) right / 1.5rem 100% no-repeat scroll;
+  }
+
+  /* Senior-friendly size floor: the board table is the main reading
+     surface, so body cells and headers stay above 14px/12.5px even though
+     the shared .data-table rules are smaller. Horizontal cell padding is
+     trimmed to 0.75rem so the bigger text still fits without sideways
+     scrolling on a 1200px desktop window. */
+  #ap-board-table { font-size: 0.95rem; }
+  #ap-board-table th { font-size: 0.8rem; padding: 0.75rem; }
+  #ap-board-table td { padding: 0.65rem 0.75rem; }
 
   .ap-form-grid {
     display: grid;
@@ -191,36 +220,59 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     gap: 0.75rem;
     margin-bottom: 0.5rem;
   }
-  .ap-field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
-  .ap-field > span { font-weight: 500; color: var(--text); }
-  .ap-check { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+  .ap-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; }
+  /* Field labels use the same caption family as the detail list above
+     (12px, grey, weight 600) so a label can never be mistaken for the
+     value typed beside it. Sentence case, because several of these labels
+     carry full instructions that would shout in uppercase. */
+  .ap-field > span {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+  }
+  .ap-check { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; }
   /* display:flex would override the hidden attribute (same class of bug as
      the 2026-07-05 drawer fix) — restore it explicitly. */
   .ap-check[hidden] { display: none; }
 
-  /* Brand-coloured checkboxes and file pickers (approvals page only). */
+  /* Brand-coloured checkboxes and file pickers (approvals page only).
+     Checkboxes are 20px: 16px is hard to tick accurately for older users.
+     Inputs are 1rem because Safari on iPhone auto-zooms the page whenever
+     a focusable field renders below 16px. */
   #ap-create-card input[type="checkbox"],
   #ap-drawer input[type="checkbox"] {
     accent-color: var(--swa-1);
-    width: 1rem;
-    height: 1rem;
+    width: 1.25rem;
+    height: 1.25rem;
+    /* flex-shrink:0 — without it the long checkbox labels squeeze the box
+       narrower than its set width (measured 13px against a 20px height). */
+    flex-shrink: 0;
+  }
+  #ap-create-card .form-input,
+  #ap-drawer .form-input {
+    font-size: 1rem;
+  }
+  #ap-create-card .form-input:focus,
+  #ap-drawer .form-input:focus {
+    box-shadow: 0 0 0 3px rgba(135, 75, 161, 0.35);
   }
   #ap-create-card input[type="file"].form-input,
   #ap-drawer input[type="file"].form-input {
     padding: 0.45rem 0.6rem;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     color: var(--text-muted);
   }
   #ap-create-card input[type="file"]::file-selector-button,
   #ap-drawer input[type="file"]::file-selector-button {
     margin-right: 0.75rem;
-    padding: 0.35rem 0.85rem;
+    padding: 0.55rem 1.1rem;
     border: 1px solid var(--swa-3);
     border-radius: 0.375rem;
     background: var(--bg);
     color: var(--swa-2);
     font-family: inherit;
-    font-size: 0.8rem;
+    font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
   }
@@ -249,7 +301,14 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     font-weight: 500;
   }
 
-  .ap-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+  .ap-actions { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+  /* Every button inside the two forms (New request card + drawer) matches
+     the drawer action buttons: 42px tall, 14.4px text. */
+  #ap-create-card .btn,
+  #ap-drawer .btn {
+    font-size: 0.9rem;
+    min-height: 2.6rem;
+  }
   .ap-actions a.btn { text-decoration: none; display: inline-flex; align-items: center; }
   #ap-reject-box, #ap-finance-reject-box, #ap-edit-form, #ap-voucher-form, #ap-paid-form {
     border: 1px solid var(--border);
@@ -278,7 +337,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     flex-wrap: wrap;
   }
   .ap-comp-row:last-child { border-bottom: none; }
-  .ap-comp-name { font-size: 0.85rem; min-width: 180px; word-break: break-all; }
+  .ap-comp-name { font-size: 0.9rem; min-width: 180px; word-break: break-all; }
 
   .ap-file-row {
     display: flex;
@@ -292,8 +351,9 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   .ap-file-row:last-of-type { border-bottom: none; }
   .ap-file-row .ap-comp-name { min-width: 0; flex: 1; }
   .ap-file-remove {
-    padding: 0.15rem 0.55rem;
-    font-size: 0.75rem;
+    padding: 0.45rem 0.9rem;
+    min-height: 2.25rem;
+    font-size: 0.85rem;
     border: 1px solid var(--border);
     background: var(--bg);
     color: #b3261e;
@@ -304,9 +364,9 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
 
   .ap-chip {
     display: inline-block;
-    padding: 0.15rem 0.6rem;
+    padding: 0.2rem 0.65rem;
     border-radius: 9999px;
-    font-size: 0.78rem;
+    font-size: 0.85rem;
     font-weight: 600;
     white-space: nowrap;
   }
@@ -318,8 +378,9 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   .ap-chip-paid { background: #eceff1; color: #37474f; }
 
   .row-view-btn {
-    padding: 0.3rem 0.7rem;
-    font-size: 0.78rem;
+    padding: 0.5rem 1rem;
+    min-height: 2.5rem;
+    font-size: 0.9rem;
     border: 1px solid var(--swa-3);
     background: var(--bg);
     color: var(--swa-2);
@@ -365,21 +426,23 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     margin-top: 0.75rem;
   }
   .ap-pagination:empty { display: none; }
-  .ap-page-info { font-size: 0.8rem; color: var(--text-muted); }
+  .ap-page-info { font-size: 0.85rem; color: #4b5563; }
   .ap-page-btns { display: flex; gap: 0.3rem; align-items: center; flex-wrap: wrap; }
   .ap-page-btn {
-    padding: 0.2rem 0.6rem;
-    font-size: 0.78rem;
+    padding: 0.45rem 0.85rem;
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+    font-size: 0.9rem;
     border: 1px solid var(--border);
     background: var(--bg);
-    color: var(--text-muted);
+    color: #4b5563;
     border-radius: 0.3rem;
     cursor: pointer;
   }
   .ap-page-btn:hover:not(:disabled) { border-color: var(--swa-3); color: var(--swa-2); }
   .ap-page-btn.active { background: var(--swa-1); border-color: var(--swa-1); color: #fff; }
   .ap-page-btn:disabled { opacity: 0.5; cursor: default; }
-  .ap-page-ellipsis { padding: 0 0.15rem; color: var(--text-muted); font-size: 0.78rem; }
+  .ap-page-ellipsis { padding: 0 0.15rem; color: var(--text-muted); font-size: 0.85rem; }
 
   .drawer-overlay {
     position: fixed;
@@ -413,12 +476,19 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   .drawer-header h2 { margin: 0; font-size: 1.15rem; color: var(--swa-2); }
   .drawer-close {
     background: none;
-    border: none;
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-size: 1.6rem;
     line-height: 1;
     cursor: pointer;
-    color: var(--text-muted);
+    color: #4b5563;
   }
+  .drawer-close:hover { background: #f5f0f8; border-color: var(--swa-3); }
   .drawer-body { padding: 1.25rem; display: flex; flex-direction: column; gap: 1.25rem; }
 
   .ap-detail-grid {
@@ -426,20 +496,27 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     /* Two columns at the 760px drawer width, so long values such as email
        addresses fit on one line instead of wrapping mid-word. */
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 0.6rem 1.25rem;
+    gap: 0.9rem 1.25rem;
   }
-  .ap-detail-item { font-size: 0.85rem; }
+  /* Label-vs-value hierarchy: the caption line is quiet small caps; the
+     value is the biggest, darkest text in the pair; a hairline divider
+     closes each pair so the list never reads as one wall of text. */
+  .ap-detail-item {
+    font-size: 0.95rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--border);
+  }
   .ap-detail-item dt {
     color: var(--text-muted);
-    margin: 0 0 0.15rem;
-    font-size: 0.7rem;
+    margin: 0 0 0.2rem;
+    font-size: 0.75rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
   /* overflow-wrap (not word-break) only splits a word when it truly cannot
      fit; long rows marked wide span both columns and never wrap. */
-  .ap-detail-item dd { margin: 0; font-weight: 500; font-size: 0.9rem; overflow-wrap: break-word; }
+  .ap-detail-item dd { margin: 0; font-weight: 600; font-size: 1rem; overflow-wrap: break-word; }
   .ap-detail-item--wide { grid-column: 1 / -1; }
 
   .ap-note {
@@ -464,16 +541,28 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     flex-wrap: wrap;
     margin-bottom: 0.5rem;
   }
-  .ap-attachment-name { font-size: 0.85rem; font-weight: 600; word-break: break-all; }
+  .ap-attachment-name { font-size: 0.9rem; font-weight: 600; word-break: break-all; }
   .ap-attachment-actions { display: flex; gap: 0.5rem; align-items: center; }
   .ap-attachment-actions a {
-    font-size: 0.78rem;
+    font-size: 0.9rem;
+    padding: 0.3rem 0.25rem;
     color: var(--swa-2);
   }
   .ap-attachment-preview img { max-width: 100%; height: auto; border-radius: 0.3rem; }
   .ap-attachment-preview iframe { width: 100%; height: 560px; border: 1px solid var(--border); border-radius: 0.3rem; }
 
-  .ap-comparison-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  /* Responsive-table pattern: display:block + overflow-x on the table lets
+     a wide table (the AI comparison reaches ~560px on a 375px phone) pan
+     within its own border box. Scrolling stays local to the table, so the
+     summary text and nearby cards never slide away, and the drawer itself
+     can no longer be dragged sideways leaving an empty band. */
+  .ap-comparison-table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
   .ap-comparison-table th, .ap-comparison-table td {
     border: 1px solid var(--border);
     padding: 0.4rem 0.6rem;
@@ -496,7 +585,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   .ap-ai-disclaimer {
     display: block;
     margin: 0.5rem 0 0;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     color: var(--text-muted);
   }
   .ap-ai-reco {
@@ -507,7 +596,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     font-weight: 600;
     color: var(--swa-2);
   }
-  .ap-ai-meta { margin: 0.5rem 0 0; font-size: 0.75rem; color: var(--text-muted); }
+  .ap-ai-meta { margin: 0.5rem 0 0; font-size: 0.8rem; color: var(--text-muted); }
 
   /* Rotating ring shown beside the working message while an AI analysis runs.
      Pure CSS — no image, no emoji, respects prefers-reduced-motion. */
@@ -552,6 +641,14 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   .ap-voucher .ap-comparison-table th:nth-child(4),
   .ap-voucher .ap-comparison-table td:nth-child(4) {
     white-space: nowrap;
+  }
+
+  /* Phones: admin.css shrinks .data-table to 0.75rem below 768px; the ID
+     selector here out-specifies it so the approvals board stays readable
+     on the small screens older members actually use. */
+  @media (max-width: 768px) {
+    #ap-board-table { font-size: 0.9rem; }
+    #ap-board-table th { font-size: 0.78rem; }
   }
 </style>
 

@@ -12,6 +12,46 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-28 (session 23) — Approvals UI: senior-friendly CSS pass (browser-verified)
+
+Owner asked for the approvals screen to be easier for older members on
+desktop and phone. All changes CSS-only in approvals.astro's style block;
+every fix measured in the live dev server with Playwright at 1200px and
+375px, across admin, purchase-approver and finance-approver sessions.
+
+### Done
+- Size floor: board table 15.2px body / 12.8px heads (mobile override keeps
+  14.4px where admin.css shrank to 12px), chips 13.6px, drawer labels
+  12px captions with 16px weight-600 values, tabs 14.4px.
+- Tap targets: page/View/Remove buttons and drawer close now 40-42px tall;
+  checkboxes 20x20 (flex-shrink:0 — long labels were squeezing them to
+  13px, a pre-existing bug).
+- Inputs 1rem so Safari on iPhone stops auto-zooming the page.
+- Hierarchy: dt/dd pairs split into quiet grey small-caps captions vs
+  16px bold dark values, hairline divider per pair; form field labels
+  (.ap-field > span) use the same caption family so Edit/create forms
+  match; all form buttons 42px tall like the drawer action buttons.
+- Scroll behaviour: .table-scroll uses the scrolling-shadow hint (fade on
+  the cut edge, disappears when fully scrolled) plus contain:paint — the
+  wide table was leaking to the page layer and letting the whole page pan
+  633px into empty space. .ap-comparison-table switched to the
+  responsive-table pattern (display:block + overflow-x) so the 558px AI
+  table pans inside its own border box instead of dragging the drawer
+  sideways; an earlier section-level attempt was rejected because it slid
+  the AI summary off-screen.
+- Contrast: inactive tabs/headers/pagination grey #6b7280 -> #4b5563 on
+  small text (measured 4.63:1 before; nothing failed AA, this is margin).
+  Focus-visible rings added for Remove buttons and checkboxes.
+
+### Verification
+- `npm run build` clean after each change. Measured before/after on every
+  fix; screenshots archived (session temp dir). Role gating re-checked
+  (approvers see no New request button; Approve/Reject for both stages).
+- Desktop 1200px regression caught and fixed: bigger fonts overflowed the
+  board table by 44px — cell padding trimmed to 0.75rem, fits exactly.
+
+---
+
 ## 2026-08-27 (session 22) — AI analysis: friendly note when Cloudflare's reader fails
 
 Owner's three mic-quote PDFs all failed Analyse with "Could not read this
