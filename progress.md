@@ -12,6 +12,34 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-27 (session 22) — AI analysis: friendly note when Cloudflare's reader fails
+
+Owner's three mic-quote PDFs all failed Analyse with "Could not read this
+document (Unexpected token 'e', "error code: 1031 " is not valid JSON)".
+Retrying the same files later the same evening worked.
+
+### Root cause
+Cloudflare's toMarkdown backend answered with a plain-text edge error
+("error code: 1031", undocumented, not on the status page) during a
+transient degradation. The runtime tried to parse that text as JSON, and
+the parse error is what the admin saw. Not a portal bug and not the files.
+
+### Done
+- ai-comparison.ts: new readerFailureNote() turns any error containing
+  "error code: NNNN" into "Cloudflare's document reader failed on this
+  file (Cloudflare error NNNN). This is usually temporary. Run Analyse
+  again in a few minutes, or attach a photo of the quotation instead."
+  All other failures keep the old cause-in-parens note. Single-attempt
+  policy unchanged (plan §4.6).
+- Regression test feeds the exact thrown message from 2026-08-27 through
+  runAiComparison and checks the note. 266 total.
+
+### Verification
+- `npm run test:run` 266 passed (16 files). `npm run typecheck` 0 errors.
+  `npm run typecheck:worker` clean. `npm run build` clean.
+
+---
+
 ## 2026-08-27 (session 21) — Drawer: show who approved at the purchase stage
 
 Owner noticed the drawer showed no approver while an item sits In finance

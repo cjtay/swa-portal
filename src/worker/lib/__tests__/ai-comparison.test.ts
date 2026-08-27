@@ -323,6 +323,24 @@ describe('runAiComparison', () => {
     expect(analysis.files[0].status).toBe('ok');
     expect(analysis.quotes[0].vendor).toBe('Text Vendor Pte Ltd');
   });
+
+  it('turns a Cloudflare edge error into an actionable retry note (live-service finding 2026-08-27)', async () => {
+    await seedFx();
+    // Real shape observed while the reader backend was degraded: the edge
+    // answered plain text "error code: 1031" and the runtime threw a
+    // JSON-parse error wrapping it.
+    const edgeAi: AiBinding = makeFakeAi({
+      async toMarkdown() {
+        throw new Error('Unexpected token \'e\', "error code: 1031 " is not valid JSON');
+      },
+    });
+    const analysis = await runAiComparison(fakeEnv(edgeAi), [pdfInput('down.pdf')], ADMIN_EMAIL);
+    expect(analysis.quotes).toHaveLength(0);
+    expect(analysis.files[0].status).toBe('error');
+    expect(analysis.files[0].note).toContain('Cloudflare error 1031');
+    expect(analysis.files[0].note).toContain('Analyse again');
+    expect(analysis.files[0].note).not.toContain('not valid JSON');
+  });
 });
 
 // ── client-supplied JSON validation ────────────────────────────────────────

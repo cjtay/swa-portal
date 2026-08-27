@@ -296,6 +296,22 @@ function dataUriFor(mime: string, bytes: ArrayBuffer): string {
   return `data:${normalised};base64,${arrayBufferToBase64(bytes)}`;
 }
 
+/** Per-file failure note for the fileNotes list.
+ *
+ *  Live-service finding (2026-08-27): while the reader backend was degraded,
+ *  toMarkdown answered with a PLAIN-TEXT edge error ("error code: 1031",
+ *  undocumented) and the runtime surfaced it as a JSON-parse failure, so the
+ *  admin saw `Unexpected token 'e', "error code: 1031 " is not valid JSON`.
+ *  Match any embedded `error code: NNNN` and say what to do; every other
+ *  failure keeps the plain cause-in-parens shape. */
+function readerFailureNote(message: string): string {
+  const edge = message.match(/error code:\s*(\d+)/i);
+  if (edge) {
+    return `Cloudflare's document reader failed on this file (Cloudflare error ${edge[1]}). This is usually temporary. Run Analyse again in a few minutes, or attach a photo of the quotation instead.`;
+  }
+  return `Could not read this document (${message.slice(0, 160)}).`;
+}
+
 /** Extract quote fields from an already-read image or text document.
  *
  *  Image format note (verified against the live service 2026-08-26): the
@@ -435,7 +451,7 @@ export async function runAiComparison(
       fileNotes.push({ filename: file.filename, status: 'ok', note: null });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      fileNotes.push({ filename: file.filename, status: 'error', note: `Could not read this document (${message.slice(0, 160)}).` });
+      fileNotes.push({ filename: file.filename, status: 'error', note: readerFailureNote(message) });
     }
   }
 
