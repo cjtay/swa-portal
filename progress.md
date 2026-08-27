@@ -43,6 +43,18 @@ every fix measured in the live dev server with Playwright at 1200px and
   small text (measured 4.63:1 before; nothing failed AA, this is margin).
   Focus-visible rings added for Remove buttons and checkboxes.
 
+### Pre-deploy content-policy audit (same session)
+- Checked CSP (_headers), robots.txt, worker response headers, Workers AI
+  terms, Resend AUP, R2/D1 — nothing blocks any approvals feature; PDF
+  iframes, inline images and canvas blob conversion are all covered by the
+  existing frame-src/img-src directives.
+- Fixed: wrangler.jsonc max_request_body_size 20 MB -> 110 MB. The old cap
+  413-rejected legitimate multi-file creates (10 files x 10 MB is
+  advertised) before the API's own limits ran. Effective ceiling is also
+  plan-capped (~100 MB free) and zone WAF/bot settings start applying only
+  once the custom domain serves traffic — post-deploy test from an outside
+  network: OTP login, file upload, Analyse with AI.
+
 ### Verification
 - `npm run build` clean after each change. Measured before/after on every
   fix; screenshots archived (session temp dir). Role gating re-checked

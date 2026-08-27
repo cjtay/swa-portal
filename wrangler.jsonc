@@ -39,8 +39,14 @@
   "ai": {
     "binding": "AI"
   },
+  // 110 MB so a single "New request" POST can honestly carry the advertised
+  // 10 files x 10 MB plus multipart overhead. The earlier 20 MB cap rejected
+  // such uploads with a 413 before the API's own per-file limits ran
+  // (found in the 2026-08-28 pre-deploy policy audit). The effective limit
+  // is min(this, the plan's body ceiling) and the API still enforces
+  // APPROVAL_MAX_FILES_PER_ITEM / APPROVAL_MAX_FILE_BYTES itself.
   "limits": {
-    "max_request_body_size": 20971520
+    "max_request_body_size": 115343360
   },
   "workers_dev": true,
   "observability": {
