@@ -54,6 +54,10 @@ every fix measured in the live dev server with Playwright at 1200px and
   plan-capped (~100 MB free) and zone WAF/bot settings start applying only
   once the custom domain serves traffic — post-deploy test from an outside
   network: OTP login, file upload, Analyse with AI.
+- Spec updated: docs/specs/features/approvals.md — documents bullet now
+  covers the 110 MB request-body cap; AI bullet covers the reader-failure
+  note; §5 records the senior-friendly UI conventions and the drawer's
+  purchase-approver display.
 
 ### Verification
 - `npm run build` clean after each change. Measured before/after on every
