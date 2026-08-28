@@ -1,0 +1,783 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+
+const SECTIONS = [
+  { id: 'workflow', title: 'The workflow at a glance' },
+  { id: 'office-admin', title: 'Office admin: raise, voucher, pay' },
+  { id: 'purchase-approver', title: 'Purchase approver: approve purchases' },
+  { id: 'finance-approver', title: 'Finance approver: check vouchers' },
+  { id: 'it-admin', title: 'IT admin: settings' },
+  { id: 'problems', title: 'If something goes wrong' },
+] as const;
+---
+
+<AdminLayout title="Approvals User Guide | SWA Admin Portal" currentPath="/approvals/guide">
+  <div class="guide-head">
+    <h1>Approvals user guide</h1>
+    <p class="guide-intro">
+      How to raise, approve and pay for purchases in the SWA Admin Portal.
+      Pick your part in the left-hand list (or the drop-down on a phone).
+      Each topic appears on its own, and the Back button takes you to the
+      topic you were reading before. Click any picture to open it enlarged.
+      Printing this page (Ctrl+P / Cmd+P) prints every topic on one sheet of pages.
+    </p>
+  </div>
+
+  <!-- Mobile topic picker: sticky so it is always within reach -->
+  <div class="guide-mobilenav">
+    <label for="guide-section-select">Go to:</label>
+    <select id="guide-section-select" class="form-input">
+      {SECTIONS.map((s) => (
+        <option value={s.id}>{s.title}</option>
+      ))}
+    </select>
+  </div>
+
+  <div class="guide-layout">
+    <!-- Desktop topic list: stays on screen while you read -->
+    <aside class="guide-side">
+      <nav aria-label="User guide topics">
+        <ul id="guide-toc">
+          {SECTIONS.map((s) => (
+            <li><a href={`#${s.id}`} data-guide-nav={s.id}>{s.title}</a></li>
+          ))}
+        </ul>
+      </nav>
+    </aside>
+
+    <div class="guide-content">
+      <section id="workflow" class="guide-section">
+        <h2>The workflow at a glance</h2>
+        <p>
+          A purchase goes through six stages. Each stage has one clear owner, and
+          the portal emails the right people at every step. Nobody needs to chase
+          paper.
+        </p>
+        <ol class="guide-flow">
+          <li><strong>Raised</strong>: the office admin fills in a request and attaches documents. Status shown: <em>For approval</em>.</li>
+          <li><strong>Purchase decision</strong>: the purchase approvers look at the request and approve or reject it. Status shown: <em>For approval</em>, then <em>Approved</em>.</li>
+          <li><strong>Voucher</strong>: the office admin prepares the payment voucher (the paper the bank payment is based on). Status shown: <em>Approved</em>, then <em>In finance check</em>.</li>
+          <li><strong>Finance decision</strong>: the finance approver checks the voucher against the documents and approves or rejects it. Status shown: <em>Finance approved</em> when happy.</li>
+          <li><strong>Payment</strong>: the office admin pays the vendor and records who paid, when and how. Status shown: <em>Paid</em>.</li>
+          <li><strong>Audit</strong>: every action along the way is written into a log that nobody can change or delete. The IT admin can export it for auditors.</li>
+        </ol>
+        <p>
+          A rejection is never the end. The request goes back to the office admin
+          with the reason, and after fixing it returns to the same stage, never
+          to a decision already made.
+        </p>
+        <p>
+          Regular costs such as office maintenance, vendor payments and payroll do
+          not need purchase approval. The office admin can create them with the
+          approval box unticked, and they go straight to the voucher stage. The
+          printed voucher then shows &ldquo;No approval required&rdquo;.
+        </p>
+        <figure class="guide-figure">
+          <a href="/guide/approval/01-board-all-tab.png">
+            <img src="/guide/approval/01-board-all-tab.png" alt="The Approvals board with status tabs, counts and a table of requests" loading="lazy" />
+          </a>
+          <figcaption>The Approvals board. The tabs at the top show how many requests are waiting at each stage. Click the picture to enlarge it.</figcaption>
+        </figure>
+      </section>
+
+      <section id="office-admin" class="guide-section">
+        <h2>Office admin: raise, voucher, pay</h2>
+        <p>
+          The office admin raises every request, prepares the payment voucher,
+          saves the voucher as a PDF and records the payment. Log in with your SWA
+          email address and open <strong>Approvals</strong> in the top bar.
+        </p>
+
+        <h3>Step 1: Fill in the request</h3>
+        <p>
+          On the Approvals board, click <strong>New request</strong>. Choose the
+          category, give the request a clear title, and fill in who will be paid
+          and the amount. Use the description box to tell the approvers why the
+          purchase is needed. Leave <strong>Approval required</strong> ticked for
+          one-off purchases; untick it only for regular costs that skip the
+          purchase decision.
+        </p>
+        <figure class="guide-figure">
+          <a href="/guide/approval/02-new-request-form-fields.png">
+            <img src="/guide/approval/02-new-request-form-fields.png" alt="The new request form with category, title, payee, amount and description filled in" loading="lazy" />
+          </a>
+          <figcaption>The New request form. The form opens below the board and collapses again after you submit.</figcaption>
+        </figure>
+
+        <h3>Step 2: Attach the documents</h3>
+        <p>
+          Add the quotation, invoice or receipt. You can pick several files at
+          once and come back later to add more, up to 10 files of 10&nbsp;MB each.
+          PDF files and photos (JPEG, PNG, WebP, HEIC) are accepted.
+        </p>
+        <figure class="guide-figure">
+          <a href="/guide/approval/03-new-request-documents.png">
+            <img src="/guide/approval/03-new-request-documents.png" alt="The documents section listing three uploaded quotation PDFs with Remove buttons" loading="lazy" />
+          </a>
+          <figcaption>Attached documents, with a Remove button for each. The counter shows how many of the 10 files are used.</figcaption>
+        </figure>
+
+        <h3>Step 3: Compare quotations (if you have more than one)</h3>
+        <p>
+          Tick <strong>I have multiple quotations to compare</strong>. Each
+          attached file becomes a row. Tick the rows you want to compare and
+          describe each one in your own words: vendor, price and anything that
+          matters. The finance approver sees this table next to the documents.
+        </p>
+        <figure class="guide-figure">
+          <a href="/guide/approval/04-comparison-table.png">
+            <img src="/guide/approval/04-comparison-table.png" alt="The comparison table with three ticked quotation rows and their descriptions" loading="lazy" />
+          </a>
+          <figcaption>The comparison table. Each row links to its document for the finance check.</figcaption>
+        </figure>
+
+        <h3>Step 4: Optional: let AI read the quotations</h3>
+        <p>
+          With at least two quotations ticked, <strong>Analyse with AI</strong> reads the documents and fills in a short summary and a recommendation.
+          The text appears in editable boxes. Read it, correct it if needed, and
+          remember it is only a helper. The final decision always belongs to the
+          approvers. If the button is missing, the feature has been switched off
+          by the IT admin; you can still submit the request normally.
+        </p>
+        <figure class="guide-figure">
+          <a href="/guide/approval/05-ai-analyse-preview.png">
+            <img src="/guide/approval/05-ai-analyse-preview.png" alt="The AI comparison panel with a table of vendors, editable summary and recommendation" loading="lazy" />
+          </a>
+          <figcaption>The AI analysis. The summary and recommendation are editable until the request is submitted.</figcaption>
+        </figure>
+
+        <h3>Step 5: Submit and follow progress</h3>
+        <p>
+          Click <strong>Raise request</strong>. The request appears on the board
+          under <em>For approval</em>, and the purchase approvers receive an
+          email. Click <strong>View</strong> on any row to open the full detail:
+          the documents, the comparison table and every decision recorded so far.
+        </p>
+        <figure class="guide-figure">
+          <a href="/guide/approval/06-item-drawer-admin.png">
+            <img src="/guide/approval/06-item-drawer-admin.png" alt="The request drawer showing status, details, raised by, description and attached documents" loading="lazy" />
+          </a>
+          <figcaption>The detail view of a request waiting for approval.</figcaption>
+        </figure>
+        <p>
+          If the request has been waiting a while, click <strong>Send reminder</strong>. This emails the approvers for the current stage
+          again.
+        </p>
+        <figure class="guide-figure">
+          <a href="/guide/approval/12-send-reminder.png">
+            <img src="/guide/approval/12-send-reminder.png" alt="The drawer with a green Reminder sent confirmation" loading="lazy" />
+          </a>
+          <figcaption>The reminder confirmation. A reminder can be sent while a request waits at either approval stage.</figcaption>
+        </figure>
+
+        <h3>If the request is rejected</h3>
+        <p>
+          A rejection is never final. The request moves to the <em>Rejected</em> tab with the approver&rsquo;s reason shown in red at the top. Click <strong>Edit</strong>, correct the request, and resubmit. It goes back
+          to the stage that rejected it. The purchase approvers do not see it
+          again after they have already approved it.
+        </p>
+        <figure class="guide-figure">
+          <a href="/guide/approval/11-rejected-item-drawer.png">
+            <img src="/guide/approval/11-rejected-item-drawer.png" alt="A rejected request showing the reason banner and an Edit button" loading="lazy" />
+          </a>
+          <figcaption>A rejected request. The reason is shown at the top; Edit lets you fix and resubmit.</figcaption>
+        </figure>
+
+        <h3>Step 6: Prepare the payment voucher</h3>
+        <p>
+          Once the purchase is approved, open the request and click <strong>Prepare voucher</strong>. The form comes pre-filled with the
+          payee and amount. Each line has a date, a description and an amount.
+          Lines may have negative amounts (a deposit already paid) or no amount
+          at all (a note such as bank details). The voucher number is assigned
+          when you first submit, and it stays with the voucher even if finance
+          asks for changes.
+        </p>
+        <figure class="guide-figure">
+          <a href="/guide/approval/13-voucher-form.png">
+            <img src="/guide/approval/13-voucher-form.png" alt="The voucher editor with pre-filled lines, a note-only line, the total and the submit button" loading="lazy" />
+          </a>
+          <figcaption>The voucher editor. Add as many lines as you need; the total updates as you type.</figcaption>
+        </figure>
+        <p>
+          After you submit, the request moves to <em>In finance check</em> and the
+          finance approver is emailed. If finance rejects the voucher, correct it
+          through the voucher editor. The approved request details are locked
+          and stay as they are.
+        </p>
+
+        <h3>Step 7: Save the voucher as a PDF</h3>
+        <p>
+          Once finance has approved, click <strong>View voucher</strong>. The
+          finished voucher opens on its own clean page with the names of who
+          prepared it and who approved the payment already filled in. Click <strong>Print / Save as PDF</strong> and choose &ldquo;Save as PDF&rdquo; in the print dialog.
+        </p>
+        <figure class="guide-figure">
+          <a href="/guide/approval/14-voucher-export.png">
+            <img src="/guide/approval/14-voucher-export.png" alt="The printable payment voucher page with voucher number, lines, total and print button" loading="lazy" />
+          </a>
+          <figcaption>The printable voucher. Use the browser&rsquo;s Save as PDF to file it.</figcaption>
+        </figure>
+
+        <h3>Step 8: Record the payment</h3>
+        <p>
+          After paying the vendor, open the request, click <strong>Record payment</strong> and fill in who made the payment, the date, the method
+          and a reference. The request then shows <em>Paid</em>, the end of the
+          journey.
+        </p>
+        <figure class="guide-figure">
+          <a href="/guide/approval/15-record-payment.png">
+            <img src="/guide/approval/15-record-payment.png" alt="The record payment form with who paid, date, method and reference" loading="lazy" />
+          </a>
+          <figcaption>The record payment form. This is the last step for the office admin.</figcaption>
+        </figure>
+        <figure class="guide-figure">
+          <a href="/guide/approval/17-paid-drawer.png">
+            <img src="/guide/approval/17-paid-drawer.png" alt="The completed request showing paid by, paid on, payment method and reference" loading="lazy" />
+          </a>
+          <figcaption>The completed record: who paid, when, how, and the reference.</figcaption>
+        </figure>
+      </section>
+
+      <section id="purchase-approver" class="guide-section">
+        <h2>Purchase approver: approve purchases</h2>
+        <p>
+          Purchase approvers (for example, the President and the 1st Vice
+          President) decide whether a purchase should go ahead. Log in with your
+          SWA email address and open <strong>Approvals</strong> in the top bar.
+          The <em>For approval</em> tab shows everything waiting for a decision.
+        </p>
+        <figure class="guide-figure">
+          <a href="/guide/approval/08-board-approver.png">
+            <img src="/guide/approval/08-board-approver.png" alt="The approvals board on the For approval tab showing six waiting requests" loading="lazy" />
+          </a>
+          <figcaption>The queue of requests waiting for a purchase decision.</figcaption>
+        </figure>
+        <p>
+          Click <strong>View</strong> to open a request. Read the description,
+          open the attached documents (each one opens in place, or use <strong>Download</strong>), and study the comparison table if there is
+          one. Then decide:
+        </p>
+        <ul>
+          <li><strong>Approve</strong>: the request moves on. The office admin is emailed and prepares the payment voucher.</li>
+          <li><strong>Reject</strong>: write why. The reason is sent to the office admin, who fixes the request and resubmits it to you.</li>
+        </ul>
+        <figure class="guide-figure">
+          <a href="/guide/approval/09-drawer-approve-reject.png">
+            <img src="/guide/approval/09-drawer-approve-reject.png" alt="A request drawer with Approve and Reject buttons at the top" loading="lazy" />
+          </a>
+          <figcaption>The decision buttons appear only while a request waits for approval.</figcaption>
+        </figure>
+        <figure class="guide-figure">
+          <a href="/guide/approval/10-reject-reason.png">
+            <img src="/guide/approval/10-reject-reason.png" alt="The rejection form with a reason typed in and a Confirm rejection button" loading="lazy" />
+          </a>
+          <figcaption>Rejecting always needs a written reason, which is emailed to the office admin.</figcaption>
+        </figure>
+        <p>
+          Once you have approved a request, your part is done. If the office admin
+          edits and resubmits a rejected request, it reappears under <em>For approval</em> with the changes made.
+        </p>
+      </section>
+
+      <section id="finance-approver" class="guide-section">
+        <h2>Finance approver: check vouchers</h2>
+        <p>
+          The finance approver is the second pair of eyes: the purchase is
+          already approved, and you check that the payment voucher matches the
+          documents before any money moves. Log in with your SWA email address
+          and open <strong>Approvals</strong>. The <em>In finance check</em> tab
+          shows the vouchers waiting for you.
+        </p>
+        <p>
+          Open a request and read down the page: the voucher with its lines and
+          total, every attached document opened out, and the comparison table.
+          The person who approved the purchase is shown, so you know the first
+          stage is complete. Then decide:
+        </p>
+        <ul>
+          <li><strong>Approve voucher</strong>: the office admin is emailed, prints the voucher as a PDF, pays the vendor and records the payment.</li>
+          <li><strong>Reject voucher</strong>: write what is wrong. The voucher goes back to the office admin for correction; the purchase approval itself stands.</li>
+        </ul>
+        <figure class="guide-figure">
+          <a href="/guide/approval/16-finance-check-drawer.png">
+            <img src="/guide/approval/16-finance-check-drawer.png" alt="A request in finance check showing the voucher, its number and the Approve voucher and Reject voucher buttons" loading="lazy" />
+          </a>
+          <figcaption>The finance check view: voucher number, lines, documents and the two decision buttons.</figcaption>
+        </figure>
+      </section>
+
+      <section id="it-admin" class="guide-section">
+        <h2>IT admin: settings</h2>
+        <p>
+          Two approval settings live in <strong>Settings</strong>, visible to IT
+          admins only.
+        </p>
+        <h3>Audit log export</h3>
+        <p>
+          Every approval action is recorded in a log that nobody can change or
+          delete. Choose a date range and click <strong>Export audit log
+          (CSV)</strong> to download the file for auditors. The export is oldest
+          first and holds up to 5,000 rows.
+        </p>
+        <figure class="guide-figure">
+          <a href="/guide/approval/19-settings-audit-export.png">
+            <img src="/guide/approval/19-settings-audit-export.png" alt="The Approvals Audit Log settings card with From and To dates and an export button" loading="lazy" />
+          </a>
+          <figcaption>The audit log export card in Settings.</figcaption>
+        </figure>
+        <h3>AI quotation comparison on/off</h3>
+        <p>
+          The AI helper that reads quotations can be switched off at any time,
+          for example if the daily limit is being reached. When off, the
+          Analyse buttons disappear from the request forms and the analysis
+          service refuses new runs, but creating and approving requests continues
+          as normal. Missing the AI helper on a form? Check this card first.
+        </p>
+        <figure class="guide-figure">
+          <a href="/guide/approval/18-settings-ai-toggle.png">
+            <img src="/guide/approval/18-settings-ai-toggle.png" alt="The Approvals AI Quotation Comparison settings card with Disable and Enable buttons" loading="lazy" />
+          </a>
+          <figcaption>The AI comparison switch in Settings.</figcaption>
+        </figure>
+      </section>
+
+      <section id="problems" class="guide-section">
+        <h2>If something goes wrong</h2>
+        <dl class="guide-problems">
+          <dt>I clicked Approve and nothing seemed to happen</dt>
+          <dd>Another approver may have decided seconds before you. Only one decision counts, and the portal shows a message saying the request has already been actioned. Refresh the board to see the current state.</dd>
+          <dt>My file will not attach</dt>
+          <dd>Check the type and size: PDF or a photo (JPEG, PNG, WebP, HEIC), up to 10 MB each, 10 files per request. Web pages saved as HTML and SVG drawings are refused for security reasons.</dd>
+          <dt>The request went back to an earlier stage than I expected</dt>
+          <dd>That is by design. A purchase-stage rejection returns the request to the purchase approvers; a finance-stage rejection returns it only to the finance check, never to a decision already made.</dd>
+          <dt>I cannot edit a request any more</dt>
+          <dd>Once the purchase is approved, the request details (title, payee, amount, documents) are locked. Corrections after a finance rejection go through the voucher editor instead.</dd>
+          <dt>The Analyse with AI button is missing or reports the feature is off</dt>
+          <dd>The IT admin has switched AI comparison off, or the daily limit has been reached. Requests can still be created and approved normally. The AI helper is optional.</dd>
+          <dt>I see a message about trying too many times</dt>
+          <dd>The portal limits how many actions each person can make in a short period, to keep it safe. Wait a few minutes and try again.</dd>
+          <dt>The printed voucher shows the wrong name</dt>
+          <dd>The &ldquo;Prepared by&rdquo; and &ldquo;Payment approved by&rdquo; names come from whoever was logged in at the time. If you prepared a voucher while logged in as a colleague, ask the IT admin. The audit log records the true account.</dd>
+        </dl>
+      </section>
+    </div>
+  </div>
+
+  <!-- Lightbox overlay for full-size screenshots (toggled by the script;
+       static markup so Astro scoped styles apply) -->
+  <div class="guide-lightbox" id="guide-lightbox" hidden role="dialog" aria-label="Enlarged screenshot">
+    <button type="button" class="guide-lightbox-close" aria-label="Close">×</button>
+    <img alt="" />
+    <div class="guide-lightbox-caption"></div>
+  </div>
+</AdminLayout>
+
+<style>
+  .guide-head {
+    max-width: 880px;
+  }
+  .guide-intro {
+    color: var(--text-muted);
+    margin-bottom: 1.25rem;
+    line-height: 1.6;
+  }
+
+  /* Layout: sticky topic list on the left, one topic at a time on the right */
+  .guide-layout {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+  }
+  .guide-side {
+    position: sticky;
+    top: 1.5rem;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 0.75rem 0.5rem;
+  }
+  .guide-side ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .guide-side a {
+    display: block;
+    padding: 0.65rem 0.9rem;
+    border-radius: 7px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-weight: 500;
+    line-height: 1.4;
+    min-height: 40px;
+  }
+  .guide-side a:hover {
+    background: #faf5fd;
+    color: var(--swa-1);
+  }
+  .guide-side a.guide-active {
+    background: var(--swa-1, #70308c);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  /* Mobile topic picker replaces the sidebar below 900px */
+  .guide-mobilenav {
+    display: none;
+  }
+
+  .guide-content {
+    min-width: 0;
+  }
+
+  /* Only the chosen topic is shown */
+  .guide-section {
+    display: none;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 1.5rem;
+  }
+  .guide-section.guide-active {
+    display: block;
+  }
+  .guide-section h2 {
+    font-size: 1.35rem;
+    margin-top: 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--swa-4, #f3d2ff);
+  }
+  .guide-section h3 {
+    font-size: 1.1rem;
+    margin-top: 1.6rem;
+  }
+  .guide-flow li,
+  .guide-section li,
+  .guide-section p {
+    line-height: 1.65;
+    max-width: 78ch;
+  }
+  .guide-flow {
+    padding-left: 1.25rem;
+  }
+  .guide-flow li {
+    margin-bottom: 0.5rem;
+  }
+
+  .guide-figure {
+    margin: 1.25rem 0 1.75rem;
+    background: #fff;
+    padding: 0.4rem;
+  }
+  .guide-figure img {
+    display: block;
+    width: 100%;
+    max-width: 1200px;
+    height: auto;
+    /* Strong branded border: screenshots show the same portal UI as the
+       page, so without this the picture blends into the guide text. */
+    border: 2px solid var(--swa-1, #70308c);
+    border-radius: 6px;
+    box-shadow: 0 3px 10px rgba(69, 10, 94, 0.14);
+    cursor: zoom-in;
+  }
+  .guide-figure figcaption {
+    margin: 0.55rem 0.4rem 0.2rem;
+    font-size: 0.9rem;
+    color: #4b5563;
+    line-height: 1.5;
+    border-top: 1px dashed #d1d5db;
+    padding-top: 0.45rem;
+  }
+
+  .guide-problems dt {
+    font-weight: 600;
+    margin-top: 1rem;
+  }
+  .guide-problems dd {
+    margin: 0.25rem 0 0 0;
+    line-height: 1.65;
+  }
+
+  /* Previous / Next buttons appended by the script at each topic's foot.
+     (Styles live in the global block below: the pager is created by
+     JavaScript, so scoped selectors would never match it.) */
+
+  /* Lightbox for full-size screenshots */
+  .guide-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(17, 6, 28, 0.82);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+  .guide-lightbox[hidden] {
+    display: none;
+  }
+  .guide-lightbox img {
+    max-width: 95vw;
+    max-height: 82vh;
+    width: auto;
+    height: auto;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  }
+  .guide-lightbox .guide-lightbox-caption {
+    color: #f3d2ff;
+    font-size: 0.95rem;
+    max-width: 90vw;
+    text-align: center;
+  }
+  .guide-lightbox .guide-lightbox-close {
+    position: absolute;
+    top: 0.9rem;
+    right: 0.9rem;
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1.4rem;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.9);
+    color: #1f2937;
+    cursor: pointer;
+  }
+
+  @media (max-width: 899px) {
+    .guide-layout {
+      grid-template-columns: 1fr;
+    }
+    .guide-side {
+      display: none;
+    }
+    .guide-mobilenav {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 0.6rem 0.75rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 2px 8px rgba(69, 10, 94, 0.06);
+    }
+    .guide-mobilenav label {
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .guide-mobilenav select {
+      flex: 1;
+      min-height: 44px;
+      font-size: 1rem;
+    }
+    .guide-section {
+      padding: 1rem;
+    }
+    /* On a phone the fitted image is too small to read, so the lightbox
+       shows the screenshot at 1000px wide and lets the reader pan around. */
+    .guide-lightbox {
+      overflow: auto;
+      align-items: flex-start;
+      justify-content: flex-start;
+    }
+    .guide-lightbox img {
+      width: 1000px;
+      max-width: none;
+      max-height: none;
+    }
+    .guide-lightbox-close {
+      position: fixed;
+    }
+  }
+
+  /* Print: every topic on paper, no navigation furniture */
+  @media print {
+    .admin-topbar,
+    .guide-side,
+    .guide-mobilenav,
+    .guide-lightbox {
+      display: none !important;
+    }
+    .guide-layout {
+      display: block;
+    }
+    .guide-section {
+      display: block !important;
+      border: none;
+      padding: 0;
+      margin-bottom: 2rem;
+      break-inside: avoid-page;
+    }
+    .guide-figure {
+      break-inside: avoid;
+    }
+  }
+</style>
+
+<!-- Global on purpose: the pager markup is created by the page script, so
+     Astro scoped selectors (which need a per-element hash attribute) would
+     never match it. Class names stay guide-prefixed to avoid collisions. -->
+<style is:global>
+  .guide-pager {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e5e7eb;
+  }
+  .guide-pager a {
+    min-height: 44px;
+  }
+  .guide-pager .guide-pager-spacer {
+    flex: 1;
+  }
+  @media (max-width: 899px) {
+    .guide-pager {
+      flex-direction: column;
+    }
+    .guide-pager a {
+      width: 100%;
+      text-align: center;
+    }
+    .guide-pager .guide-pager-spacer {
+      display: none;
+    }
+  }
+  @media print {
+    .guide-pager {
+      display: none !important;
+    }
+  }
+</style>
+
+<script>
+  import { requireAuth } from '../../scripts/auth-gate';
+
+  // Same audience as the approvals board: admins and the two approver
+  // groups. Everyone else goes back to the dashboard (the guide describes
+  // the payment workflow, so it stays with the approvals audience).
+  requireAuth({
+    onAuthenticated(data) {
+      if (!data.is_admin && !data.is_purchase_approver && !data.is_finance_approver) {
+        window.location.href = '/';
+      }
+    },
+  });
+
+  const sections = [...document.querySelectorAll<HTMLElement>('.guide-section')];
+  const tocLinks = [...document.querySelectorAll<HTMLAnchorElement>('[data-guide-nav]')];
+  const select = document.getElementById('guide-section-select') as HTMLSelectElement | null;
+  const ids = sections.map((s) => s.id);
+
+  function showSection(id: string, push = true) {
+    if (!ids.includes(id)) id = 'workflow';
+    sections.forEach((s) => s.classList.toggle('guide-active', s.id === id));
+    tocLinks.forEach((a) => {
+      const active = a.dataset.guideNav === id;
+      a.classList.toggle('guide-active', active);
+      if (active) a.setAttribute('aria-current', 'true');
+      else a.removeAttribute('aria-current');
+    });
+    if (select) select.value = id;
+    if (push && window.location.hash !== '#' + id) {
+      history.pushState(null, '', '#' + id);
+    }
+    window.scrollTo(0, 0);
+  }
+
+  // Topic list + pager clicks. pushState means the browser Back button moves
+  // between topics, so readers never lose their place.
+  tocLinks.forEach((a) => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      showSection(a.dataset.guideNav || 'workflow');
+    });
+  });
+  select?.addEventListener('change', () => showSection(select.value));
+
+  // Previous / Next buttons at the foot of every topic.
+  sections.forEach((section, i) => {
+    const pager = document.createElement('div');
+    pager.className = 'guide-pager';
+    const prev = i > 0 ? sections[i - 1] : null;
+    const next = i < sections.length - 1 ? sections[i + 1] : null;
+    if (prev) {
+      const a = document.createElement('a');
+      a.className = 'btn btn-secondary';
+      a.href = '#' + prev.id;
+      a.dataset.guideNav = prev.id;
+      const prevTitle = prev.querySelector('h2')?.textContent || prev.id;
+      a.textContent = '← ' + prevTitle;
+      a.addEventListener('click', (e) => { e.preventDefault(); showSection(prev.id); });
+      pager.appendChild(a);
+    } else {
+      pager.appendChild(Object.assign(document.createElement('span'), { className: 'guide-pager-spacer' }));
+    }
+    if (next) {
+      const a = document.createElement('a');
+      a.className = 'btn btn-primary';
+      a.href = '#' + next.id;
+      a.dataset.guideNav = next.id;
+      const nextTitle = next.querySelector('h2')?.textContent || next.id;
+      a.textContent = nextTitle + ' →';
+      a.addEventListener('click', (e) => { e.preventDefault(); showSection(next.id); });
+      pager.appendChild(a);
+    }
+    section.appendChild(pager);
+  });
+
+  window.addEventListener('hashchange', () => showSection(window.location.hash.slice(1), false));
+  window.addEventListener('popstate', () => showSection(window.location.hash.slice(1) || 'workflow', false));
+
+  // Lightbox: screenshots enlarge in place instead of opening a new tab.
+  const lightbox = document.getElementById('guide-lightbox')!;
+  const lbImg = lightbox.querySelector('img')!;
+  const lbCaption = lightbox.querySelector('.guide-lightbox-caption')!;
+  const lbClose = lightbox.querySelector('.guide-lightbox-close')!;
+  let lastTrigger: HTMLElement | null = null;
+
+  function openLightbox(src: string, alt: string, caption: string) {
+    lbImg.src = src;
+    lbImg.alt = alt;
+    lbCaption.textContent = caption;
+    lightbox.hidden = false;
+    document.body.style.overflow = 'hidden';
+    (lbClose as HTMLElement).focus();
+  }
+  function closeLightbox() {
+    lightbox.hidden = true;
+    document.body.style.overflow = '';
+    lastTrigger?.focus();
+  }
+  document.querySelectorAll<HTMLAnchorElement>('.guide-figure a').forEach((a) => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      lastTrigger = a;
+      const img = a.querySelector('img');
+      const caption = a.closest('figure')?.querySelector('figcaption')?.textContent || '';
+      openLightbox(a.href, img?.alt || '', caption);
+    });
+  });
+  lbClose.addEventListener('click', closeLightbox);
+  lightbox.addEventListener('click', (e) => { if (e.target === lightbox) closeLightbox(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !lightbox.hidden) closeLightbox();
+  });
+
+  // Initial topic from the URL hash (deep links like #office-admin work).
+  showSection(window.location.hash.slice(1) || 'workflow', false);
+  if (window.location.hash && ids.includes(window.location.hash.slice(1))) {
+    history.replaceState(null, '', window.location.hash);
+  }
+</script>

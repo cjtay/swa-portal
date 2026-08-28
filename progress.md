@@ -12,6 +12,48 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-28 (session 24): Approvals user guide page (/approvals/guide)
+
+Owner asked for a role-based user guide with screenshots, hosted in the
+portal instead of an external AI-generated manual. Guide text uses generic
+role names only (office admin, purchase approvers, finance approver, IT
+admin), with no personal names or email addresses anywhere.
+
+### Done
+- Walked the full workflow in the local dev server as each role with dummy
+  items ("Office water dispenser rental" end-to-end incl. AI analyse,
+  PV26-0807) and captured 19 screenshots (1200x900) into
+  `public/guide/approval/`: board, create form, comparison, AI preview,
+  drawers, voucher form + print page, record payment, finance check,
+  Settings cards.
+- Anonymised local seed data first (display names to Office Admin /
+  Purchase Approver / Finance Approver / IT Admin; created_by to
+  office.admin@example.org; gibberish test titles, payees and descriptions
+  rewritten) so no screenshot shows a real-looking name or address.
+- New `src/pages/approvals/guide.astro`, reference-style layout: sticky
+  topic list on the left (native drop-down on phones), one topic shown at
+  a time, hash deep links, browser Back moves between topics, Previous /
+  Next buttons per topic, screenshots enlarge in an in-page lightbox
+  (pannable at 1000px wide on phones), purple border around every
+  screenshot for separation, print expands all topics. Same audience gate
+  as the board; committee members redirect to `/` (browser-verified).
+- Approvals board got a "New to approvals?" banner with an Open the user
+  guide button instead of an inline text link.
+- Drawer fix found during capture: a purchase-stage rejected item showed
+  "Purchase approved by / Approved at"; now labelled "Purchase decision
+  by / Decided at (SG)" when the purchase decision was a rejection
+  (approvals.astro, spec section 5 updated).
+- Docs: ARCHITECTURE.md pages tree, approvals.md UI-rules row and drawer
+  note.
+
+### Verify
+`npm run build` (27 pages) and `npm run typecheck` clean; guide checked in
+Playwright at 1440px, 1200px and 375px (no horizontal overflow, images
+render ~1070px wide at 1440px), lightbox and topic switching tested,
+committee redirect confirmed.
+
+---
+
 ## 2026-08-28 (session 23) — Approvals UI: senior-friendly CSS pass (browser-verified)
 
 Owner asked for the approvals screen to be easier for older members on

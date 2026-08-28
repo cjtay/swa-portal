@@ -320,6 +320,8 @@ src/
 │   ├── members.astro            ← member directory
 │   ├── office-booking.astro     ← booking calendar
 │   ├── approvals.astro          ← approval board (tabs + drawer + create form)
+│   ├── approvals/guide.astro    ← approvals user guide (role chapters + screenshots
+│   │                                from public/guide/approval/; admin/approvers only)
 │   ├── approvals/voucher.astro  ← standalone voucher export page (print/PDF)
 │   ├── events.astro             ← events landing
 │   ├── namecards.astro          ← namecard management + self-service panel

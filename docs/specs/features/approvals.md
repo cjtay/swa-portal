@@ -91,8 +91,9 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 | AI comparison block (drawer) | Stored analysis exists — read-only for every role |
 | Analyse with AI (edit form, the only regeneration path) | `is_admin` AND item editable (pending, or rejected at purchase stage) AND ≥2 comparison rows AND `ai_comparison_enabled` |
 | AI toggle card (Settings) | IT admin only |
+| User guide page `/approvals/guide` + "user guide" link in the board intro | Same audience as the board (admin or either approver flag; others redirect `/`). Role chapters with screenshots from `public/guide/approval/`; print-friendly |
 
-`?item=<id>` deep link opens the drawer (the emails' target). The drawer shows "Purchase approved by / Approved at (SG)" whenever a purchase decision exists (added 2026-08-27), so approvers are visible from `finance_check` onwards. The voucher export page is standalone — no AdminLayout, own noindex meta, print button hides when printing.
+`?item=<id>` deep link opens the drawer (the emails' target). The drawer shows "Purchase approved by / Approved at (SG)" whenever an approval decision exists, or "Purchase decision by / Decided at (SG)" when the purchase decision was a rejection (fixed 2026-08-28 — the approved label previously showed on rejected items too). This makes approvers visible from `finance_check` onwards. The voucher export page is standalone — no AdminLayout, own noindex meta, print button hides when printing.
 
 **Senior-friendly UI conventions** (2026-08-28, CSS-only pass, browser-verified at 1200 px and 375 px across admin and both approver roles):
 - Field labels render as quiet grey small-caps captions (12 px) against 16 px weight-600 dark values, in the detail list and every form; a hairline divider closes each label/value pair.
