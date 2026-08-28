@@ -26,10 +26,20 @@ All checks were public, read-only lookups. No registrar accounts were used.
 > - dig +short DOMAIN DS
 > - dig +short www.DOMAIN CNAME
 >
-> Registry and ownership (whois DOMAIN):
-> - Registrar
-> - Registrant organisation
+> Registry and ownership (whois DOMAIN; use RDAP if the registry refuses port-43 whois):
+> - Registrar and registrar abuse contact
+> - Domain status codes (for example clientTransferProhibited)
+> - Creation date (domain start)
+> - Registry expiry date
+> - Last updated date
+> - Registrant contact: name, organisation, email, phone, country
+> - Admin contact: name, organisation, email, phone, country
+> - Technical contact: name, organisation, email, phone, country
+> - Billing contact if present
 > - Registry DNSSEC status (signed or unsigned)
+> If a contact is privacy-redacted (for example "DATA REDACTED" or
+> "REDACTED FOR PRIVACY"), write "redacted" and keep the country if
+> shown. Treat an empty answer as "none". Do not leave cells blank.
 >
 > Hosting provider:
 > - Run whois on each A-record IP address and report the owning
@@ -44,9 +54,12 @@ All checks were public, read-only lookups. No registrar accounts were used.
 > means 21 Aug 2026, 11:30), decode and report the date it implies.
 >
 > Output ONE markdown table, one row per domain, one column per item:
-> Domain | Registrar | Registrant | Nameservers | A (IP) | AAAA |
+> Domain | Registrar | Registrant | Admin contact | Technical contact |
+> Created | Expires | Status | Nameservers | A (IP) | AAAA |
 > CNAME (www) | MX | TXT | CAA | DNSSEC | Zone last updated |
 > Hosting provider | HTTP redirect | HTTPS result
+> If the table is too wide, keep the contact and date columns in the
+> table and drop the rarely-changing ones instead.
 >
 > After the table, add a short bullet list of anything unusual:
 > missing HTTPS certificates, no SPF record on a mail-sending domain,
