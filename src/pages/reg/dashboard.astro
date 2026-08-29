@@ -107,6 +107,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   }
 
   requireAuth({
+    feature: 'events',
     onAuthenticated: () => {
       loadDashboard();
       setInterval(loadDashboard, 15000);

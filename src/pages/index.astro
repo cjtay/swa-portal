@@ -1,27 +1,54 @@
 ---
 import AdminLayout from '../layouts/AdminLayout.astro';
 ---
-
 <AdminLayout title="Dashboard — SWA Admin Portal" currentPath="/">
   <h1>Dashboard</h1>
   <p style="color:var(--text-muted);margin-bottom:2rem;">Welcome to the SWA Admin Portal.</p>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;">
-    <a href="/office-booking" class="card" style="text-decoration:none;color:inherit;display:block;">
-      <h2>Office Booking</h2>
-      <p style="color:var(--text-muted);font-size:0.85rem;">Book the SWA office space and manage reservations.</p>
-    </a>
     <a href="/members" class="card" style="text-decoration:none;color:inherit;display:block;">
       <h2>Members</h2>
       <p style="color:var(--text-muted);font-size:0.85rem;">View and manage the member directory.</p>
     </a>
-    <a href="/reg/admin/bookings" class="card" style="text-decoration:none;color:inherit;display:block;">
+    <a href="/admin/forms" class="card" style="text-decoration:none;color:inherit;display:block;">
+      <h2>Forms</h2>
+      <p style="color:var(--text-muted);font-size:0.85rem;">Review online form submissions — membership, volunteer and laughter yoga.</p>
+    </a>
+    <a href="/approvals" class="card" id="card-approvals" style="text-decoration:none;color:inherit;display:block;" hidden>
+      <h2>Approvals</h2>
+      <p style="color:var(--text-muted);font-size:0.85rem;">Raise and track payment approvals with two-stage sign-off.</p>
+    </a>
+    <a href="/office-booking" class="card" data-feature="office_booking" style="text-decoration:none;color:inherit;display:block;" hidden>
+      <h2>Office Booking</h2>
+      <p style="color:var(--text-muted);font-size:0.85rem;">Book the SWA office space and manage reservations.</p>
+    </a>
+    <a href="/reg/admin/bookings" class="card" data-feature="events" style="text-decoration:none;color:inherit;display:block;" hidden>
       <h2>Registration</h2>
       <p style="color:var(--text-muted);font-size:0.85rem;">Manage gala dinner bookings, guest lists, and arrival tracking.</p>
     </a>
-    <a href="/reg/dashboard" class="card" style="text-decoration:none;color:inherit;display:block;">
+    <a href="/reg/dashboard" class="card" data-feature="events" style="text-decoration:none;color:inherit;display:block;" hidden>
       <h2>Arrivals Dashboard</h2>
       <p style="color:var(--text-muted);font-size:0.85rem;">Live arrival monitoring for event night.</p>
     </a>
   </div>
 </AdminLayout>
+
+<script>
+  import { requireAuth } from '../scripts/auth-gate';
+
+  // Feature-gated cards ship hidden and are revealed once the session's
+  // feature flags arrive; the Approvals card follows the same role rule as
+  // the nav item (admins + purchase/finance approvers).
+  requireAuth({
+    onAuthenticated(data) {
+      document.querySelectorAll<HTMLElement>('[data-feature]').forEach((el) => {
+        const key = el.dataset.feature as keyof typeof data.features | undefined;
+        if (!key || data.features[key]) el.removeAttribute('hidden');
+      });
+      const approvalsCard = document.getElementById('card-approvals');
+      if (approvalsCard && (data.is_admin || data.is_purchase_approver || data.is_finance_approver)) {
+        approvalsCard.removeAttribute('hidden');
+      }
+    },
+  });
+</script>

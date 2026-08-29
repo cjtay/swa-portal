@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import type { AppContext } from "../types";
 import { IT_ADMIN_EMAILS, IT_ADMIN_NAMES } from '../../constants/portal';
+import { PROD_DEFAULT_FEATURE_FLAGS, type FeatureKey } from '../lib/feature-flags';
 
 
 // 'swa:it_admins' is a read-only pseudo-key: it is served from the code
@@ -9,7 +10,11 @@ import { IT_ADMIN_EMAILS, IT_ADMIN_NAMES } from '../../constants/portal';
 // 'swa:ai_config' is the AI quotation comparison kill-switch
 // (docs/plans/AI-Quotation-Comparison-Plan.md §4.5). A missing key means the
 // feature is ON; only {"enabled": false} turns it off.
-const KNOWN_KEYS = ['swa:reg_tables_config', 'swa:it_admins', 'swa:ai_config'] as const;
+// 'swa:feature_flags' is the feature availability override
+// (src/worker/lib/feature-flags.ts). A missing key means the CODE defaults
+// apply — disabled in production, enabled in local dev. Writes must carry
+// every known key so a partial update can never silently flip a feature.
+const KNOWN_KEYS = ['swa:reg_tables_config', 'swa:it_admins', 'swa:ai_config', 'swa:feature_flags'] as const;
 type KnownKey = (typeof KNOWN_KEYS)[number];
 const READ_ONLY_KEYS = ['swa:it_admins'] as const;
 
@@ -77,12 +82,37 @@ function validateRegTablesConfig(value: unknown): { valid: true; data: Record<st
   return { valid: true, data: obj };
 }
 
+function validateFeatureFlags(value: unknown): { valid: true; data: Record<string, unknown> } | { valid: false; errors: string[] } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { valid: false, errors: ['Value must be a JSON object.'] };
+  }
+  const obj = value as Record<string, unknown>;
+  const knownKeys = Object.keys(PROD_DEFAULT_FEATURE_FLAGS) as FeatureKey[];
+  const errors: string[] = [];
+  for (const key of knownKeys) {
+    if (typeof obj[key] !== 'boolean') {
+      errors.push(`${key} must be true or false.`);
+    }
+  }
+  const unknown = Object.keys(obj).filter((k) => !knownKeys.includes(k as FeatureKey));
+  if (unknown.length > 0) {
+    errors.push(`Unknown feature keys: ${unknown.join(', ')}.`);
+  }
+  if (errors.length > 0) return { valid: false, errors };
+  // Normalise to exactly the known keys, in declaration order.
+  const data: Record<string, unknown> = {};
+  for (const key of knownKeys) data[key] = obj[key];
+  return { valid: true, data };
+}
+
 function validateValue(key: KnownKey, value: unknown): { valid: true; data: Record<string, unknown> } | { valid: false; errors: string[] } {
   switch (key) {
     case 'swa:reg_tables_config':
       return validateRegTablesConfig(value);
     case 'swa:ai_config':
       return validateAiConfig(value);
+    case 'swa:feature_flags':
+      return validateFeatureFlags(value);
     default:
       return { valid: false, errors: [`Unknown settings key: ${key}`] };
   }
@@ -110,6 +140,11 @@ export async function handleAdminSettingsGet(c: AppContext) {
 
   const raw = await c.env.SWA_CONFIG.get(key);
   if (!raw) {
+    // Feature flags fall back to the code defaults instead of 404 so the
+    // Settings card can render a concrete state ("Disabled (default)").
+    if (key === 'swa:feature_flags') {
+      return c.json({ success: true, key, value: PROD_DEFAULT_FEATURE_FLAGS, isDefault: true });
+    }
     return c.json({ success: false, error_code: 'NOT_FOUND', message: `No configuration found for key: ${key}` }, 404);
   }
 

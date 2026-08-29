@@ -1,3 +1,13 @@
+// Feature availability keys — mirrored from src/worker/lib/feature-flags.ts
+// (the worker-side type is not importable from page scripts at runtime).
+export type FeatureKey = 'namecards' | 'office_booking' | 'events';
+
+export interface FeatureFlags {
+  namecards: boolean;
+  office_booking: boolean;
+  events: boolean;
+}
+
 export interface SessionResponse {
   authenticated: boolean;
   email: string | null;
@@ -11,11 +21,19 @@ export interface SessionResponse {
   // IT-admin kill-switch for the approvals AI quotation comparison. False
   // hides the Analyse/Regenerate buttons (server also returns 503).
   ai_comparison_enabled: boolean;
+  // Runtime feature availability (KV-overridden code defaults; see
+  // src/worker/lib/feature-flags.ts). Disabled features hide their nav
+  // items/cards and bounce direct page visits to the dashboard; the server
+  // also gates their APIs with 503 FEATURE_DISABLED.
+  features: FeatureFlags;
 }
 
 interface AuthGateOptions {
   requireAdmin?: boolean;
   requireItAdmin?: boolean;
+  // Redirect to the dashboard when this feature is switched off. Applied
+  // before role checks so a disabled feature hides for every role.
+  feature?: FeatureKey;
   onAuthenticated?: (data: SessionResponse) => void;
   onError?: () => void;
 }
@@ -28,6 +46,7 @@ export function requireAuth(options?: AuthGateOptions): void {
   const {
     requireAdmin = false,
     requireItAdmin = false,
+    feature,
     onAuthenticated,
     onError,
   } = options || {};
@@ -39,8 +58,12 @@ export function requireAuth(options?: AuthGateOptions): void {
         redirectLogin();
         return;
       }
+      if (feature && data.features && !data.features[feature]) {
+        window.location.href = '/';
+        return;
+      }
       if (requireAdmin && !data.is_admin) {
-        window.location.href = '/office-booking';
+        window.location.href = '/';
         return;
       }
       if (requireItAdmin && !data.is_it_admin) {
@@ -72,8 +95,12 @@ export function redirectIfAuthenticated(): void {
     .catch(() => {});
 }
 
-export function requireRegAdmin(onAuthenticated?: (data: SessionResponse) => void): void {
+export function requireRegAdmin(
+  onAuthenticated?: (data: SessionResponse) => void,
+  opts?: { feature?: FeatureKey },
+): void {
   requireAuth({
+    feature: opts?.feature,
     onAuthenticated: (data) => {
       if (data.role !== 'admin' && data.regRole !== 'reg_admin') {
         window.location.href = '/';
@@ -84,8 +111,12 @@ export function requireRegAdmin(onAuthenticated?: (data: SessionResponse) => voi
   });
 }
 
-export function requireRegVolunteer(onAuthenticated?: (data: SessionResponse) => void): void {
+export function requireRegVolunteer(
+  onAuthenticated?: (data: SessionResponse) => void,
+  opts?: { feature?: FeatureKey },
+): void {
   requireAuth({
+    feature: opts?.feature,
     onAuthenticated: (data) => {
       if (
         data.role !== 'admin' &&
@@ -101,9 +132,13 @@ export function requireRegVolunteer(onAuthenticated?: (data: SessionResponse) =>
   });
 }
 
-export function requireItAdmin(onAuthenticated?: (data: SessionResponse) => void): void {
+export function requireItAdmin(
+  onAuthenticated?: (data: SessionResponse) => void,
+  opts?: { feature?: FeatureKey },
+): void {
   requireAuth({
     requireItAdmin: true,
+    feature: opts?.feature,
     onAuthenticated,
   });
 }

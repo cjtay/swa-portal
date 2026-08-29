@@ -702,6 +702,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
   }
 
   requireAuth({
+    feature: 'namecards',
     onAuthenticated(data) {
       isAdmin = !!data.is_admin;
       if (isAdmin) {

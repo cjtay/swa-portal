@@ -101,5 +101,5 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 
   requireRegVolunteer(async () => {
     await loadTableConfig();
-  });
+  }, { feature: 'events' });
 </script>

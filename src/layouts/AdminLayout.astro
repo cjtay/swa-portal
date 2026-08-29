@@ -1,5 +1,6 @@
 ---
 import '../styles/admin.css';
+import type { FeatureKey } from '../scripts/auth-gate';
 
 interface Props {
   title: string;
@@ -25,13 +26,17 @@ type NavItem = {
   // (approval workflow — plan §3).
   approvalsGroup?: boolean;
   itAdminOnly?: boolean;
+  // Feature availability gating (src/worker/lib/feature-flags.ts). The item
+  // is hidden client-side when the feature is switched off; the server also
+  // blocks the feature's APIs with 503 FEATURE_DISABLED.
+  feature?: FeatureKey;
 };
 
 const navItems: NavItem[] = [
   { href: '/', label: 'Dashboard' },
   { href: '/members', label: 'Members', matchPrefix: ['/members'] },
-  { href: '/namecards', label: 'Namecards', matchPrefix: ['/namecards'] },
-  { href: '/office-booking', label: 'Office Booking', matchPrefix: ['/office-booking'] },
+  { href: '/namecards', label: 'Namecards', matchPrefix: ['/namecards'], feature: 'namecards' },
+  { href: '/office-booking', label: 'Office Booking', matchPrefix: ['/office-booking'], feature: 'office_booking' },
   { href: '/admin/forms', label: 'Forms', matchPrefix: ['/admin/forms'] },
   { href: '/approvals', label: 'Approvals', matchPrefix: ['/approvals'], approvalsGroup: true },
   {
@@ -39,6 +44,7 @@ const navItems: NavItem[] = [
     label: 'Events',
     matchPrefix: ['/events', '/reg/', '/admin/settings/tables'],
     eventsGroup: true,
+    feature: 'events',
   },
   { href: '/admin/settings', label: 'Settings', matchPrefix: ['/admin/settings'], itAdminOnly: true },
 ];
@@ -77,7 +83,8 @@ function isCurrent(item: NavItem): boolean {
            data-reg-role={item.regRole ?? ''}
            data-events-group={item.eventsGroup ? 'true' : 'false'}
            data-approvals-group={item.approvalsGroup ? 'true' : 'false'}
-           data-it-admin-only={item.itAdminOnly ? 'true' : 'false'}>
+           data-it-admin-only={item.itAdminOnly ? 'true' : 'false'}
+           data-feature={item.feature ?? ''}>
           {item.label}
         </a>
       ))}
@@ -107,7 +114,8 @@ function isCurrent(item: NavItem): boolean {
            data-reg-role={item.regRole ?? ''}
            data-events-group={item.eventsGroup ? 'true' : 'false'}
            data-approvals-group={item.approvalsGroup ? 'true' : 'false'}
-           data-it-admin-only={item.itAdminOnly ? 'true' : 'false'}>
+           data-it-admin-only={item.itAdminOnly ? 'true' : 'false'}
+           data-feature={item.feature ?? ''}>
           {item.label}
         </a>
       ))}
@@ -160,9 +168,13 @@ function isCurrent(item: NavItem): boolean {
         const itAdminOnly = a.dataset.itAdminOnly === 'true';
         const eventsGroup = a.dataset.eventsGroup === 'true';
         const approvalsGroup = a.dataset.approvalsGroup === 'true';
+        const feature = a.dataset.feature || '';
 
         let visible = true;
-        if (itAdminOnly) visible = data.is_it_admin;
+        // Feature availability wins over every role rule — a switched-off
+        // feature is hidden for admins and IT admins alike.
+        if (feature && data.features && !data.features[feature as keyof typeof data.features]) visible = false;
+        else if (itAdminOnly) visible = data.is_it_admin;
         else if (approvalsGroup) visible = canSeeApprovals(data);
         else if (eventsGroup) visible = canSeeEvents(data.role, data.regRole);
         else if (itemRegRole) visible = canSeeRegItem(itemRegRole, data.role, data.regRole);

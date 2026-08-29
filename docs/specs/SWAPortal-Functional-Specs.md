@@ -2,7 +2,7 @@
 
 > **Version**: 2.0
 > **Date**: 2026-08-23
-> **Structure**: This is the **core** spec — roles, access-control conventions, the feature matrix, authentication, and documentation rules. Each feature's detail lives in its own file under `docs/specs/features/`, linked from the matrix in §3.2. Non-technical overview: `docs/specs/SWAPortal-Owner-Guide.md`.
+> **Structure**: This is the **core** spec — roles, access-control conventions, the feature matrix, authentication, and documentation rules. Each feature's detail lives in its own file under `docs/specs/features/`, linked from the matrix in §3.3. Non-technical overview: `docs/specs/SWAPortal-Owner-Guide.md`.
 > **Boundary**: `docs/ARCHITECTURE.md` describes how the system is *built* (stack, request flow, tables at a glance). This document and the feature specs describe what it must *do* and *who may do it*. Point-in-time plans and audits live in `docs/plans/`.
 
 ---
@@ -52,11 +52,13 @@ The `swa_session` cookie carries an HMAC-signed payload (`email`, `name`, `role`
   "is_admin": true,
   "is_it_admin": false,
   "is_purchase_approver": false,
-  "is_finance_approver": false
+  "is_finance_approver": false,
+  "ai_comparison_enabled": true,
+  "features": { "namecards": false, "office_booking": false, "events": false }
 }
 ```
 
-The approver flags drive the Approvals nav item and board actions.
+The approver flags drive the Approvals nav item and board actions. The `features` object carries runtime feature availability (see §3.2) and drives the nav/dashboard/client-side gates.
 
 ### 2.3 Permission groups (email-list pattern)
 
@@ -75,9 +77,26 @@ Beyond base roles, specific powers are granted by email lists in `src/constants/
 - **Middleware tiers** (`src/worker/middleware.ts`): public paths; authenticated-by-default; IT-admin-only set; admin-write sets (GET open, writes admin); `reg_role` gates for the gala module; gate 7c for `/api/approvals` (admin or either approval group).
 - **Handlers re-check finer rules** (defence in depth) — e.g. finance decisions re-check `isFinanceApprover`; audit export is IT-admin only (middleware set, handler re-checks the admin tier).
 - **Writes are rate-limited** per email per endpoint (`src/worker/lib/rate-limit.ts`); public form endpoints are IP rate-limited.
-- **New feature rule**: one row in the §3.2 matrix below + one spec file in `docs/specs/features/`.
+- **New feature rule**: one row in the §3.3 matrix below + one spec file in `docs/specs/features/`.
 
-### 3.2 Feature matrix
+### 3.2 Feature availability flags
+
+Work-in-progress features are switched off for all users via runtime feature flags (`src/worker/lib/feature-flags.ts`, added 2026-08-29). The §3.3 matrix applies **only when a feature is enabled**.
+
+| Feature key | Covers | Default (production) |
+|-------------|--------|----------------------|
+| `namecards` | `/namecards`, `/api/namecards/*`, public `/c/*` | Disabled until launch |
+| `office_booking` | `/office-booking`, `/api/bookings/*` | Disabled until launch |
+| `events` | `/events`, `/reg/*` (admin, dashboard, volunteer, buyer), `/admin/settings/tables`, `/api/reg/*` | Disabled until launch |
+
+Rules:
+
+- **Code defaults are the source of truth**; the KV key `swa:feature_flags` in `SWA_CONFIG` is a per-key override written only from Settings → Feature availability (IT admin). Missing/unparseable KV → code default — fail closed.
+- **Local dev sees everything**: when the dev bypass is active, defaults are all-enabled. A local KV override can preview the off state.
+- **Enforcement is layered**: middleware returns `503 FEATURE_DISABLED` on gated API prefixes before auth; `/c/*` returns 404; nav items and dashboard cards hide; gated pages redirect to `/` client-side via auth-gate's `feature` option.
+- **New features ship behind a flag defaulting to `false`** in `PROD_DEFAULT_FEATURE_FLAGS` (same commit as the feature; TypeScript's `Record` forces the default).
+
+### 3.3 Feature matrix
 
 | Feature | Committee | Admin | IT Admin | Spec |
 |---------|-----------|-------|----------|------|
@@ -145,4 +164,5 @@ Update the touched spec in the same commit as the code change; `progress.md` rec
 | `CONFIG_ERROR` | 500 | Missing server config |
 | `TOKEN_INVALID` | 401 | Magic link token invalid or expired |
 | `FORM_CLOSED` | 403 | Buyer form past cutoff time |
+| `FEATURE_DISABLED` | 503 | Feature switched off via the availability flags (§3.2) |
 | `CONFLICT` | 409 | State conflict (e.g. approvals: item already actioned, wrong status for the action) |

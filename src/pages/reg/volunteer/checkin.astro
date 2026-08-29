@@ -563,6 +563,6 @@ interface TableRow { id: string | number; label: string; isVIP?: boolean }
   requireRegVolunteer(async () => {
     await loadTableConfig();
     searchInput.focus();
-  });
+  }, { feature: 'events' });
 </script>
 </html>

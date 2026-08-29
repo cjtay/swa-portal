@@ -75,7 +75,53 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     <p id="ai-msg" style="margin:0.5rem 0 0;font-size:0.8rem;color:#b3261e;" hidden></p>
   </div>
 
-  <div class="card steps-card" style="margin-top:1.5rem;">
+  <div class="card" style="margin-top:1.5rem;">
+    <h2>Feature Availability</h2>
+    <p style="color:var(--text-muted);font-size:0.85rem;">
+      Features still under construction are switched off for all portal users. Enabling a feature
+      shows its navigation and pages to the relevant roles within about a minute — no redeploy
+      needed. New features always launch disabled. Unset features follow the code defaults
+      (off in production, on in local development).
+    </p>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>Status</th>
+          <th style="width:120px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Namecards</td>
+          <td><span id="ff-namecards-status" style="font-weight:600;">Loading…</span></td>
+          <td>
+            <button type="button" class="btn btn-secondary" id="ff-namecards-enable" hidden>Enable</button>
+            <button type="button" class="btn btn-secondary" id="ff-namecards-disable" hidden>Disable</button>
+          </td>
+        </tr>
+        <tr>
+          <td>Office Booking</td>
+          <td><span id="ff-office_booking-status" style="font-weight:600;">Loading…</span></td>
+          <td>
+            <button type="button" class="btn btn-secondary" id="ff-office_booking-enable" hidden>Enable</button>
+            <button type="button" class="btn btn-secondary" id="ff-office_booking-disable" hidden>Disable</button>
+          </td>
+        </tr>
+        <tr>
+          <td>Events</td>
+          <td><span id="ff-events-status" style="font-weight:600;">Loading…</span></td>
+          <td>
+            <button type="button" class="btn btn-secondary" id="ff-events-enable" hidden>Enable</button>
+            <button type="button" class="btn btn-secondary" id="ff-events-disable" hidden>Disable</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p id="ff-msg" style="margin:0.5rem 0 0;font-size:0.8rem;color:#b3261e;" hidden></p>
+  </div>
+
+  <div class="card steps-card" style="margin-top:1.5rem;" id="tables-pointer-card" hidden>
     <h3 style="color:#16a34a;font-size:0.9rem;margin-bottom:0.5rem;">Where are the other settings?</h3>
     <p style="font-size:0.85rem;color:var(--text-muted);">
       Table configuration for the charity dinner now lives under
@@ -94,7 +140,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 </style>
 
 <script>
-  import { requireItAdmin } from '../../../scripts/auth-gate';
+  import { requireItAdmin, type FeatureKey } from '../../../scripts/auth-gate';
 
   requireItAdmin(() => {});
 
@@ -221,4 +267,90 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   document.getElementById('ai-enable')?.addEventListener('click', () => void setAiConfig(true));
   document.getElementById('ai-disable')?.addEventListener('click', () => void setAiConfig(false));
   loadAiConfig();
+
+  // Feature availability (src/worker/lib/feature-flags.ts). The GET falls
+  // back to the code defaults when the KV override is absent, marked with
+  // isDefault so the status renders as "Disabled (default)". Writes must
+  // carry every known key, so the card always POSTs the full object.
+  const FF_KEYS: FeatureKey[] = ['namecards', 'office_booking', 'events'];
+  const FF_STATUS_COLORS = { on: '#1b7f3b', off: '#b3261e' };
+  let ffState: Record<string, boolean> = {};
+  let ffByDefault = false;
+
+  function ffMsg(text: string): void {
+    const el = document.getElementById('ff-msg');
+    if (!el) return;
+    el.textContent = text;
+    el.hidden = !text;
+  }
+
+  function renderFeatureFlags(): void {
+    for (const key of FF_KEYS) {
+      const status = document.getElementById(`ff-${key}-status`);
+      const enableBtn = document.getElementById(`ff-${key}-enable`) as HTMLButtonElement | null;
+      const disableBtn = document.getElementById(`ff-${key}-disable`) as HTMLButtonElement | null;
+      if (!status || !enableBtn || !disableBtn) continue;
+      const on = !!ffState[key];
+      status.textContent = on ? 'Enabled' : (ffByDefault ? 'Disabled (default)' : 'Disabled');
+      status.style.color = on ? FF_STATUS_COLORS.on : FF_STATUS_COLORS.off;
+      enableBtn.hidden = on;
+      disableBtn.hidden = !on;
+      enableBtn.disabled = false;
+      disableBtn.disabled = false;
+    }
+    // The Table Configuration pointer card only makes sense while Events is
+    // available to portal users.
+    const pointer = document.getElementById('tables-pointer-card');
+    if (pointer && ffState.events) pointer.removeAttribute('hidden');
+  }
+
+  async function loadFeatureFlags(): Promise<void> {
+    try {
+      const res = await fetch('/api/admin/settings?key=swa:feature_flags');
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Request failed');
+      ffState = data.value || {};
+      ffByDefault = !!data.isDefault;
+      renderFeatureFlags();
+    } catch {
+      for (const key of FF_KEYS) {
+        const status = document.getElementById(`ff-${key}-status`);
+        if (status) {
+          status.textContent = 'Could not load.';
+          status.style.color = '#b3261e';
+        }
+      }
+    }
+  }
+
+  async function setFeatureFlag(key: FeatureKey, enabled: boolean): Promise<void> {
+    for (const k of FF_KEYS) {
+      const btn = document.getElementById(`ff-${k}-${enabled ? 'enable' : 'disable'}`) as HTMLButtonElement | null;
+      const other = document.getElementById(`ff-${k}-${enabled ? 'disable' : 'enable'}`) as HTMLButtonElement | null;
+      if (btn) btn.disabled = true;
+      if (other) other.disabled = true;
+    }
+    ffMsg('');
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'swa:feature_flags', value: { ...ffState, [key]: enabled } }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Request failed');
+      ffState = data.value;
+      ffByDefault = false;
+      renderFeatureFlags();
+    } catch (err) {
+      ffMsg(err instanceof Error ? err.message : 'Could not save the setting.');
+      renderFeatureFlags();
+    }
+  }
+
+  for (const key of FF_KEYS) {
+    document.getElementById(`ff-${key}-enable`)?.addEventListener('click', () => void setFeatureFlag(key, true));
+    document.getElementById(`ff-${key}-disable`)?.addEventListener('click', () => void setFeatureFlag(key, false));
+  }
+  loadFeatureFlags();
 </script>

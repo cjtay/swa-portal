@@ -15,6 +15,7 @@ import {
   NAMECARD_BOARD_CATEGORIES,
 } from '../../constants/portal';
 import { checkNamecardIpRateLimit, clientIp } from '../lib/namecard-rate-limit';
+import { getFeatureFlags } from '../lib/feature-flags';
 import { streamNamecardPhoto, readNamecardPhotoBytes } from '../lib/namecard-photo';
 import { buildVcard } from '../lib/namecard-vcard';
 import { renderCardSvg } from '../lib/namecard-svg';
@@ -91,6 +92,12 @@ function cardBaseUrl(c: AppContext): string {
 
 // ── GET /c/:slug — HTML card page ──────────────────────────────────────────
 export async function handleNamecardPage(c: AppContext): Promise<Response> {
+  // Feature flag (namecards disabled → the whole public surface 404s; see
+  // feature-flags.ts). Checked before the IP rate limit so disabled traffic
+  // never burns quota.
+  const flags = await getFeatureFlags(c.env, c.req.url);
+  if (!flags.namecards) return brandedNotFound(c);
+
   const slug = c.req.param('slug') ?? '';
   const ip = clientIp(c.req.raw);
   const rl = await checkNamecardIpRateLimit(c.env.SWA_SESSION, ip);
@@ -125,6 +132,9 @@ export async function handleNamecardPage(c: AppContext): Promise<Response> {
 
 // ── GET /c/:slug/contact.vcf — vCard download ──────────────────────────────
 export async function handleNamecardVcard(c: AppContext): Promise<Response> {
+  const flags = await getFeatureFlags(c.env, c.req.url);
+  if (!flags.namecards) return brandedNotFound(c);
+
   const slug = c.req.param('slug') ?? '';
   const ip = clientIp(c.req.raw);
   const rl = await checkNamecardIpRateLimit(c.env.SWA_SESSION, ip);
@@ -198,6 +208,9 @@ export async function handleNamecardVcard(c: AppContext): Promise<Response> {
 
 // ── GET /c/:slug/card.svg — branded card image ─────────────────────────────
 export async function handleNamecardCardSvg(c: AppContext): Promise<Response> {
+  const flags = await getFeatureFlags(c.env, c.req.url);
+  if (!flags.namecards) return brandedNotFound(c);
+
   const slug = c.req.param('slug') ?? '';
   const ip = clientIp(c.req.raw);
   const rl = await checkNamecardIpRateLimit(c.env.SWA_SESSION, ip);
@@ -260,6 +273,9 @@ export async function handleNamecardCardSvg(c: AppContext): Promise<Response> {
 // The Content-Type header (from R2 metadata) governs the response, so the
 // browser renders the image correctly without a file extension in the URL.
 export async function handlePublicNamecardPhoto(c: AppContext): Promise<Response> {
+  const flags = await getFeatureFlags(c.env, c.req.url);
+  if (!flags.namecards) return brandedNotFound(c);
+
   const slug = c.req.param('slug') ?? '';
   const ip = clientIp(c.req.raw);
   const rl = await checkNamecardIpRateLimit(c.env.SWA_SESSION, ip);

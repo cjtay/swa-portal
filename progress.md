@@ -12,6 +12,59 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-29 (session 26): Feature availability flags — production launch prep
+
+Owner decision: Dashboard, Members, Forms, Approvals and Settings go live;
+Namecards, Office Booking and Events stay hidden until finished. Implemented
+as runtime feature flags following the `swa:ai_config` kill-switch pattern:
+code defaults are the fail-safe source of truth (all `false` in prod, all
+`true` under dev bypass), the KV key `swa:feature_flags` in SWA_CONFIG is a
+per-key override, and IT admins flip features from a new Settings → Feature
+availability card — launching a finished feature needs no redeploy (takes
+effect within ~60s: per-isolate cache + KV eventual consistency).
+
+### Done
+- `src/worker/lib/feature-flags.ts` (new): `getFeatureFlags()` — dev-bypass
+  short-circuit → KV overlay on code defaults; 60s in-isolate cache;
+  `__resetFeatureFlagCacheForTests()`.
+- `middleware.ts` gate 2b: `/api/namecards*`, `/api/bookings*`, `/api/reg/*`
+  return `503 FEATURE_DISABLED` before auth and before the public buyer
+  bypass. `namecard-public.ts`: all four `/c/*` handlers 404 when namecards
+  is off (before rate limiting).
+- `api/session.ts`: `features` object on every response branch (same pattern
+  as `ai_comparison_enabled`). `admin-settings.ts`: `swa:feature_flags` key
+  added to `KNOWN_KEYS` — GET falls back to code defaults with `isDefault`,
+  POST validation requires every known boolean key and rejects unknown keys.
+- Client: `auth-gate.ts` gains `FeatureKey` + `feature` option on
+  requireAuth/requireRegAdmin/requireRegVolunteer/requireItAdmin (disabled →
+  redirect `/`; also fixed the non-admin fallback redirect away from
+  `/office-booking`). AdminLayout nav + dashboard cards carry `data-feature`;
+  dashboard rebuilt (Members/Forms/Approvals always, WIP cards hidden);
+  11 WIP pages gated; buyer page shows the closed view on 503.
+- Settings page: Feature availability card (3 rows, Enable/Disable) and the
+  Table-Config pointer card now hides unless events is on.
+- Tests: `test/feature-flags-setup.ts` setup file seeds all-true KV for the
+  suite (test host is example.com so dev defaults never apply); new
+  `feature-flags.test.ts` (13 tests: 503 gates, fail-closed KV fallbacks,
+  per-key overlays, /c/* 404/200, session payload, settings validation).
+- Docs: ARCHITECTURE.md §3 feature-flags subsection + counts, functional
+  specs §3.2 (availability flags) + §3.3 matrix renumber + `FEATURE_DISABLED`
+  error code + session JSON, AGENTS.md Core Rules + Key Files row.
+
+### Verify
+`npm run test:run` (282 passed), `npm run typecheck`,
+`npm run typecheck:worker`, `npm run build` clean.
+
+### Deploy notes
+- Nothing to configure — missing KV key already means all three disabled.
+- Public volunteer form remains closed by default
+  (`swa:volunteer_event_config`); open via KV when wanted.
+- After deploy: smoke test nav shows only Dashboard/Members/Forms/Approvals
+  (+ Settings for IT admins), `/c/x` → 404, `/api/reg/*` → 503; flip each
+  feature on/off from Settings to confirm runtime toggling.
+
+---
+
 ## 2026-08-29 (session 25): Approvals — document required when approval is required
 
 Owner decision: purchase approvers decide remotely from the uploaded files,

@@ -21,6 +21,10 @@ export default defineConfig({
   ],
   test: {
     include: ['test/**/*.test.ts', 'src/**/__tests__/**/*.test.ts'],
+    // Seeds the swa:feature_flags KV override to all-true so existing
+    // integration tests run against fully-enabled features (the test host
+    // is example.com, so dev defaults never apply). See the file header.
+    setupFiles: ['test/feature-flags-setup.ts'],
     // The @cloudflare/vitest-pool-workers pool shares a single Miniflare D1
     // instance across all test files. Running files in parallel would race
     // their applyMigrations() calls and clobber each other's fixture data.

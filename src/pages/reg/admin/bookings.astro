@@ -324,7 +324,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   requireRegAdmin(async () => {
     await loadTableConfig();
     await loadBookings();
-  });
+  }, { feature: 'events' });
 </script>
 
 <style is:global>

@@ -31,6 +31,7 @@ See `docs/specs/SWAPortal-Functional-Specs.md` (core: roles, access matrix, conv
 - **Auth system** — OTP via email, HMAC-signed sessions in cookies (`swa_session`)
 - **Role tiers** — `admin` (D1 `category='admin'` or `IT_ADMIN_EMAILS`), `committee` session role (D1 `category='committee'` or `category='advisor'` with `can_login=1`). Advisor = same session tier as committee, but `fee_waived=1`.
 - **Local dev login** — With `DEV_BYPASS_AUTH=true` (`.dev.vars`), `/login` shows a "Dev quick login" picker listing every `can_login=1` member. `POST /api/dev/login { email }` signs a real `swa_session` cookie without OTP. Logout sets a `swa_dev_logout` marker so the bypass stays inert until you pick another identity. Real cookie always wins over the bypass injection. All dev-login paths 404 in prod.
+- **Feature availability flags** — WIP features (`namecards`, `office_booking`, `events`) are hidden in production until an IT admin enables them from Settings → Feature availability (KV key `swa:feature_flags`; code defaults in `src/worker/lib/feature-flags.ts` are the fail-safe source of truth, all `false` in prod, all `true` under dev bypass). Every NEW feature ships behind a flag defaulting to `false` — gate APIs in `middleware.ts`, pages via auth-gate's `feature` option, and add the Settings card row. See `docs/specs/SWAPortal-Functional-Specs.md` §3.2.
 - **No emoji icons** in professional components
 
 ## Safety Standards
@@ -92,6 +93,7 @@ Secrets: `OTP_SECRET`, `SESSION_SECRET`, `RESEND_API_KEY` (set interactively via
 | `src/worker/api/members.ts`      | Member CRUD API (includes `can_login`, membership lifecycle fields)                                                                      |
 | `src/worker/api/bookings.ts`     | Office booking CRUD API                                                                                                                  |
 | `src/worker/lib/rate-limit.ts`   | General-purpose authenticated endpoint rate limiting                                                                                     |
+| `src/worker/lib/feature-flags.ts` | Runtime feature availability (KV-overridden code defaults; gates WIP features in prod, all-on in dev)                                  |
 | `src/worker/lib/session-role.ts` | Shared `resolveSessionRole` — single source of truth for the IT-admin/admin/volunteer/committee mapping (used by verify-otp + dev-login) |
 | `src/constants/portal.ts`        | `IT_ADMIN_EMAILS`, session config, OTP TTL, rate limit constants, `DEV_LOGOUT_COOKIE_NAME`                                               |
 | `src/pages/login.astro`          | Standalone login (NO AdminLayout — avoids redirect loop). Renders the dev role-picker when `/api/dev/members` succeeds                   |

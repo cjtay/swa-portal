@@ -2,6 +2,7 @@ import type { Context } from 'hono';
 import type { Env, AppContext } from '../types';
 import { IT_ADMIN_EMAILS, SESSION_COOKIE_NAME, DEV_LOGOUT_COOKIE_NAME, isPurchaseApprover, isFinanceApprover } from '../../constants/portal';
 import { isAiComparisonEnabled } from '../lib/ai-comparison';
+import { getFeatureFlags } from '../lib/feature-flags';
 import { verifyHmac, base64urlDecode } from '../lib/crypto';
 import { revalidateSession } from '../lib/session-revalidation';
 import { sessionCookieHeader, clearedSessionCookieHeader, type SessionPayload } from '../lib/session-cookie';
@@ -146,6 +147,12 @@ export async function getSession(c: AppContext): Promise<SessionData | null> {
 }
 
 export async function handleSession(c: AppContext) {
+  // Feature availability for this environment (cached per isolate; see
+  // feature-flags.ts). Surfaced on every response branch so client-side
+  // gates (nav, dashboard cards, requireFeature) behave identically
+  // whether or not a session cookie is present.
+  const features = await getFeatureFlags(c.env, c.req.url);
+
   // Real cookie takes precedence over the dev-bypass injection. This lets
   // /api/dev/login switch to a chosen member identity even while the bypass
   // flag is on: the picked session cookie is honoured, and the bypass only
@@ -158,7 +165,7 @@ export async function handleSession(c: AppContext) {
     const revalidated = await revalidateSession(c.env.DB, c.env.SESSION_SECRET, realSession);
     if (revalidated.status === 'invalid') {
       c.header('Set-Cookie', clearedSessionCookieHeader(), { append: true });
-      return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false, is_purchase_approver: false, is_finance_approver: false, ai_comparison_enabled: false });
+      return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false, is_purchase_approver: false, is_finance_approver: false, ai_comparison_enabled: false, features });
     }
     if (revalidated.newCookie) {
       c.header(
@@ -179,6 +186,7 @@ export async function handleSession(c: AppContext) {
       is_purchase_approver: isPurchaseApprover(s.email),
       is_finance_approver: isFinanceApprover(s.email),
       ai_comparison_enabled: await isAiComparisonEnabled(c.env.SWA_CONFIG),
+      features,
     });
   }
 
@@ -203,10 +211,11 @@ export async function handleSession(c: AppContext) {
       is_purchase_approver: isPurchaseApprover(s.email),
       is_finance_approver: isFinanceApprover(s.email),
       ai_comparison_enabled: await isAiComparisonEnabled(c.env.SWA_CONFIG),
+      features,
     });
   }
 
-  return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false, is_purchase_approver: false, is_finance_approver: false, ai_comparison_enabled: false });
+  return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false, is_purchase_approver: false, is_finance_approver: false, ai_comparison_enabled: false, features });
 }
 
 export async function handleLogout(c: AppContext) {

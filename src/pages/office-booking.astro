@@ -440,6 +440,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
   });
 
   requireAuth({
+    feature: 'office_booking',
     onAuthenticated(data: any) {
       sessionEmail = data.email || '';
       sessionName = data.name || '';

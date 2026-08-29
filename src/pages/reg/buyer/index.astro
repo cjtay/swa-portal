@@ -105,6 +105,14 @@ interface GuestRow { id: number; guest_name?: string | null; notes?: string | nu
   async function loadData() {
     try {
       const res = await fetch(`/api/reg/buyer/${token}`);
+      if (res.status === 503) {
+        // Feature disabled (feature-flags.ts) — treat like a closed form
+        // rather than an error.
+        loading.style.display = 'none';
+        closedView.style.display = '';
+        closedReason.textContent = 'Guest registration is currently unavailable. If you have any questions, please contact SWA directly.';
+        return;
+      }
       if (!res.ok) {
         throw new Error(`Server error: ${res.status}`);
       }

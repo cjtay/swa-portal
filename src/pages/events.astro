@@ -74,5 +74,5 @@ import AdminLayout from '../layouts/AdminLayout.astro';
 
 <script>
   import { requireRegVolunteer } from '../scripts/auth-gate';
-  requireRegVolunteer(() => {});
+  requireRegVolunteer(() => {}, { feature: 'events' });
 </script>

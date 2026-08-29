@@ -5,6 +5,7 @@ import { IT_ADMIN_EMAILS, isPurchaseApprover, isFinanceApprover } from '../const
 import { checkApiRateLimit, getEndpointKey } from './lib/rate-limit';
 import { revalidateSession } from './lib/session-revalidation';
 import { sessionCookieHeader, clearedSessionCookieHeader } from './lib/session-cookie';
+import { getFeatureFlags, type FeatureKey } from './lib/feature-flags';
 
 const PUBLIC_PATHS = new Set([
   '/api/health',
@@ -83,6 +84,20 @@ function pathStartsWithAny(path: string, prefixes: Set<string>): boolean {
   return false;
 }
 
+// Feature availability gates (docs: src/worker/lib/feature-flags.ts). These
+// run BEFORE the buyer/public bypasses below so a disabled feature's public
+// endpoints (e.g. /api/reg/buyer/*) are blocked too. Disabled → 503, the
+// same error shape as the approvals AI kill-switch.
+const FEATURE_GATES: Array<{ prefix: string; key: FeatureKey }> = [
+  { prefix: '/api/namecards', key: 'namecards' },
+  { prefix: '/api/bookings', key: 'office_booking' },
+  { prefix: '/api/reg', key: 'events' },
+];
+
+function pathStartsWith(path: string, prefix: string): boolean {
+  return path === prefix || path.startsWith(prefix + '/');
+}
+
 export async function authMiddleware(c: AppContext, next: Next) {
   const path = c.req.path;
   const basePath = getBasePath(path);
@@ -96,6 +111,22 @@ export async function authMiddleware(c: AppContext, next: Next) {
   // 2. Public paths bypass auth
   if (PUBLIC_PATHS.has(path) || PUBLIC_PATHS.has(basePath)) {
     return next();
+  }
+
+  // 2b. Feature availability — disabled features return 503 before any auth
+  // or public-bypass logic runs. In local dev the defaults are all-enabled
+  // (see feature-flags.ts), so WIP features stay reachable.
+  for (const gate of FEATURE_GATES) {
+    if (pathStartsWith(path, gate.prefix)) {
+      const flags = await getFeatureFlags(c.env, c.req.url);
+      if (!flags[gate.key]) {
+        return c.json(
+          { success: false, error_code: 'FEATURE_DISABLED', message: 'This feature is currently unavailable.' },
+          503,
+        );
+      }
+      break;
+    }
   }
 
   // 3. Registration buyer routes — bypass session auth, token validation in handler

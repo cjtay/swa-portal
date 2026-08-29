@@ -179,5 +179,5 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   requireRegVolunteer(async () => {
     await loadTableConfig();
     searchInput.focus();
-  });
+  }, { feature: 'events' });
 </script>

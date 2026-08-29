@@ -1,6 +1,6 @@
 # SWA Portal — Architecture
 
-> **Living document.** It describes the system as it is today (last verified 23 August 2026).
+> **Living document.** It describes the system as it is today (last verified 29 August 2026).
 > If a change alters how the system works (routes, tables, roles, page groups, bindings),
 > update this file in the same commit. Session-by-session history lives in `progress.md`.
 > A point-in-time critique of code quality from 22-08-2026 lives in
@@ -48,7 +48,7 @@ Headline numbers, verified 23-08-2026:
 | Worker routes | 82 |
 | Database tables | 16 (14 live, 2 dormant) |
 | Migration files | 11 (two share the number `005`) |
-| Automated tests | 220 |
+| Automated tests | 282 |
 | Source lines, including tests | ~22,000 |
 
 The important number is the 2 production dependencies. The project deliberately builds on two
@@ -92,7 +92,7 @@ handler. Each entry is called a binding: a pre-connected handle to a Cloudflare 
 |---|---|---|
 | `DB` | D1 (SQLite database) | All persistent data: members, bookings, forms, registrations |
 | `SWA_SESSION` | KV (key–value store) | OTP codes, rate-limit counters, session bookkeeping |
-| `SWA_CONFIG` | KV | Event and form configuration: open/closed flags, notify emails, table layouts |
+| `SWA_CONFIG` | KV | Event and form configuration: open/closed flags, notify emails, table layouts, feature availability overrides |
 | `R2_BUCKET` | R2 (file storage) | Uploaded images: PayNow screenshots, signatures, card photos |
 | `AI` | Workers AI | Approvals AI quotation comparison: reads PDFs (`toMarkdown`) and photos (vision model), writes the comparison summary. All usage inside `src/worker/lib/ai-comparison.ts` |
 
@@ -128,6 +128,7 @@ src/worker/index.ts — Hono matches the route
 src/worker/middleware.ts — authMiddleware runs first:
   • reads the swa_session cookie
   • revalidates the session against D1
+  • checks feature availability gates (503 before auth)
   • checks the caller's role against the route
   • applies rate limits
   │
@@ -150,6 +151,35 @@ Two points matter:
 The public namecard routes (`/c/*`) skip the auth middleware because they are meant for
 anonymous visitors. They enforce their own IP-based rate limit inside
 `src/worker/api/namecard-public.ts` instead.
+
+### Feature availability flags
+
+Not every built feature is launched. Namecards, Office Booking and Events are
+work-in-progress; they are switched off for all users until an IT admin enables them from
+Settings → Feature availability. The mechanism (`src/worker/lib/feature-flags.ts`, added
+29-08-2026):
+
+- **Code defaults are the source of truth** (`PROD_DEFAULT_FEATURE_FLAGS`, all `false`).
+  The KV key `swa:feature_flags` in `SWA_CONFIG` is a per-key override, written only via
+  `POST /api/admin/settings` from the Settings page. A missing or unparseable KV value
+  falls back to the code default — a half-built feature can never leak into production
+  because someone forgot a KV write.
+- **Local dev sees everything.** When the dev bypass is active, the defaults flip to
+  all-enabled, so WIP features stay visible while being built. A local KV override
+  (`wrangler kv key put --local`) can preview the off state.
+- **Enforcement is layered.** The middleware returns `503 FEATURE_DISABLED` on gated API
+  prefixes (`/api/namecards*`, `/api/bookings*`, `/api/reg/*`) before auth and before the
+  public buyer bypass; the public `/c/*` routes 404; nav items and dashboard cards hide
+  via `data-feature` attributes driven by the `features` object on `/api/session`; gated
+  pages bounce to `/` via auth-gate's `feature` option. A flip takes effect within ~60s
+  (per-isolate cache, matching KV's eventual consistency).
+- **New features ship behind a flag.** Add the key to `FeatureKey` +
+  `PROD_DEFAULT_FEATURE_FLAGS` (`false`) in the same commit as the feature — TypeScript's
+  `Record<FeatureKey, boolean>` makes a missing default a compile error.
+
+Tests: `test/feature-flags-setup.ts` seeds the KV override to all-true for the suite
+(the test host is `example.com`, so dev defaults never apply);
+`src/worker/api/__tests__/feature-flags.test.ts` covers the disabled/enabled paths.
 
 ## 4. Authentication
 
