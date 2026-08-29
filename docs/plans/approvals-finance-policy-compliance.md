@@ -1,6 +1,7 @@
 # Approvals: Finance Policy Compliance
 
-> **Status**: draft for owner review. Not implemented.
+> **Status**: gap analysis complete; all seven owner decisions settled
+> 2026-08-29 (§12.1). Not implemented — detailed build plan is the next step.
 > **Source**: "Finance Policy, Accounting and Procedure Manual", Singapore Women's
 > Association, version 2, 15 December 2024. This document calls it the manual.
 > **Related**: `docs/specs/features/approvals.md` (feature spec),
@@ -308,15 +309,88 @@ attachments are capped at 10 files of 10 MB per item.
 
 | # | Decision | Recommendation |
 |---|----------|----------------|
-| 1 | Office mapping: who holds President, 1st VP, Treasurer, Assistant Treasurer | Roxanne = President, Angela = 1st VP, YS = Treasurer, Joyce = Assistant Treasurer |
-| 2 | Above S$10,000: evidence box or a third portal stage | Evidence box plus attached minutes |
-| 3 | Two signatures: two stages count, or two finance clicks | Two stages count |
-| 4 | Quotation minimum: block without two quotes or waiver, or warn | Block |
-| 5 | Duplicate invoice number: warn or block | Warn |
-| 6 | Old quotation: warn or block | Warn |
-| 7 | Grandfathering: feature not yet in production, so no old items | Confirm, then rules apply to everything |
+| 1 | Office mapping: who holds President, 1st VP, Treasurer, Assistant Treasurer | **Settled 2026-08-29**: Roxanne = President, Angela = 1st VP, YS = Treasurer, Joyce = Assistant Treasurer (detail in §12.1) |
+| 2 | Above S$10,000: evidence box or a third portal stage | **Settled 2026-08-29**: evidence box plus attached minutes (detail in §12.1) |
+| 3 | Two signatures: two stages count, or two finance clicks | **Settled 2026-08-29**: two stages count (detail in §12.1) |
+| 4 | Quotation minimum: block without two quotes or waiver, or warn | **Settled 2026-08-29**: block (detail in §12.1) |
+| 5 | Duplicate invoice number: warn or block | **Settled 2026-08-29**: warn (detail in §12.1) |
+| 6 | Old quotation: warn or block | **Settled 2026-08-29**: warn (detail in §12.1) |
+| 7 | Grandfathering: feature not yet in production, so no old items | **Settled 2026-08-29**: confirmed — rules apply to everything (detail in §12.1) |
 
 Implementation runs in two batches. Batch A covers changes 1, 2, 4, 7 and 8
 (rules and records; migration 012). Batch B covers changes 3, 5 and 6 (form and
-evidence; migration 013). The detailed build plan will be written once the
-decisions above are settled.
+evidence; migration 013). All decisions below are now settled (§12.1).
+
+### 12.1 Settled decisions
+
+**Decision 1 — office mapping (settled 2026-08-29).** Roxanne = President,
+Angela = 1st Vice President; both sit on the purchase list. YS = Treasurer,
+Joyce = Assistant Treasurer; both sit on the finance list. Production
+addresses are owner-swapped at ship time, following the pattern already
+commented in `src/constants/portal.ts`; this doc deliberately lists none of
+them. Angela joins the purchase stage through `IT_ADMIN_EMAILS` as well as
+the purchase list, so the office map covers her address once.
+
+Local dev maps each office onto one of the five owner-controlled test
+addresses (`cjtay@`, `internal@`, `system@`, `approval@`, `finance@`, all
+under `singaporewomenassociation.org`). No real office-holder addresses
+appear in local dev:
+
+| Office | Local dev address | Exists today? |
+|--------|-------------------|---------------|
+| President | `approval@singaporewomenassociation.org` | Yes (shared test inbox, purchase list) |
+| 1st Vice President | `cjtay@singaporewomenassociation.org` | Yes (IT admin, so already a purchase approver; Change 2's self-approval guard stops this identity approving its own requests) |
+| Treasurer | `finance@singaporewomenassociation.org` | Yes (shared test inbox, finance list) |
+| Assistant Treasurer | `internal@singaporewomenassociation.org` | Seed row exists and is login-capable; the build plan adds the address to the finance list, dev only |
+
+No new seed rows are needed. Every office maps to an address that already
+appears in the dev quick-login picker, and `internal@` lets local testing
+show that either Treasurer-side office may sign the finance stage.
+
+**Decision 2 — board approval above S$10,000 (settled 2026-08-29).** Evidence
+box plus attached minutes; no third portal stage. The board evidence is
+simply an uploaded PDF of the minutes (or the approval email), sitting in the
+request's attachments like any other supporting document. The purchase
+approve handler refuses the click until both parts are present: the short
+board reference in the evidence box, and the minutes PDF among the
+attachments.
+
+**Decision 3 — two signatures at S$5,000 and above (settled 2026-08-29).**
+The two existing stages count as the two signatures: the purchase stage
+supplies the President/Vice President signature, the finance stage supplies
+the Treasurer/Assistant Treasurer signature. No extra click. What changes:
+at create and edit, amounts of S$5,000 or more switch `approval_required` on
+even for recurring categories, and the printed voucher shows both signers
+with their offices.
+
+**Decision 4 — quotation minimum (settled 2026-08-29).** Block. At create
+and edit, when the amount is S$1,000 or more, the API refuses the submission
+until either two quotations are attached or the required waiver-reason box is
+filled. One of the two must always be present; the waiver text becomes the
+recorded decision the manual asks for (3.3 j).
+
+**Decision 5 — duplicate invoice number (settled 2026-08-29).** Warn. When
+the invoice or receipt number already exists on another item, the API returns
+a clear warning, the audit log notes the possible duplicate, and the office
+admin sees the warning at the payment step. The payment can still be
+recorded, because some suppliers reuse numbers monthly. If real duplicates
+appear later, the check can tighten to a block.
+
+**Decision 6 — old quotation (settled 2026-08-29).** Warn. Each comparison
+row gains an optional quotation date. When a date shows the quotation is
+older than 12 months, the board and drawer display a warning that a fresh
+quotation is needed (manual 3.3 d). The date is optional and typed by hand,
+so a warning keeps a typo from wrongly blocking a request; the approvers
+decide whether to send it back.
+
+**Decision 7 — grandfathering (settled 2026-08-29).** Confirmed: the
+approvals feature has not shipped to the board, so every item in the database
+is local test data. All eight changes apply to every item from day one, with
+no old-format rows to accommodate.
+
+## 13. Next step
+
+All seven decisions are settled (see §12.1). The detailed build plan now
+exists: `docs/plans/approvals-finance-compliance-implementation-plan.md`
+(Batch A: changes 1, 2, 4, 7, 8 — migration 012; Batch B: changes 3, 5, 6 —
+migration 013).
