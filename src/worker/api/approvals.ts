@@ -381,9 +381,11 @@ export async function handleApprovalsCreate(c: AppContext) {
   const amountRaw = typeof form['requestedAmount'] === 'string' ? form['requestedAmount'].trim() : '';
   if (amountRaw.length > 0) {
     const parsed = Number(amountRaw);
-    if (!Number.isFinite(parsed) || parsed < 0 || parsed > MAX_REQUESTED_AMOUNT) {
+    // Optional field, but zero/negative makes no sense for a payment request
+    // (owner decision 29-08-2026) — any category, approval or not.
+    if (!Number.isFinite(parsed) || parsed <= 0 || parsed > MAX_REQUESTED_AMOUNT) {
       return c.json(
-        { success: false, error_code: 'VALIDATION_ERROR', message: 'Requested amount must be a number between 0 and 10,000,000.' },
+        { success: false, error_code: 'VALIDATION_ERROR', message: 'Requested amount must be greater than 0 and at most 10,000,000.' },
         400,
       );
     }
@@ -1262,8 +1264,9 @@ export async function handleApprovalEdit(c: AppContext) {
     const raw = String(form['requestedAmount']).trim();
     if (raw.length > 0) {
       const parsed = Number(raw);
-      if (!Number.isFinite(parsed) || parsed < 0 || parsed > MAX_REQUESTED_AMOUNT) {
-        return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Requested amount must be a number between 0 and 10,000,000.' }, 400);
+      // Same rule as create: > 0 when present (owner decision 29-08-2026).
+      if (!Number.isFinite(parsed) || parsed <= 0 || parsed > MAX_REQUESTED_AMOUNT) {
+        return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Requested amount must be greater than 0 and at most 10,000,000.' }, 400);
       }
       updates.push('requested_amount = ?');
       params.push(Math.round(parsed * 100) / 100);

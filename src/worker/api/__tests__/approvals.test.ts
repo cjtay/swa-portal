@@ -234,6 +234,26 @@ describe('POST /api/approvals — create', () => {
     expect(count?.n).toBe(0);
   });
 
+  it('rejects a requested amount of zero, regardless of category or approval requirement (owner decision 29-08-2026)', async () => {
+    // quotation (approval required, file attached) and payroll (recurring,
+    // no file needed) — the zero-amount 400 must fire for both.
+    for (const category of ['quotation', 'payroll']) {
+      const form = new FormData();
+      form.append('category', category);
+      form.append('title', `Zero amount ${category}`);
+      form.append('requestedAmount', '0');
+      if (category === 'quotation') form.append('files', pdfFile('quote.pdf'));
+      const res = await SELF.fetch('https://example.com/api/approvals', {
+        method: 'POST',
+        headers: { Cookie: await adminCookie() },
+        body: form,
+      });
+      expect(res.status).toBe(400);
+    }
+    const count = await env.DB.prepare('SELECT COUNT(*) AS n FROM approval_items').first<{ n: number }>();
+    expect(count?.n).toBe(0);
+  });
+
   it('rejects an unknown category', async () => {
     const form = new FormData();
     form.append('category', 'not-a-category');
@@ -940,6 +960,22 @@ describe('POST /api/approvals/:id/edit — edit and resubmit', () => {
 
     const attCount = await env.DB.prepare('SELECT COUNT(*) AS n FROM approval_attachments WHERE item_id = ?').bind(id).first<{ n: number }>();
     expect(attCount?.n).toBe(2); // quote.pdf from seedPendingItem + extra-quote.pdf
+  });
+
+  it('rejects editing the amount to zero (400)', async () => {
+    const id = await seedPendingItem();
+    const form = new FormData();
+    form.append('requestedAmount', '0');
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/edit`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    expect(res.status).toBe(400);
+    const item = await env.DB.prepare('SELECT requested_amount FROM approval_items WHERE id = ?')
+      .bind(id)
+      .first<{ requested_amount: number }>();
+    expect(item?.requested_amount).toBeCloseTo(1200.5, 2); // unchanged
   });
 
   it('resubmit after purchase rejection returns to pending and clears the stage', async () => {

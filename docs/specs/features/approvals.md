@@ -112,7 +112,7 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 | `id`, `created_at`, `updated_at` | | Standard |
 | `category` | TEXT | Key from `APPROVAL_CATEGORIES` (8 categories) |
 | `title`, `payee`, `description` | TEXT | Description capped 4,000 chars |
-| `requested_amount` | REAL | Optional estimate |
+| `requested_amount` | REAL | Optional; when present must exceed 0 for any category (owner decision 29-08-2026 — a payment request is never for S$0; enforced at create and edit) |
 | `approval_required` | INTEGER | Default from category, flippable per item |
 | `status` | TEXT | CHECK: the six statuses above |
 | `rejected_stage` | TEXT | `purchase`/`finance`; cleared on resubmit |

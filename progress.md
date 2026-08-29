@@ -32,6 +32,11 @@ maintenance — approval_required = 0) stay paperless.
   (incl. seedPendingItem); edit-attachments test expects 2 files now.
 - Docs: approvals.md spec (§3 create row, §4 Documents rule, §8 tests);
   guide.astro Step 2 explains the rule and the paperless exception.
+- Follow-up (same session): requested amount, when filled in, must be > 0
+  (any category, approval or not) — create + edit endpoints return 400,
+  form inputs use min="0.01". Still optional (an estimate; the voucher
+  carries the actual figures). Voucher lines unchanged — negative deposit
+  rows remain by design. Spec §6 updated; zero-amount 400 tests added.
 
 ### Verify
 `npx vitest run src/worker/api/__tests__/approvals.test.ts` (74 passed);
