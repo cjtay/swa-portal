@@ -430,6 +430,7 @@ describe('AI analyse endpoints — guards', () => {
         const form = new FormData();
         form.append('category', APPROVAL_CATEGORIES[0].key);
         form.append('title', 'AI guard test');
+        form.append('files', new File(['%PDF-1.4 x'], 'quote.pdf', { type: 'application/pdf' }));
         return form;
       })(),
     });

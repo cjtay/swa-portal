@@ -74,7 +74,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       </label>
 
       <label class="ap-field" style="display:block;margin-top:0.75rem;">
-        <span>Documents: add one at a time or several at once (PDF or photos, up to 10 files, 10 MB each)</span>
+        <span>Documents: add one at a time or several at once (PDF or photos, up to 10 files, 10 MB each). At least one document is required when approval is required.</span>
         <input type="file" id="ap-files" class="form-input" multiple accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" />
       </label>
       <div id="ap-files-list" aria-live="polite"></div>
@@ -2053,6 +2053,14 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     if (!msg || !submit) return;
     msg.textContent = '';
     msg.style.color = 'var(--text-muted)';
+
+    // Approvers decide remotely from the uploaded files: an approval-required
+    // request must carry at least one document (owner decision 29-08-2026).
+    if (approvalCheck?.checked && chosenFiles.length === 0) {
+      msg.style.color = '#b3261e';
+      msg.textContent = 'Attach at least one document (quotation, invoice or photo), or uncheck "Approval required" for paperless recurring items.';
+      return;
+    }
 
     const form = new FormData();
     if (categorySelect) form.append('category', categorySelect.value);

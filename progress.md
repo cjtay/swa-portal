@@ -12,6 +12,34 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-29 (session 25): Approvals — document required when approval is required
+
+Owner decision: purchase approvers decide remotely from the uploaded files,
+so a request raised with "Approval required" checked must carry at least one
+document. Recurring items (payroll, standing vendor payments, office
+maintenance — approval_required = 0) stay paperless.
+
+### Done
+- `src/worker/api/approvals.ts` create endpoint: 400 VALIDATION_ERROR when
+  approvalRequired resolves true and no files attached (check sits after the
+  per-file MIME/size validation, before comparison parsing).
+- `src/pages/approvals.astro` create form: submit-time guard with red
+  message; documents label states the rule.
+- No edit-path change needed: approval_required is frozen at creation and
+  attachments are add-only, so create is the only enforcement point.
+- Tests: new 400 case proving the rule; every prior create of an
+  approval-required item without files now seeds `pdfFile('quote.pdf')`
+  (incl. seedPendingItem); edit-attachments test expects 2 files now.
+- Docs: approvals.md spec (§3 create row, §4 Documents rule, §8 tests);
+  guide.astro Step 2 explains the rule and the paperless exception.
+
+### Verify
+`npx vitest run src/worker/api/__tests__/approvals.test.ts` (74 passed);
+full `npm run test:run`, `npm run typecheck`, `npm run typecheck:worker`,
+`npm run build` clean.
+
+---
+
 ## 2026-08-28 (session 24): Approvals user guide page (/approvals/guide)
 
 Owner asked for a role-based user guide with screenshots, hosted in the

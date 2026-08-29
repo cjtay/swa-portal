@@ -156,6 +156,7 @@ describe('POST /api/approvals — create', () => {
     form.append('title', 'Gala dinner quotations');
     form.append('payee', 'Grand Copthorne Waterfront Hotel');
     form.append('requestedAmount', '36772.50');
+    form.append('files', pdfFile('quote.pdf'));
 
     const res = await SELF.fetch('https://example.com/api/approvals', {
       method: 'POST',
@@ -217,6 +218,22 @@ describe('POST /api/approvals — create', () => {
     expect(body.status).toBe('purchase_approved');
   });
 
+  it('requires at least one document when approval is required (owner decision 29-08-2026)', async () => {
+    const form = new FormData();
+    form.append('category', 'quotation');
+    form.append('title', 'Approval item without any document');
+    const res = await SELF.fetch('https://example.com/api/approvals', {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json<{ error_code?: string }>();
+    expect(body.error_code).toBe('VALIDATION_ERROR');
+    const count = await env.DB.prepare('SELECT COUNT(*) AS n FROM approval_items').first<{ n: number }>();
+    expect(count?.n).toBe(0);
+  });
+
   it('rejects an unknown category', async () => {
     const form = new FormData();
     form.append('category', 'not-a-category');
@@ -233,6 +250,7 @@ describe('POST /api/approvals — create', () => {
     const form = new FormData();
     form.append('category', 'quotation');
     form.append('title', 'Laptops for the office');
+    form.append('files', pdfFile('laptops.pdf'));
     form.append('description', 'Two laptops to replace the 2019 units that no longer receive security updates. Quotes attached for both vendors.');
     const res = await SELF.fetch('https://example.com/api/approvals', {
       method: 'POST',
@@ -417,6 +435,7 @@ describe('POST /api/approvals — AI comparison replay', () => {
     const form = new FormData();
     form.append('category', 'quotation');
     form.append('title', 'AI comparison replay');
+    form.append('files', pdfFile('quote.pdf'));
     form.append('aiComparison', validAnalysis);
     const res = await SELF.fetch('https://example.com/api/approvals', {
       method: 'POST',
@@ -443,6 +462,7 @@ describe('POST /api/approvals — AI comparison replay', () => {
     const form = new FormData();
     form.append('category', 'quotation');
     form.append('title', 'Bad AI payload');
+    form.append('files', pdfFile('quote.pdf'));
     form.append('aiComparison', '{"version":1,"not":"the agreed shape"}');
     const res = await SELF.fetch('https://example.com/api/approvals', {
       method: 'POST',
@@ -456,6 +476,7 @@ describe('POST /api/approvals — AI comparison replay', () => {
     const form = new FormData();
     form.append('category', 'quotation');
     form.append('title', 'No AI analysis');
+    form.append('files', pdfFile('quote.pdf'));
     const res = await SELF.fetch('https://example.com/api/approvals', {
       method: 'POST',
       headers: { Cookie: await adminCookie() },
@@ -473,6 +494,7 @@ describe('POST /api/approvals — AI comparison replay', () => {
     const form = new FormData();
     form.append('category', 'quotation');
     form.append('title', 'AI without manual comparison');
+    form.append('files', pdfFile('quote.pdf'));
     // Deliberately NO `comparison` field and no descriptions.
     form.append('aiComparison', validAnalysis);
     const res = await SELF.fetch('https://example.com/api/approvals', {
@@ -500,6 +522,7 @@ describe('POST /api/approvals — AI comparison replay', () => {
     const form = new FormData();
     form.append('category', 'quotation');
     form.append('title', 'AI text edit');
+    form.append('files', pdfFile('quote.pdf'));
     form.append('aiComparison', validAnalysis);
     const res = await SELF.fetch('https://example.com/api/approvals', {
       method: 'POST',
@@ -531,6 +554,7 @@ describe('POST /api/approvals — AI comparison replay', () => {
     const form = new FormData();
     form.append('category', 'quotation');
     form.append('title', 'No analysis to edit');
+    form.append('files', pdfFile('quote.pdf'));
     const res = await SELF.fetch('https://example.com/api/approvals', {
       method: 'POST',
       headers: { Cookie: await adminCookie() },
@@ -552,6 +576,7 @@ describe('POST /api/approvals — AI comparison replay', () => {
     const form = new FormData();
     form.append('category', 'quotation');
     form.append('title', 'Cap test');
+    form.append('files', pdfFile('quote.pdf'));
     form.append('aiComparison', validAnalysis);
     const res = await SELF.fetch('https://example.com/api/approvals', {
       method: 'POST',
@@ -574,6 +599,7 @@ describe('POST /api/approvals — AI comparison replay', () => {
     const form = new FormData();
     form.append('category', 'quotation');
     form.append('title', 'Frozen AI texts');
+    form.append('files', pdfFile('quote.pdf'));
     form.append('aiComparison', validAnalysis);
     const res = await SELF.fetch('https://example.com/api/approvals', {
       method: 'POST',
@@ -610,6 +636,7 @@ describe('GET /api/approvals — list and counts', () => {
     const formA = new FormData();
     formA.append('category', 'quotation');
     formA.append('title', 'Needs approval');
+    formA.append('files', pdfFile('quote.pdf'));
     const formB = new FormData();
     formB.append('category', 'payroll');
     formB.append('title', 'Recurring payroll');
@@ -645,6 +672,7 @@ describe('GET /api/approvals — list and counts', () => {
       const form = new FormData();
       form.append('category', 'quotation');
       form.append('title', `Paged item ${i}`);
+      form.append('files', pdfFile(`paged-${i}.pdf`));
       await SELF.fetch('https://example.com/api/approvals', { method: 'POST', headers: { Cookie: await adminCookie() }, body: form });
     }
     const page = await SELF.fetch('https://example.com/api/approvals?limit=2&offset=2', {
@@ -749,6 +777,7 @@ async function seedPendingItem(): Promise<number> {
   form.append('title', 'Stage test item');
   form.append('payee', 'Test Vendor Pte Ltd');
   form.append('requestedAmount', '1200.50');
+  form.append('files', pdfFile('quote.pdf'));
   const res = await SELF.fetch('https://example.com/api/approvals', {
     method: 'POST',
     headers: { Cookie: await adminCookie() },
@@ -910,7 +939,7 @@ describe('POST /api/approvals/:id/edit — edit and resubmit', () => {
     expect(names).toContain('attachments_added');
 
     const attCount = await env.DB.prepare('SELECT COUNT(*) AS n FROM approval_attachments WHERE item_id = ?').bind(id).first<{ n: number }>();
-    expect(attCount?.n).toBe(1);
+    expect(attCount?.n).toBe(2); // quote.pdf from seedPendingItem + extra-quote.pdf
   });
 
   it('resubmit after purchase rejection returns to pending and clears the stage', async () => {
@@ -1153,6 +1182,7 @@ describe('POST /api/approvals/:id/voucher', () => {
     const pendingForm = new FormData();
     pendingForm.append('category', 'quotation');
     pendingForm.append('title', 'Still pending');
+    pendingForm.append('files', pdfFile('quote.pdf'));
     const pendingRes = await SELF.fetch('https://example.com/api/approvals', {
       method: 'POST',
       headers: { Cookie: await adminCookie() },

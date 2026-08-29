@@ -433,6 +433,20 @@ export async function handleApprovalsCreate(c: AppContext) {
     }
   }
 
+  // Owner decision 29-08-2026: purchase approvers decide remotely from the
+  // uploaded files, so an approval-required item must carry at least one
+  // document. Recurring items (approval_required = 0) may be paperless.
+  if (approvalRequired && fileList.length === 0) {
+    return c.json(
+      {
+        success: false,
+        error_code: 'VALIDATION_ERROR',
+        message: 'Attach at least one document (quotation, invoice or photo) when approval is required — approvers decide from the uploaded files. Uncheck "Approval required" for paperless recurring items.',
+      },
+      400,
+    );
+  }
+
   // --- Validate comparison rows against the uploaded filenames ---
   interface ComparisonInput {
     file: string;
