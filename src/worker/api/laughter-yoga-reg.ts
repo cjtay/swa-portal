@@ -4,6 +4,7 @@ import { handleApiError } from '../lib/error-handler';
 import { logError } from '../lib/log-error';
 import { csvEscape } from '../lib/csv';
 import { buildLaughterYogaNotificationEmail } from '../lib/email-volunteer-notification';
+import { isResendSuppressed } from '../lib/resend';
 import { isDevBypassActive } from './session';
 import { LAUGHTER_YOGA_NOTIFY_EMAILS } from '../../constants/portal';
 
@@ -525,6 +526,11 @@ async function sendNotification(env: Env, data: NotificationPayload): Promise<vo
     adminPath: '/admin/forms/laughter-yoga/',
   });
   const subject = `New Laughter Yoga Registration — ${data.reference}`;
+
+  if (isResendSuppressed(env)) {
+    console.log(`[resend] suppressed (test run): "${subject}" -> ${recipients.join(', ')}`);
+    return;
+  }
 
   try {
     const resendRes = await fetch('https://api.resend.com/emails', {

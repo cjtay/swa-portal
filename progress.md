@@ -12,6 +12,40 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-08-29 (session 27): Test runs no longer send real emails
+
+Owner request: every `npm run test:run` was emailing the real approver /
+notify lists (approval reminders, decision and notification emails) because
+vitest loads `.dev.vars`, which holds the real Resend key — the inbox was
+clogging on each verification run. Production and local-dev email sending
+are untouched; suppression exists only under vitest.
+
+### Done
+- `src/worker/lib/resend.ts` (new): `TEST_SUPPRESSED_RESEND_KEY` sentinel +
+  `isResendSuppressed()`.
+- Guards at all 8 send sites (`email-approval.ts` sendViaResend,
+  `reg/email.ts` magic link, `bookings.ts` confirmation, `send-otp.ts` OTP,
+  membership notification + welcome, volunteer + laughter-yoga
+  notifications): sentinel → log `[resend] suppressed` and return as
+  success, so handler logic (OTP storage, audit rows, responses) is
+  unchanged. send-otp still stores the OTP first, keeping login flows
+  testable.
+- `vitest.config.ts`: `miniflare.bindings` overrides `RESEND_API_KEY` with
+  the sentinel — verified empirically that this beats `.dev.vars`.
+- `test/feature-flags-setup.ts` renamed to `test/suite-setup.ts` (guards
+  both flags and email now) and gained a fail-fast assertion: the suite
+  throws immediately if the sentinel is not active, so a config regression
+  can never silently resume real sends.
+- Tests: `lib/__tests__/resend.test.ts` (sentinel exact-match, near-misses,
+  suite-active guarantee). Docs: ARCHITECTURE conventions bullet +
+  setup-file reference updated.
+
+### Verify
+`npx vitest run` full suite green with `[resend] suppressed` logs on
+approval flows; `npm run typecheck`, `npm run typecheck:worker` clean.
+
+---
+
 ## 2026-08-29 (session 26): Feature availability flags — production launch prep
 
 Owner decision: Dashboard, Members, Forms, Approvals and Settings go live;

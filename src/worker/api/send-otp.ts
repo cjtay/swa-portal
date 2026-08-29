@@ -3,6 +3,7 @@ import type { AppContext } from '../types';
 import { buildOtpEmail } from '../lib/email-otp';
 import { signHmac } from '../lib/crypto';
 import { handleApiError } from '../lib/error-handler';
+import { isResendSuppressed } from '../lib/resend';
 import { isDevBypassActive } from './session';
 import { IT_ADMIN_EMAILS, OTP_TTL_SECONDS, OTP_RATE_LIMIT_WINDOW_SECONDS, OTP_RATE_LIMIT_MAX_REQUESTS } from '../../constants/portal';
 
@@ -113,6 +114,13 @@ export async function handleSendOtp(c: AppContext) {
   await env.SWA_SESSION.put(`swa:otp:${email}`, JSON.stringify({ sig: otpSignature }), { expirationTtl: OTP_TTL_SECONDS });
 
   const emailHtml = buildOtpEmail(otp);
+
+  // Test runs never email — the OTP is already stored above, so the login
+  // flow stays fully exercisable in the suite (see lib/resend.ts).
+  if (isResendSuppressed(env)) {
+    console.log(`[resend] suppressed (test run): OTP -> ${email}`);
+    return c.json({ success: true, message: 'If this email is registered, a code has been sent.' });
+  }
 
   try {
     const resendRes = await fetch('https://api.resend.com/emails', {

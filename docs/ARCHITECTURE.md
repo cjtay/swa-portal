@@ -48,7 +48,7 @@ Headline numbers, verified 23-08-2026:
 | Worker routes | 82 |
 | Database tables | 16 (14 live, 2 dormant) |
 | Migration files | 11 (two share the number `005`) |
-| Automated tests | 282 |
+| Automated tests | 285 |
 | Source lines, including tests | ~22,000 |
 
 The important number is the 2 production dependencies. The project deliberately builds on two
@@ -177,8 +177,9 @@ Settings → Feature availability. The mechanism (`src/worker/lib/feature-flags.
   `PROD_DEFAULT_FEATURE_FLAGS` (`false`) in the same commit as the feature — TypeScript's
   `Record<FeatureKey, boolean>` makes a missing default a compile error.
 
-Tests: `test/feature-flags-setup.ts` seeds the KV override to all-true for the suite
-(the test host is `example.com`, so dev defaults never apply);
+Tests: `test/suite-setup.ts` seeds the KV override to all-true for the suite
+(the test host is `example.com`, so dev defaults never apply) and asserts the
+email-suppression sentinel is active;
 `src/worker/api/__tests__/feature-flags.test.ts` covers the disabled/enabled paths.
 
 ## 4. Authentication
@@ -472,10 +473,16 @@ The rules:
 - **Two typechecks.** `npm run typecheck` runs `astro check` over the pages;
   `npm run typecheck:worker` runs `tsc` over the Worker with its own tsconfig.
 - **Tests hit a simulated Cloudflare, not mocks.** Vitest + Miniflare give the tests a real
-  fake D1/KV/R2. `npm run test:run` currently passes 220 tests; it runs through
+  fake D1/KV/R2. `npm run test:run` currently passes 285 tests; it runs through
   `scripts/test-run.mjs`, a watchdog that kills the process tree if the pool
   deadlocks in teardown (see progress.md 2026-08-23 session 7). The test files
   share one D1 isolate, so `vitest.config.ts` runs them serially.
+- **Test runs never send email.** The vitest config replaces `RESEND_API_KEY`
+  with a sentinel (`miniflare.bindings` override beating `.dev.vars`); every
+  send site checks `src/worker/lib/resend.ts` and treats the sentinel as a
+  suppressed no-op with a console log. `test/suite-setup.ts` asserts the
+  sentinel is active and fails the whole suite otherwise. Production and
+  local `wrangler dev` send normally — suppression exists only under vitest.
 - **Destructive local scripts are user-invoked only.** `db:setup`, `db:seed` and
   `db:clear:membership` never run autonomously.
 

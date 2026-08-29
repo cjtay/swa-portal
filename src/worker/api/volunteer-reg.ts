@@ -4,6 +4,7 @@ import { handleApiError } from '../lib/error-handler';
 import { logError } from '../lib/log-error';
 import { csvEscape } from '../lib/csv';
 import { buildVolunteerNotificationEmail } from '../lib/email-volunteer-notification';
+import { isResendSuppressed } from '../lib/resend';
 import { isDevBypassActive } from './session';
 import { VOLUNTEER_NOTIFY_EMAILS } from '../../constants/portal';
 
@@ -636,6 +637,11 @@ async function sendNotification(env: Env, data: NotificationPayload): Promise<vo
 
   const html = buildVolunteerNotificationEmail(data);
   const subject = `New Volunteer Registration — ${data.reference}`;
+
+  if (isResendSuppressed(env)) {
+    console.log(`[resend] suppressed (test run): "${subject}" -> ${recipients.join(', ')}`);
+    return;
+  }
 
   try {
     const resendRes = await fetch('https://api.resend.com/emails', {

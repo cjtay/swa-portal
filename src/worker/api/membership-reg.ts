@@ -5,6 +5,7 @@ import { logError } from '../lib/log-error';
 import { csvEscape } from '../lib/csv';
 import { buildMembershipNotificationEmail } from '../lib/email-membership-notification';
 import { buildMembershipReference } from '../lib/paynow-qr';
+import { isResendSuppressed } from '../lib/resend';
 import { isDevBypassActive } from './session';
 import {
   MEMBERSHIP_NOTIFY_EMAILS,
@@ -1007,6 +1008,11 @@ async function sendNotification(env: Env, data: NotificationPayload): Promise<vo
   const html = buildMembershipNotificationEmail(data);
   const subject = `New Membership Application: ${data.reference}`;
 
+  if (isResendSuppressed(env)) {
+    console.log(`[resend] suppressed (test run): "${subject}" -> ${recipients.join(', ')}`);
+    return;
+  }
+
   try {
     const resendRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -1076,6 +1082,10 @@ function buildWelcomeEmailHtml(d: WelcomePayload): string {
 
 async function sendWelcomeEmail(env: Env, d: WelcomePayload): Promise<void> {
   if (!d.email) return;
+  if (isResendSuppressed(env)) {
+    console.log(`[resend] suppressed (test run): welcome email -> ${d.email}`);
+    return;
+  }
   try {
     const resendRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',

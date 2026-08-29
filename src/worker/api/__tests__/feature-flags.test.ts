@@ -7,7 +7,7 @@
 //   3. the swa:feature_flags settings key (GET default fallback + POST
 //      validation) and the /api/session `features` payload.
 //
-// The vitest setup file (test/feature-flags-setup.ts) seeds all-true so the
+// The vitest suite setup (test/suite-setup.ts) seeds all-true so the
 // rest of the suite runs against enabled features; these tests flip the KV
 // override per scenario and reset the in-isolate cache between them.
 

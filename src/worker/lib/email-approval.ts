@@ -1,5 +1,6 @@
 import type { Env } from '../types';
 import { logError } from './log-error';
+import { isResendSuppressed } from './resend';
 import { APPROVAL_FINANCE_APPROVER_EMAILS, APPROVAL_PURCHASE_APPROVER_EMAILS } from '../../constants/portal';
 
 // Approval-workflow emails — docs/plans/Approval-Workflow-Implementation-Plan.md §10.
@@ -137,6 +138,10 @@ export function buildPurchaseDecisionEmail(env: Env, item: ApprovalEmailItem, de
 
 async function sendViaResend(env: Env, to: string[], subject: string, html: string, logEndpoint: string): Promise<void> {
   if (to.length === 0) return;
+  if (isResendSuppressed(env)) {
+    console.log(`[resend] suppressed (test run): "${subject}" -> ${to.join(', ')}`);
+    return;
+  }
   try {
     const resendRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',

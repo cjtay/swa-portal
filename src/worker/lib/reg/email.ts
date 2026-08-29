@@ -1,5 +1,6 @@
 import type { Env } from '../../types';
 import { logError } from '../log-error';
+import { isResendSuppressed } from '../resend';
 
 interface MagicLinkParams {
   buyerEmail: string;
@@ -94,6 +95,11 @@ function buildMagicLinkEmail(params: MagicLinkParams): string {
 }
 
 export async function sendMagicLink(env: Env, params: MagicLinkParams): Promise<void> {
+  if (isResendSuppressed(env)) {
+    console.log(`[resend] suppressed (test run): magic link -> ${params.buyerEmail}`);
+    return;
+  }
+
   const html = buildMagicLinkEmail(params);
 
   const emailPayload = {

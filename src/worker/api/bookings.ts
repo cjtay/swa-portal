@@ -1,7 +1,12 @@
 import type { Env, AppContext } from '../types';
 import { buildBookingConfirmationEmail } from '../lib/email-booking';
+import { isResendSuppressed } from '../lib/resend';
 
 async function sendConfirmationEmail(env: Env, booking: Record<string, unknown>) {
+  if (isResendSuppressed(env)) {
+    console.log(`[resend] suppressed (test run): booking confirmation -> ${booking.booker_email}`);
+    return;
+  }
   try {
     const html = buildBookingConfirmationEmail({
       booker_name: String(booking.booker_name || ''),
