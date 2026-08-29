@@ -132,6 +132,37 @@ full `npm run test:run`, `npm run typecheck`, `npm run typecheck:worker`,
 
 ---
 
+## 2026-08-29 (session 25): Staging environment plan (docs only)
+
+Owner asked whether Cloudflare's preview feature can host a staging
+environment for real user testing, with its own D1 and R2.
+
+### Findings
+- Preview URLs (wrangler versions upload, Workers Builds branch
+  previews) serve another code version of the SAME Worker, wired to the
+  same D1/R2/KV. Tester data would land in production.
+- The supported way is a named environment in wrangler.jsonc:
+  `wrangler deploy --env staging` deploys a second Worker
+  (swa-portal-staging) at swa-portal-staging.cjtay-4e0.workers.dev with
+  its own D1, KV, R2 and secrets. Same repo, same code, two deploy
+  targets.
+- Verified: last production deploy was 3 Aug 2026, no real users yet.
+  Email links follow the SWA_ADMIN_DOMAIN var, CSP is same-origin, dev
+  quick login stays inert without DEV_BYPASS_AUTH.
+
+### Owner decisions
+- Real Turnstile captcha on staging (add the staging hostname to the
+  existing widget). Dummy seed data in staging D1. Manual
+  `deploy:staging` script, no git auto-deploy for now.
+
+### Output
+- Plan saved: docs/plans/staging-environment-plan.md (8 steps: create
+  resources, env.staging block, npm script, seed remote D1, Turnstile
+  hostname, secrets, first admin row, deploy plus E2E checklist).
+- No code changed.
+
+---
+
 ## 2026-08-28 (session 24): Approvals user guide page (/approvals/guide)
 
 Owner asked for a role-based user guide with screenshots, hosted in the
