@@ -255,6 +255,11 @@ path returns 404 in production. See AGENTS.md, "Local dev login".
   Finance approvers are `APPROVAL_FINANCE_APPROVER_EMAILS` only (`isFinanceApprover()`)
   — IT admins are deliberately excluded so an IT account can never approve a payment
   voucher. Item creation is gated by `canRaiseApprovalItem()` (admin tier only today).
+  Email recipients are environment-aware (`lib/notify-recipients.ts`): local dev (the
+  `local-dev-` SESSION_SECRET anchor) redirects approval and form-notification mail to
+  the shared test inboxes / cjtay@, while staging and production use the real lists;
+  the optional `NOTIFY_RECIPIENTS_OVERRIDE` var is honoured only under that same local
+  anchor.
   Both flags reach the browser via `/api/session` (`is_purchase_approver`,
   `is_finance_approver`), which drives the Approvals nav item and the board page's
   role gate. Phase 2 ships list, create (multipart with documents), detail and the

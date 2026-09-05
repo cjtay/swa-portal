@@ -6,6 +6,7 @@ import { csvEscape } from '../lib/csv';
 import { buildLaughterYogaNotificationEmail } from '../lib/email-volunteer-notification';
 import { isResendSuppressed } from '../lib/resend';
 import { isDevBypassActive } from './session';
+import { resolveFormNotifyRecipients } from '../lib/notify-recipients';
 import { LAUGHTER_YOGA_NOTIFY_EMAILS } from '../../constants/portal';
 
 
@@ -508,8 +509,9 @@ interface NotificationPayload {
 }
 
 async function sendNotification(env: Env, data: NotificationPayload): Promise<void> {
-  // Resolve recipients: KV event config notifyEmail overrides defaults
-  let recipients: string[] = [...LAUGHTER_YOGA_NOTIFY_EMAILS];
+  // Resolve recipients: local dev redirects to a safe inbox; KV event config
+  // notifyEmail overrides defaults
+  let recipients: string[] = resolveFormNotifyRecipients(env, LAUGHTER_YOGA_NOTIFY_EMAILS);
   try {
     const raw = await env.SWA_CONFIG.get(KV_KEY);
     if (raw) {

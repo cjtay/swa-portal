@@ -19,6 +19,7 @@ import {
   MEMBERSHIP_RENEWAL_FEE,
   isMembershipApprover,
 } from '../../constants/portal';
+import { resolveFormNotifyRecipients } from '../lib/notify-recipients';
 
 
 /** Session vars are set by auth middleware; read via the request context.
@@ -1004,7 +1005,7 @@ interface NotificationPayload {
 }
 
 async function sendNotification(env: Env, data: NotificationPayload): Promise<void> {
-  const recipients = [...MEMBERSHIP_NOTIFY_EMAILS];
+  const recipients = resolveFormNotifyRecipients(env, MEMBERSHIP_NOTIFY_EMAILS);
   const html = buildMembershipNotificationEmail(data);
   const subject = `New Membership Application: ${data.reference}`;
 

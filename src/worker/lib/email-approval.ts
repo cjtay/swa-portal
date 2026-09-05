@@ -1,7 +1,7 @@
 import type { Env } from '../types';
 import { logError } from './log-error';
 import { isResendSuppressed } from './resend';
-import { APPROVAL_FINANCE_APPROVER_EMAILS, APPROVAL_PURCHASE_APPROVER_EMAILS } from '../../constants/portal';
+import { resolveFinanceApproverRecipients, resolvePurchaseApproverRecipients } from './notify-recipients';
 
 // Approval-workflow emails — docs/plans/Approval-Workflow-Implementation-Plan.md §10.
 //
@@ -10,8 +10,11 @@ import { APPROVAL_FINANCE_APPROVER_EMAILS, APPROVAL_PURCHASE_APPROVER_EMAILS } f
 // existing SWA Portal sender and is sent non-blocking via waitUntil by the
 // callers, so an email failure never fails the action.
 //
-// Recipients: emails go to the named approver list only. The IT-admin union
-// in isPurchaseApprover() grants authority to decide, not mailbox traffic.
+// Recipients: on staging/production, the named approver lists only. The
+// IT-admin union in isPurchaseApprover() grants authority to decide, not
+// mailbox traffic. In local dev, lib/notify-recipients.ts redirects all
+// approval mail to the shared test inboxes so real approvers are never
+// emailed from a laptop.
 
 export interface ApprovalEmailItem {
   id: number;
@@ -173,7 +176,7 @@ async function sendViaResend(env: Env, to: string[], subject: string, html: stri
 export async function sendApprovalRequestEmail(env: Env, item: ApprovalEmailItem, kind: 'new' | 'resubmitted' | 'reminder'): Promise<void> {
   const subject =
     (kind === 'new' ? 'New approval request: ' : kind === 'resubmitted' ? 'Resubmitted approval request: ' : 'Reminder — approval request: ') + item.title;
-  await sendViaResend(env, [...APPROVAL_PURCHASE_APPROVER_EMAILS], subject, buildApprovalRequestEmail(env, item, kind), 'approvals-request-email');
+  await sendViaResend(env, resolvePurchaseApproverRecipients(env), subject, buildApprovalRequestEmail(env, item, kind), 'approvals-request-email');
 }
 
 export async function sendPurchaseDecisionEmail(env: Env, item: ApprovalEmailItem, decision: { approved: boolean; reason?: string; decidedBy: string }): Promise<void> {
@@ -251,7 +254,7 @@ export function buildFinanceDecisionEmail(env: Env, item: VoucherEmailItem, deci
 
 export async function sendVoucherEmail(env: Env, item: VoucherEmailItem, kind: 'new' | 'resubmitted' | 'reminder'): Promise<void> {
   const prefix = kind === 'new' ? 'Voucher for finance check: ' : kind === 'resubmitted' ? 'Voucher resubmitted: ' : 'Reminder — voucher awaiting finance check: ';
-  await sendViaResend(env, [...APPROVAL_FINANCE_APPROVER_EMAILS], prefix + `${item.title} (${item.voucherNo})`, buildVoucherEmail(env, item, kind), 'approvals-voucher-email');
+  await sendViaResend(env, resolveFinanceApproverRecipients(env), prefix + `${item.title} (${item.voucherNo})`, buildVoucherEmail(env, item, kind), 'approvals-voucher-email');
 }
 
 export async function sendFinanceDecisionEmail(env: Env, item: VoucherEmailItem, decision: { approved: boolean; reason?: string; decidedBy: string }): Promise<void> {

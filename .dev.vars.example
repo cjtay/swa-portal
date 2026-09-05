@@ -24,3 +24,17 @@ OTP_SECRET=local-dev-otp-secret-change-me
 # Resend is not exercised in dev unless you actually send OTPs.
 # `re_*` is Resend's documented dummy key prefix.
 RESEND_API_KEY=re_dummy_unused_locally
+
+# Local email safety net (optional — safe to omit).
+# When the SESSION_SECRET above starts with "local-dev-", every auto-triggered
+# email is redirected to shared inboxes instead of the real approvers:
+#   approval-stage emails -> approval@singaporewomenassociation.org
+#   finance-stage emails  -> finance@singaporewomenassociation.org
+#   form notifications    -> cjtay@singaporewomenassociation.org
+# See src/worker/lib/notify-recipients.ts. Staging and production (real
+# secret) always use the real lists from src/constants/portal.ts.
+#
+# NOTIFY_RECIPIENTS_OVERRIDE optionally replaces ALL of those local targets
+# with your own comma-separated list. It only ever has effect when the
+# local-dev anchor is present — it is ignored by staging and production.
+# NOTIFY_RECIPIENTS_OVERRIDE=cjtay@singaporewomenassociation.org

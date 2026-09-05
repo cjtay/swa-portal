@@ -12,6 +12,105 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-09-05 (session 29): Local-dev email redirect — laptops never email real members
+
+Owner concern: with the real approvers now in portal.ts, local manual testing
+(`npm run dev:worker`, real Resend key from `.dev.vars`) would email Roxanne,
+Angela, Joyce and YS on every test action.
+
+### Done
+- `src/worker/lib/notify-recipients.ts` (new): resolves email recipients per
+  environment. Local detection reuses the dev trust anchor (SESSION_SECRET
+  starts with `local-dev-`). Locally: approval-stage mail → `approval@`,
+  finance-stage → `finance@`, form notifications → `cjtay@`. Staging and
+  production get the real portal.ts lists unchanged. Optional
+  `NOTIFY_RECIPIENTS_OVERRIDE` (`.dev.vars`, comma-separated) replaces the
+  local targets and is ignored unless the local anchor is present, so it can
+  never reroute deployed mail.
+- Recipient lines switched to the resolver: `email-approval.ts` (purchase +
+  finance sends), `volunteer-reg.ts`, `membership-reg.ts`,
+  `laughter-yoga-reg.ts`. KV per-event `notifyEmail` overrides still win
+  after the resolver. Approval AUTHORITY unchanged:
+  `isPurchaseApprover`/`isFinanceApprover` still gate in middleware and
+  handlers.
+- `.dev.vars.example` documents the behaviour + optional override;
+  `src/worker/types.ts` declares the optional var. Owner confirmed
+  `.dev.vars` stays gitignored (real Resend key — never committed; private
+  repo is not protection).
+- Tests: `src/worker/lib/__tests__/notify-recipients.test.ts` (local targets,
+  override precedence, deployed passthrough, override ignored when deployed,
+  suite-level local guarantee).
+
+### Verify
+`npm run test:run` 295/295 (19 files); `npm run typecheck`,
+`npm run typecheck:worker`, `npm run build` all clean.
+
+---
+
+## 2026-09-05 (session 28): Staging plan revised (no seeds) + repo config implemented
+
+Owner decisions: staging D1 gets NO dummy seed data — the owner adds
+real members directly via the staging Members UI, after one bootstrap
+insert of the IT-admin row (login is impossible on an empty members
+table: send-otp requires a `can_login=1` row).
+
+### Done
+- `docs/plans/staging-environment-plan.md` revised: schema-only step 4,
+  bootstrap-admin step 7, corrected reset note (`schema.sql` uses
+  `CREATE TABLE IF NOT EXISTS`, so a reset means recreating staging D1).
+- `wrangler.jsonc`: `env.staging` block (second Worker
+  `swa-portal-staging`, workers.dev only). Bindings/vars repeated with
+  `RUN-STEP-1-*` placeholder IDs for the owner to replace after
+  creating the resources. `assets`/`limits`/`observability` inherit.
+- `package.json`: `deploy:staging` script
+  (`astro build && wrangler deploy --env staging`).
+- Dry-run finding: WITHOUT `"routes": []` the staging env inherits the
+  top-level custom domain and a staging deploy would REASSIGN
+  admin.singaporewomenassociation.org away from production (wrangler
+  warns about exactly this). The block pins `"routes": []`, so staging
+  can never claim the prod domain.
+
+### Verify
+`npm run build` clean; `npx wrangler deploy --env staging --dry-run`
+shows the staging bindings and no routes warning; plain
+`npx wrangler deploy --dry-run` still resolves production bindings.
+
+### Also done (same session, at owner's request)
+Plan step 1 executed: D1 `swa-portal-staging` already existed
+(owner-created); created KV `SWA_SESSION_STAGING`
+(`314f62835d7b41d1978e4de0c881ab55`), KV `SWA_CONFIG_STAGING`
+(`82d3e18a71914f72bb336bcbce633bce`) and R2
+`swa-portal-staging-uploads`. Answered `n` to the local-dev
+remote-connect prompts (local dev keeps local emulators) and declined
+wrangler's auto-add-binding offers. Real IDs filled into `env.staging`;
+staging dry-run resolves the real resources.
+- Plan step 4 executed: `schema.sql` applied to staging D1
+  (`--remote -y`), 54 queries / 16 tables, verified via `sqlite_master`.
+- Steps 6–8 executed at owner's request: `npm run deploy:staging`
+  (Worker live, `/login` HTTP 200, version `b0534182`); fresh random
+  `OTP_SECRET` + `SESSION_SECRET` uploaded (values never displayed);
+  bootstrap admin row inserted and verified by count (`admin_rows = 1`).
+- `RESEND_API_KEY` set on staging (value supplied by the owner in chat,
+  exact-byte piped). Known cosmetic 404 on `/favicon.ico` (repo ships
+  `favicon.svg` only — same on production).
+- Owner finished the setup: Turnstile hostname saved + `TURNSTILE_SECRET`
+  set (4/4 secrets confirmed; full OTP login verified working). Owner
+  swapped the real approvers into `portal.ts` (purchase:
+  `roxanne.zhang@`, `angela.wong@`; finance: `wong.ys@`, `joyce.yeo@`;
+  shared inboxes kept — tests still pass unchanged) and added 5 testers
+  via the staging Members UI (jolene.lim@ = Office Admin, rest
+  committee; verified by counts only). Staging redeployed — version
+  `93b8febc`. NOTE: the same lists ship to PRODUCTION on the next
+  `npm run deploy` (they match the go-live names already pencilled in
+  the file, so this is the intended config arriving early).
+
+### Next
+Step 8 E2E UAT walk with the real testers. Automated test runs remain
+email-suppressed (Resend sentinel), so running the suite can never
+email the new real members.
+
+---
+
 ## 2026-08-29 (session 27): Test runs no longer send real emails
 
 Owner request: every `npm run test:run` was emailing the real approver /

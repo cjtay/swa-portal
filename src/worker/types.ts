@@ -53,6 +53,11 @@ export type Env = {
   // the auth middleware short-circuits with a fake IT-admin session so
   // `npm run dev:worker` can be used without OTP login.
   DEV_BYPASS_AUTH?: string;
+  // Optional local-only override for every auto-triggered email recipient
+  // (comma-separated). Only read when the local-dev SESSION_SECRET anchor is
+  // present, so it can never reroute staging/production mail. Intended for
+  // .dev.vars; leave unset everywhere else. See lib/notify-recipients.ts.
+  NOTIFY_RECIPIENTS_OVERRIDE?: string;
 };
 
 export type RegRole = 'reg_admin' | 'reg_volunteer' | null;
