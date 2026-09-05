@@ -18,6 +18,9 @@ export interface SessionResponse {
   is_it_admin: boolean;
   is_purchase_approver: boolean;
   is_finance_approver: boolean;
+  // R2: view-only approvals auditor. Sees the board, tabs, drawer and
+  // documents; every write and the export stay hidden server-side.
+  is_approvals_viewer: boolean;
   // IT-admin kill-switch for the approvals AI quotation comparison. False
   // hides the Analyse/Regenerate buttons (server also returns 503).
   ai_comparison_enabled: boolean;

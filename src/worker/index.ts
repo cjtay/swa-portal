@@ -59,6 +59,7 @@ import {
   handleFinanceReject,
   handleApprovalPaid,
   handleApprovalAuditExport,
+  handleApprovalListExport,
 } from './api/approvals';
 
 const app = new Hono<AppEnv>();
@@ -206,6 +207,8 @@ app.delete('/api/namecards/:id/photo', handleNamecardPhoto);
 // registered BEFORE the /:id routes — Hono matches in order (the Phase 2
 // comment anticipated this).
 app.get('/api/approvals/audit/export', handleApprovalAuditExport);
+// R3: board-list CSV — registered before /:id so 'export' is not read as an id.
+app.get('/api/approvals/export', handleApprovalListExport);
 app.get('/api/approvals', handleApprovalsList);
 app.post('/api/approvals', handleApprovalsCreate);
 app.post('/api/approvals/analyse-preview', handleApprovalAnalysePreview);

@@ -2656,6 +2656,91 @@ export async function handleApprovalPaid(c: AppContext) {
 }
 
 /* ----------------------------------------------------
+   GET /api/approvals/export?status=<status>   (R3)
+   CSV of the board list itself — one row per item with
+   the voucher number, title, payee, category, amount,
+   status, dates and decision makers. Exports the
+   currently open status tab (`status` optional = all).
+   Admin tier only (IT admins hold the admin role through
+   resolveSessionRole); the R2 auditor cannot export.
+   Separate from the IT-admin-only audit CSV. Newest
+   first, capped at 5000 rows; reuses the shared
+   formula-injection-guarded csvEscape.
+   ---------------------------------------------------- */
+export async function handleApprovalListExport(c: AppContext) {
+  const endpoint = 'approvals-list-export';
+  if (getSessionRole(c) !== 'admin') {
+    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Admin access required.' }, 403);
+  }
+
+  const statusFilter = (c.req.query('status') || '').trim();
+  if (statusFilter && statusFilter !== 'all' && !(APPROVAL_STATUSES as readonly string[]).includes(statusFilter)) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Invalid status filter.' }, 400);
+  }
+
+  let rows: Array<Record<string, unknown>>;
+  try {
+    const baseSelect =
+      'SELECT id, voucher_no, title, payee, category, requested_amount, status, ' +
+      'created_at, voucher_date, purchase_decision_by, purchase_decision_at, ' +
+      'finance_decision_by, finance_decision_at, paid_by, paid_at ' +
+      'FROM approval_items';
+    const res = statusFilter && statusFilter !== 'all'
+      ? await c.env.DB.prepare(`${baseSelect} WHERE status = ? ORDER BY created_at DESC, id DESC LIMIT 5000`).bind(statusFilter).all()
+      : await c.env.DB.prepare(`${baseSelect} ORDER BY created_at DESC, id DESC LIMIT 5000`).all();
+    rows = (res.results || []) as Array<Record<string, unknown>>;
+  } catch (err) {
+    return handleApiError(c, endpoint, err, 'Could not load the approvals list.', {
+      error_type: 'D1_SELECT_APPROVAL_EXPORT',
+      http_status: 500,
+    });
+  }
+
+  const labelFor = (key: unknown): string => {
+    const cat = APPROVAL_CATEGORIES.find((c2) => c2.key === String(key || ''));
+    return cat?.label || String(key || '');
+  };
+
+  const lines: string[] = [
+    ['Item ID', 'Voucher No', 'Title', 'Payee', 'Category', 'Requested Amount (S$)', 'Status', 'Created At (UTC)', 'Voucher Date', 'Purchase Decision By', 'Purchase Decision At (UTC)', 'Finance Decision By', 'Finance Decision At (UTC)', 'Paid By', 'Paid At (UTC)']
+      .map(csvEscape)
+      .join(','),
+  ];
+  for (const row of rows) {
+    lines.push(
+      [
+        row.id,
+        row.voucher_no,
+        row.title,
+        row.payee,
+        labelFor(row.category),
+        row.requested_amount === null || row.requested_amount === undefined ? null : Number(row.requested_amount).toFixed(2),
+        row.status,
+        row.created_at,
+        row.voucher_date,
+        row.purchase_decision_by,
+        row.purchase_decision_at,
+        row.finance_decision_by,
+        row.finance_decision_at,
+        row.paid_by,
+        row.paid_at,
+      ]
+        .map(csvEscape)
+        .join(','),
+    );
+  }
+
+  const csv = '\uFEFF' + lines.join('\n');
+  const stamp = new Date().toISOString().slice(0, 10);
+  return new Response(csv, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="approval-list-${statusFilter || 'all'}-${stamp}.csv"`,
+    },
+  });
+}
+
+/* ----------------------------------------------------
    GET /api/approvals/audit/export?from=YYYY-MM-DD&to=YYYY-MM-DD
    IT admin only (owner decision 24-08-2026). Enforced by the
    middleware IT_ADMIN_ONLY_API set; the role check below stays

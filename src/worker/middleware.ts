@@ -1,7 +1,7 @@
 import type { Next } from 'hono';
 import type { AppContext } from './types';
 import { getSession, getDevBypassSession } from './api/session';
-import { IT_ADMIN_EMAILS, isPurchaseApprover, isFinanceApprover } from '../constants/portal';
+import { IT_ADMIN_EMAILS, isPurchaseApprover, isFinanceApprover, isApprovalsAuditor } from '../constants/portal';
 import { checkApiRateLimit, getEndpointKey } from './lib/rate-limit';
 import { revalidateSession } from './lib/session-revalidation';
 import { sessionCookieHeader, clearedSessionCookieHeader } from './lib/session-cookie';
@@ -244,9 +244,16 @@ export async function authMiddleware(c: AppContext, next: Next) {
 
   // 7c. Approval workflow routes — entry requires admin, purchase approver,
   // or finance approver (all methods). Handlers enforce the finer rules.
+  // R2: a view-only auditor is admitted to GET reads only — every write
+  // method (and R3's export) stays behind the approver/admin gate.
   if (pathStartsWithAny(path, APPROVALS_API)) {
-    if (session.role !== 'admin' && !isPurchaseApprover(session.email) && !isFinanceApprover(session.email)) {
-      return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Approval workflow access required.' }, 403);
+    const approverOrAdmin =
+      session.role === 'admin' || isPurchaseApprover(session.email) || isFinanceApprover(session.email);
+    if (!approverOrAdmin) {
+      const isRead = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+      if (!(isRead && isApprovalsAuditor(session.email))) {
+        return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Approval workflow access required.' }, 403);
+      }
     }
   }
 

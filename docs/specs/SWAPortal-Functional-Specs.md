@@ -74,7 +74,7 @@ Beyond base roles, specific powers are granted by email lists in `src/constants/
 
 ### 3.1 Conventions
 
-- **Middleware tiers** (`src/worker/middleware.ts`): public paths; authenticated-by-default; IT-admin-only set; admin-write sets (GET open, writes admin); `reg_role` gates for the gala module; gate 7c for `/api/approvals` (admin or either approval group).
+- **Middleware tiers** (`src/worker/middleware.ts`): public paths; authenticated-by-default; IT-admin-only set; admin-write sets (GET open, writes admin); `reg_role` gates for the gala module; gate 7c for `/api/approvals` (admin or either approval group; R2 auditors admitted to GET reads only).
 - **Handlers re-check finer rules** (defence in depth) — e.g. finance decisions re-check `isFinanceApprover`; audit export is IT-admin only (middleware set, handler re-checks the admin tier).
 - **Writes are rate-limited** per email per endpoint (`src/worker/lib/rate-limit.ts`); public form endpoints are IP rate-limited.
 - **New feature rule**: one row in the §3.3 matrix below + one spec file in `docs/specs/features/`.
@@ -108,9 +108,11 @@ Rules:
 | Namecards — view list + self-service | Yes | Yes | Yes | `features/namecards.md` |
 | Namecards — admin edit | No | Yes | Yes | 〃 |
 | Approvals — view board | Approvers only | Yes | Yes | `features/approvals.md` |
+| Approvals — view board (auditor, read-only) | Auditor email list only (R2): read + tabs + drawer, no actions | 〃 | 〃 | 〃 |
 | Approvals — raise/edit/voucher/paid/remind | No | Yes | Yes | 〃 |
 | Approvals — purchase decision | Approvers only | No | Yes | 〃 |
 | Approvals — voucher decision | Finance approvers only | No | **No** (by design) | 〃 |
+| Approvals — list CSV export (R3) | No | Yes | Yes | 〃 |
 | Approvals — audit CSV export | No | No | Yes | 〃 |
 | Gala — manage bookings | `reg_admin` only | Yes | Yes | `features/gala-registration.md` |
 | Gala — check-in guests | Yes | Yes | Yes | 〃 |

@@ -12,6 +12,47 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-09-05 (session 33): Approvals compliance Batch C implemented — R1-R8 complete
+
+Executed plan §17.2 (Batch C): R2 view-only auditor role + R3 board-list
+CSV export. All eight owner requirements now built. Verified locally,
+nothing deployed.
+
+### Done
+- `src/constants/portal.ts`: `APPROVAL_AUDITOR_EMAILS` +
+  `isApprovalsAuditor()` — email list, not a member category (dev
+  placeholder `audit@`; owner swaps in the real auditor at ship time).
+- `src/worker/middleware.ts`: gate 7c admits auditors to GET approvals
+  endpoints only — every write method still 403s for a viewer.
+- `src/worker/api/session.ts` + `src/scripts/auth-gate.ts` +
+  `AdminLayout.astro`: `is_approvals_viewer` session flag; Approvals nav
+  visible for auditors. `approvals.astro` needs no change for read-only —
+  every action button is already admin/approver-flag gated.
+- `src/worker/api/approvals.ts`: `GET /api/approvals/export?status=…` (R3)
+  — board-list CSV (voucher no, title, payee, category, amount, status,
+  dates, decision makers), status-tab filtered, newest first, ≤5,000 rows,
+  csvEscape-guarded; admin tier only (auditor and finance approver 403 —
+  proven by test). Route registered before `/:id` in `src/worker/index.ts`.
+- `src/pages/approvals.astro`: Export CSV button in the admin bar; exports
+  the currently open status tab.
+- Docs: feature spec (auditor row in §2, export row in §3, UI rules),
+  functional-spec access matrix (2 new rows), `docs/ARCHITECTURE.md`, plan
+  + change-request status lines now "built".
+- Tests: compliance file at 30 cases — auditor GET reads 200, writes 403,
+  export 403 (auditor + finance approver), export headers/rows/status
+  filter/unknown-status 400.
+
+### Verify
+`npm run typecheck`, `typecheck:worker`, `build` clean; `npm run test:run`
+325/325. No new migration — R2/R3 need none.
+
+### State
+R1-R8 all built (A `2966c29`, B `9dd856e`, C this commit). Remaining:
+owner-gated §14 ship steps (remote D1 backup + migrations 012/013, office
+map swap to production addresses, deploy) and staging UAT of the new rules.
+
+---
+
 ## 2026-09-05 (session 32): Approvals compliance Batch B implemented
 
 Executed Phases B1-B4 of

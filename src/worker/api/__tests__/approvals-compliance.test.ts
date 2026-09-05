@@ -36,6 +36,7 @@ const ADMIN_EMAILS = [
 const PURCHASE_EMAIL = 'approval@singaporewomenassociation.org';
 const FINANCE_EMAIL = 'finance@singaporewomenassociation.org';
 const IT_ADMIN = IT_ADMIN_EMAILS[0]; // cjtay@ — purchase approver via the IT-admin union
+const AUDITOR_EMAIL = 'audit@singaporewomenassociation.org'; // R2 view-only auditor
 
 let adminRotation = 0;
 
@@ -165,6 +166,7 @@ beforeAll(async () => {
   await seedMember(env.DB, { name: 'Purchase Approver', email: PURCHASE_EMAIL, category: 'committee' });
   await seedMember(env.DB, { name: 'Finance Approver', email: FINANCE_EMAIL, category: 'committee' });
   await seedMember(env.DB, { name: 'IT Admin', email: IT_ADMIN, category: 'admin' });
+  await seedMember(env.DB, { name: 'Approvals Auditor', email: AUDITOR_EMAIL, category: 'committee' });
 });
 
 beforeEach(async () => {
@@ -642,5 +644,106 @@ describe('R7: Tax Invoice flag (Batch B)', () => {
     const flagged = (rows.results || []).filter((r) => r.is_tax_invoice === 1);
     expect(flagged).toHaveLength(1);
     expect(flagged[0].filename).toBe('second.pdf');
+  });
+});
+
+describe('R2: view-only auditor role (Batch C)', () => {
+  async function auditorCookie(): Promise<string> {
+    return mintCookie(AUDITOR_EMAIL, 'committee');
+  }
+
+  it('an auditor can read the board list and open a drawer (GET)', async () => {
+    const id = await createItem({ title: 'Auditor eye view' });
+    for (const path of ['/api/approvals', `/api/approvals/${id}`]) {
+      const res = await SELF.fetch(`https://example.com${path}`, {
+        headers: { Cookie: await auditorCookie() },
+      });
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it('an auditor cannot create, remind, or record payment (all writes 403)', async () => {
+    const id = await createItem({ title: 'Not for auditors' });
+
+    const create = await SELF.fetch('https://example.com/api/approvals', {
+      method: 'POST',
+      headers: { Cookie: await auditorCookie() },
+      body: new FormData(),
+    });
+    expect(create.status).toBe(403);
+
+    const remind = await SELF.fetch(`https://example.com/api/approvals/${id}/remind`, {
+      method: 'POST',
+      headers: { Cookie: await auditorCookie() },
+    });
+    expect(remind.status).toBe(403);
+
+    const paid = await SELF.fetch(`https://example.com/api/approvals/${id}/paid`, {
+      method: 'POST',
+      headers: { Cookie: await auditorCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paidBy: 'x', paidDate: '2026-09-05', paymentMethod: 'cash' }),
+    });
+    expect(paid.status).toBe(403);
+  });
+
+  it('an auditor cannot export (R3 keeps export admin-only)', async () => {
+    const res = await SELF.fetch('https://example.com/api/approvals/export', {
+      headers: { Cookie: await auditorCookie() },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('a finance approver cannot export either (admin and IT admin only)', async () => {
+    const res = await SELF.fetch('https://example.com/api/approvals/export', {
+      headers: { Cookie: await financeCookie() },
+    });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('R3: board-list CSV export (Batch C)', () => {
+  it('exports the requested status tab with the board columns', async () => {
+    await createItem({ title: 'Export pending one', amount: '800', evidence: fullEvidence() });
+    await createItem({ title: 'Export under-threshold', amount: '900' });
+
+    const res = await SELF.fetch('https://example.com/api/approvals/export?status=pending', {
+      headers: { Cookie: await adminCookie() },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('text/csv');
+
+    const csv = await res.text();
+    const lines = csv.replace(/^\uFEFF/, '').trim().split('\n');
+    expect(lines[0]).toContain('Voucher No');
+    expect(lines[0]).toContain('Purchase Decision By');
+    const body = lines.slice(1);
+    expect(body).toHaveLength(2);
+    const joined = body.join('\n');
+    expect(joined).toContain('Export pending one');
+    expect(joined).toContain('Export under-threshold');
+    expect(joined).toContain('pending');
+  });
+
+  it('exports all items when no status filter is given, and honours tab filters', async () => {
+    await createItem({ title: 'All-tab row' });
+    const all = await SELF.fetch('https://example.com/api/approvals/export', {
+      headers: { Cookie: await adminCookie() },
+    });
+    const allCsv = (await all.text()).replace(/^\uFEFF/, '').trim().split('\n');
+    expect(allCsv.length).toBeGreaterThanOrEqual(2);
+    expect(allCsv.join('\n')).toContain('All-tab row');
+
+    const none = await SELF.fetch('https://example.com/api/approvals/export?status=paid', {
+      headers: { Cookie: await adminCookie() },
+    });
+    const noneCsv = (await none.text()).replace(/^\uFEFF/, '').trim().split('\n');
+    expect(noneCsv).toHaveLength(1); // header only
+  });
+
+  it('rejects an unknown status filter (400)', async () => {
+    const res = await SELF.fetch('https://example.com/api/approvals/export?status=nonsense', {
+      headers: { Cookie: await adminCookie() },
+    });
+    expect(res.status).toBe(400);
   });
 });

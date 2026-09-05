@@ -1,6 +1,6 @@
 import type { Context } from 'hono';
 import type { Env, AppContext } from '../types';
-import { IT_ADMIN_EMAILS, SESSION_COOKIE_NAME, DEV_LOGOUT_COOKIE_NAME, isPurchaseApprover, isFinanceApprover } from '../../constants/portal';
+import { IT_ADMIN_EMAILS, SESSION_COOKIE_NAME, DEV_LOGOUT_COOKIE_NAME, isPurchaseApprover, isFinanceApprover, isApprovalsAuditor } from '../../constants/portal';
 import { isAiComparisonEnabled } from '../lib/ai-comparison';
 import { getFeatureFlags } from '../lib/feature-flags';
 import { verifyHmac, base64urlDecode } from '../lib/crypto';
@@ -165,7 +165,7 @@ export async function handleSession(c: AppContext) {
     const revalidated = await revalidateSession(c.env.DB, c.env.SESSION_SECRET, realSession);
     if (revalidated.status === 'invalid') {
       c.header('Set-Cookie', clearedSessionCookieHeader(), { append: true });
-      return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false, is_purchase_approver: false, is_finance_approver: false, ai_comparison_enabled: false, features });
+      return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false, is_purchase_approver: false, is_finance_approver: false, is_approvals_viewer: false, ai_comparison_enabled: false, features });
     }
     if (revalidated.newCookie) {
       c.header(
@@ -185,6 +185,7 @@ export async function handleSession(c: AppContext) {
       is_it_admin: (IT_ADMIN_EMAILS as readonly string[]).includes(s.email),
       is_purchase_approver: isPurchaseApprover(s.email),
       is_finance_approver: isFinanceApprover(s.email),
+      is_approvals_viewer: isApprovalsAuditor(s.email),
       ai_comparison_enabled: await isAiComparisonEnabled(c.env.SWA_CONFIG),
       features,
     });
@@ -210,12 +211,13 @@ export async function handleSession(c: AppContext) {
       is_it_admin: (IT_ADMIN_EMAILS as readonly string[]).includes(s.email),
       is_purchase_approver: isPurchaseApprover(s.email),
       is_finance_approver: isFinanceApprover(s.email),
+      is_approvals_viewer: isApprovalsAuditor(s.email),
       ai_comparison_enabled: await isAiComparisonEnabled(c.env.SWA_CONFIG),
       features,
     });
   }
 
-  return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false, is_purchase_approver: false, is_finance_approver: false, ai_comparison_enabled: false, features });
+  return c.json({ authenticated: false, email: null, name: null, role: null, regRole: null, is_admin: false, is_it_admin: false, is_purchase_approver: false, is_finance_approver: false, is_approvals_viewer: false, ai_comparison_enabled: false, features });
 }
 
 export async function handleLogout(c: AppContext) {

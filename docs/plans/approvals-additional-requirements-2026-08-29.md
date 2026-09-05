@@ -6,10 +6,11 @@
 > the pending compliance plan
 > (`docs/plans/approvals-finance-compliance-implementation-plan.md`, which
 > records the build placement in its §17).
-> **Status**: Batches A and B shipped 2026-09-05 — **R1, R4, R5, R6, R7 and
-> R8 are built** (R7's column in Batch A, its checkbox UI in Batch B; R8's
-> matrix printed in the feature spec and user guide). Remaining: R2, R3
-> (Batch C).
+> **Status**: built 2026-09-05 — **all of R1 to R8 implemented** across
+> Batches A, B and C of
+> `docs/plans/approvals-finance-compliance-implementation-plan.md`
+> (R8 as the printed matrix + the single-source threshold constants).
+> Not yet deployed to production; §14 ship steps remain owner-gated.
 
 ## R1 to R8
 

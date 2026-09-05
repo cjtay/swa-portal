@@ -307,7 +307,14 @@ path returns 404 in production. See AGENTS.md, "Local dev login".
   R1 field-level audit (`field: old → new` pairs in the item_created /
   item_edited notes), R6 (`last_paid_method` on detail — the category's most
   recent paid method, pre-selected in the paid form), and the R7 checkbox
-  (create/edit/drawer; one tick per item, ticked document first). Guards: an IT-admin kill-switch
+  (create/edit/drawer; one tick per item, ticked document first).
+  Compliance Batch C (2026-09-05) adds: the R2 view-only auditor role
+  (`APPROVAL_AUDITOR_EMAILS` + `isApprovalsAuditor()`; gate 7c admits
+  auditors to GET approvals endpoints only; `is_approvals_viewer` on
+  `/api/session` drives the nav; every write 403s for auditors — proven by
+  test) and the R3 board-list CSV export
+  (`GET /api/approvals/export?status=…`, admin tier, ≤5,000 rows,
+  status-tab filter, Export CSV button on the board). Guards: an IT-admin kill-switch
   (`swa:ai_config` in SWA_CONFIG, surfaced as `ai_comparison_enabled` on
   `/api/session`), a 10/hour per-email rate bucket, and a portal-wide daily
   cap of 50 analyses (KV counter). S$ conversion happens in code from a

@@ -205,6 +205,24 @@ export function canRaiseApprovalItem(session: { email: string; role: string }): 
 	return session.role === "admin";
 }
 
+// View-only approvals auditors (R2, owner discussion 2026-08-29). Chosen by
+// email list — the same pattern as the approver lists — NOT a member
+// category. An auditor can open /approvals, read the board, filter by the
+// status tabs and open the drawer and its documents, but can never create,
+// edit, prepare vouchers, approve, reject, pay, remind or export (R3 keeps
+// export admin/IT-admin only). The middleware admits auditors to GET
+// approvals endpoints only.
+export const APPROVAL_AUDITOR_EMAILS = [
+	// Dev/test placeholder — the owner swaps in the real auditor(s) at ship
+	// time, same as the approver lists.
+	"audit@singaporewomenassociation.org",
+] as const;
+
+/** True if the email is a view-only approvals auditor (R2). */
+export function isApprovalsAuditor(email: string): boolean {
+	return (APPROVAL_AUDITOR_EMAILS as readonly string[]).includes(email.toLowerCase());
+}
+
 // Item categories, each with a label and the default for approval_required.
 // The three recurring types skip the purchase stage; every other type needs
 // it. The create form can flip the default per item (plan §5).

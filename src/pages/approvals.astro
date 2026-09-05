@@ -33,6 +33,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
        The table leads the page; the form opens on demand. -->
   <div id="ap-create-bar" style="margin-bottom:1.5rem;display:none;align-items:center;gap:0.75rem;flex-wrap:wrap;">
     <button type="button" class="btn btn-primary" id="ap-create-open">New request</button>
+    <button type="button" class="btn btn-secondary" id="ap-export" title="Downloads the currently open tab as a CSV file">Export CSV</button>
     <span id="ap-create-bar-msg" style="font-size:0.85rem;color:#1b7f3b;"></span>
   </div>
 
@@ -2429,6 +2430,13 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   const createBarMsg = document.getElementById('ap-create-bar-msg');
   document.getElementById('ap-create-open')?.addEventListener('click', openCreateForm);
   document.getElementById('ap-create-cancel')?.addEventListener('click', closeCreateForm);
+
+  // R3: export the currently open status tab as CSV (admin/IT admin only —
+  // the button sits in the admin-only bar; the endpoint re-checks).
+  document.getElementById('ap-export')?.addEventListener('click', () => {
+    const status = currentTab && currentTab !== 'all' ? `?status=${encodeURIComponent(currentTab)}` : '';
+    window.location.href = `/api/approvals/export${status}`;
+  });
 
   document.getElementById('ap-create-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();

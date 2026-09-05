@@ -151,10 +151,11 @@ function isCurrent(item: NavItem): boolean {
   }
 
   // Approvals board — admin tier plus the purchase/finance approver lists
-  // (flags come from /api/session; plan §3). Ordinary committee members
-  // never see it: the board shows financial data.
+  // and the view-only auditor list (flags come from /api/session; plan §3,
+  // R2). Ordinary committee members never see it: the board shows financial
+  // data.
   function canSeeApprovals(data: SessionResponse): boolean {
-    return data.is_admin || data.is_purchase_approver || data.is_finance_approver;
+    return data.is_admin || data.is_purchase_approver || data.is_finance_approver || data.is_approvals_viewer;
   }
 
   function updateNavVisibility(data: SessionResponse) {
