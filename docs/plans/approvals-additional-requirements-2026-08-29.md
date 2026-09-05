@@ -6,9 +6,10 @@
 > the pending compliance plan
 > (`docs/plans/approvals-finance-compliance-implementation-plan.md`, which
 > records the build placement in its §17).
-> **Status**: Batch A shipped 2026-09-05 — **R4, R5 and the R7 column are
-> built**, and the R8 matrix is printed in the feature spec and user guide.
-> Remaining: R1, R6 and the R7 checkbox UI (Batch B); R2, R3 (Batch C).
+> **Status**: Batches A and B shipped 2026-09-05 — **R1, R4, R5, R6, R7 and
+> R8 are built** (R7's column in Batch A, its checkbox UI in Batch B; R8's
+> matrix printed in the feature spec and user guide). Remaining: R2, R3
+> (Batch C).
 
 ## R1 to R8
 

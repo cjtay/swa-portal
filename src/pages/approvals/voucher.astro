@@ -144,6 +144,10 @@
       <p style="margin:0 0 0.35rem;"><strong>Payment record</strong></p>
       <div id="v-payment-lines"></div>
     </div>
+    <div class="voucher-payment" id="v-evidence-block" hidden>
+      <p style="margin:0 0 0.35rem;"><strong>Declarations &amp; evidence</strong></p>
+      <div id="v-evidence-lines"></div>
+    </div>
     <p class="voucher-note" id="v-note" hidden></p>
     <div class="no-print">
       <button type="button" id="v-print">Print / Save as PDF</button>
@@ -182,6 +186,16 @@
       paid_at: string | null;
       payment_method: string | null;
       payment_reference: string | null;
+      board_approval_ref: string | null;
+      quotation_waiver_reason: string | null;
+      supplier_is_cheapest: number | null;
+      supplier_choice_reason: string | null;
+      budget_approved: number | null;
+      budget_amount: string | null;
+      budget_officer: string | null;
+      budget_date: string | null;
+      coi_declared: number | null;
+      no_split_declared: number | null;
     }
 
     // Mirrors PAYMENT_METHODS in src/worker/api/approvals.ts (R4: GIRO
@@ -340,6 +354,29 @@
           paymentBlock.removeAttribute('hidden');
         } else {
           paymentBlock.setAttribute('hidden', '');
+        }
+      }
+
+      // Declarations & evidence (compliance Batch B, plan §7.4): printed
+      // whenever the fields exist.
+      const evidenceBlock = document.getElementById('v-evidence-block');
+      const evidenceLinesEl = document.getElementById('v-evidence-lines');
+      if (evidenceBlock && evidenceLinesEl) {
+        const rows: string[] = [];
+        if (item.board_approval_ref) rows.push(`Board approval: ${item.board_approval_ref}`);
+        if (item.quotation_waiver_reason) rows.push(`Quotation waiver: ${item.quotation_waiver_reason}`);
+        if (item.supplier_is_cheapest === 0 && item.supplier_choice_reason) rows.push(`Supplier (not the cheapest): ${item.supplier_choice_reason}`);
+        if (Number(item.budget_approved) === 1) {
+          const budgetBits = [item.budget_amount, item.budget_officer, item.budget_date ? fmtVoucherDate(item.budget_date) : ''].filter(Boolean).join(', ');
+          if (budgetBits) rows.push(`Budget approved by: ${budgetBits}`);
+        }
+        if (Number(item.coi_declared) === 1) rows.push('Conflict of interest: none declared');
+        if (Number(item.no_split_declared) === 1) rows.push('Purchase not split to avoid approval limits (declared)');
+        if (rows.length > 0) {
+          evidenceLinesEl.innerHTML = rows.map((r) => `<div>${esc(r)}</div>`).join('');
+          evidenceBlock.removeAttribute('hidden');
+        } else {
+          evidenceBlock.setAttribute('hidden', '');
         }
       }
 

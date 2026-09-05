@@ -12,6 +12,60 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-09-05 (session 32): Approvals compliance Batch B implemented
+
+Executed Phases B1-B4 of
+`docs/plans/approvals-finance-compliance-implementation-plan.md` (§7 + §13).
+Verified locally, nothing deployed. Migration 013 applied to LOCAL D1 only.
+Delivers R1, R6, R7-UI, R8-docs; S$1,000/S$6,000/S$10,000/S$90,000 rules.
+
+### Done
+- `migrations/013_approvals_compliance_evidence.sql` + `schema.sql` backport:
+  ten nullable `approval_items` columns (board_approval_ref,
+  quotation_waiver_reason, supplier_is_cheapest, supplier_choice_reason,
+  budget_approved/amount/officer/date, coi_declared, no_split_declared).
+- `src/worker/api/approvals.ts`: shared evidence helpers
+  (parse/merge/validate — cap checks always, required checks only at the
+  effective S$1,000+); create + edit store and validate the evidence;
+  comparison rows carry optional `quoteDate` (rides the JSON, no migration);
+  purchase approve 409s above S$10,000 without a board reference + an
+  attachment; R1 `field: old → new` audit pairs in item_created/item_edited
+  (60-char truncation, attachments excluded); R6 `last_paid_method` on
+  detail (most recent PAID item in the same category); R7 tax-invoice tick
+  accepted at create (`taxInvoice` filename) and edit
+  (`taxInvoiceAttachmentId`), one tick per item via a single CASE UPDATE.
+- `src/pages/approvals.astro`: declarations card on the create form (live by
+  the typed amount; S$6k/S$90k reminders; board box at S$10k); tax-invoice
+  checkbox per chosen file (ticking clears others); quotation-date inputs in
+  the comparison builder; drawer gains the evidence card, quotation dates
+  with the amber 12-month chip, Tax Invoice chips, R6 paid-form pre-select,
+  and an edit-form declarations block + attachment tax-invoice picker.
+- `src/pages/approvals/voucher.astro`: declarations print under the payment
+  record whenever the fields exist.
+- Docs: feature spec (Batch B rules live in the matrix, evidence columns,
+  declarations/audit/remembered-method/tax-invoice rules), guide money-rules
+  expanded to the full matrix, `docs/ARCHITECTURE.md`, plan + change-request
+  status lines.
+- Tests: compliance file extended to 23 cases (quotes-or-waiver, per-field
+  declaration 400s, S$999 exempt, cheapest-supplier reason, dated rows,
+  board guard 409/200/below-threshold, R1 create+edit diff notes + evidence
+  diffs, R6 last-paid ordering, R7 create-tick + re-tick). Seeders in
+  `approvals.test.ts` carrying amounts ≥ S$1,000 now send the declarations
+  (`COMPLIANCE_EVIDENCE`) — the S$1,000 rule is genuinely enforced.
+
+### Verify
+`npm run typecheck`, `typecheck:worker`, `build` clean; `npm run test:run`
+318/318 (20 files), three consecutive runs stable (one shared-D1 harness
+flake in the re-tick test removed by reading attachment ids from D1).
+Migration 013 applied to local D1 (10 commands).
+
+### Next
+Batch C (plan §17.2): R2 view-only auditor role (`APPROVAL_AUDITOR_EMAILS`,
+`is_approvals_viewer` session flag, GET-only middleware entry, viewer-gated
+UI) and R3 `GET /api/approvals/export?status=…` CSV + Export button.
+
+---
+
 ## 2026-09-05 (session 31): Approvals compliance Batch A implemented
 
 Executed Phases A1-A4 of

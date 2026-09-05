@@ -297,7 +297,17 @@ path returns 404 in production. See AGENTS.md, "Local dev login".
   payment-record block, GIRO replacing Cheque in the paid step, and the
   `is_tax_invoice` attachment column (ticked document renders first).
   Threshold constants live in `src/constants/portal.ts` only — see
-  `docs/plans/approvals-finance-compliance-implementation-plan.md`. Guards: an IT-admin kill-switch
+  `docs/plans/approvals-finance-compliance-implementation-plan.md`.
+  Compliance Batch B (2026-09-05, migration 013) adds: the S$1,000-and-above
+  evidence (two comparison rows or a waiver, budget/coi/no-split
+  declarations, cheapest-supplier Yes/No with reason — stored in ten new
+  `approval_items` columns), optional per-row quotation dates in the
+  comparison JSON with a twelve-month staleness chip in the drawer, the
+  S$10,000 board-approval guard (409 without a reference + attachment),
+  R1 field-level audit (`field: old → new` pairs in the item_created /
+  item_edited notes), R6 (`last_paid_method` on detail — the category's most
+  recent paid method, pre-selected in the paid form), and the R7 checkbox
+  (create/edit/drawer; one tick per item, ticked document first). Guards: an IT-admin kill-switch
   (`swa:ai_config` in SWA_CONFIG, surfaced as `ai_comparison_enabled` on
   `/api/session`), a 10/hour per-email rate bucket, and a portal-wide daily
   cap of 50 analyses (KV counter). S$ conversion happens in code from a

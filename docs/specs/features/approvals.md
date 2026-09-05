@@ -1,6 +1,6 @@
 # Approval Workflow — Functional Spec
 
-> **Status**: live (Phases 1–5 complete, 2026-08-23; not yet deployed to production). Finance-policy compliance **Batch A** (self-approval ban, approver offices, S$5,000 two-stage force, invoice number + duplicate warning, GIRO payment method, full voucher print, tax-invoice column) added 2026-09-05 — `docs/plans/approvals-finance-compliance-implementation-plan.md` §6.
+> **Status**: live (Phases 1–5 complete, 2026-08-23; not yet deployed to production). Finance-policy compliance **Batch A** (self-approval ban, approver offices, S$5,000 two-stage force, invoice number + duplicate warning, GIRO payment method, full voucher print, tax-invoice column) and **Batch B** (S$1,000 declarations + quotations-or-waiver, quotation dates + 12-month warning, S$10,000 board guard, R1 field-level audit, R6 remembered payment method, R7 tax-invoice checkbox) added 2026-09-05 — `docs/plans/approvals-finance-compliance-implementation-plan.md` §6–§7. Batch C (auditor role, list export) pending.
 > **Plan**: `docs/plans/Approval-Workflow-Implementation-Plan.md` (v2, owner decisions)
 > **Owner decisions**: two-stage approval (purchase then finance), no signatures, office admin raises items, built-in comparison table, insert-only audit log, browser "Save as PDF".
 
@@ -68,7 +68,7 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 - **Decisions are atomic** (`UPDATE … WHERE status = …`): two approvers clicking at once cannot both decide; the loser gets a 409. The audit row is written only when the state change wins, so a lost race never records a false decision.
 - **Voucher numbering** `PV<YY>-<MM><NN>` from the voucher's own month (e.g. `PV26-0801`), assigned at first submission, survives rejection unchanged; UNIQUE-index retry on races; two digits cap at 99/month. Lines may carry negative amounts (deposits) and note-only rows (bank details).
 - **Documents**: PDF/JPG/PNG/WebP/HEIC/HEIF, 10 MB each, 10 files per item; HTML and SVG always rejected. **At least one document is required whenever approval is required** (owner decision 29-08-2026 — approvers decide remotely from the uploaded files; enforced client-side and by a 400 from the create endpoint). Recurring items (`approval_required = 0`) may be paperless: payroll, standing vendor payments and GIRO deductions often have no quotation or invoice. Files accumulate across multiple picker visits; viewed inline (iframe for PDFs). A create/edit request is one POST, so `wrangler.jsonc` caps the whole body at 110 MB (raised from 20 MB on 2026-08-28 — the old cap 413-rejected legitimate multi-file uploads before the per-file limits could run; effective ceiling is also the plan's ~100 MB free-plan body limit).
-- **Comparison table**: rows typed by the creator, each linking to one attached document.
+- **Comparison table**: rows typed by the creator, each linking to one attached document. Rows may carry an optional quotation date (YYYY-MM-DD); the drawer shows a chip when a date is older than twelve months.
 - **AI quotation comparison** (2026-08-26, `docs/plans/AI-Quotation-Comparison-Plan.md`): Workers AI reads the ticked quotations (PDF text via `toMarkdown`, photos via a vision model), extracts vendor/item/prices/currency/GST/validity/lead time per document, converts prices to S$ **in code** from a daily KV-cached FX table (open.er-api.com), then a text model writes a 3–4 sentence summary and a one-line value-based recommendation. Unreadable files (scanned PDFs, unsupported types) get per-file notes, never silent skips; Cloudflare reader edge failures (e.g. error 1031) surface as a friendly "usually temporary — run Analyse again" note (2026-08-27). HEIC photos are converted to JPEG in the browser at pick time. Every result carries the label "AI-generated — verify against the original documents". Single-attempt AI calls with 30 s timeouts; no automatic retries anywhere.
 - **AI texts are editable fields** (owner decision 26-08-2026): the summary and recommendation render as textareas in the create-form preview and in the edit form, so the admin can correct the AI wording before approval. They ride the same UPDATE as every other field, so they freeze at purchase approval like title/payee/amount, and the create endpoint stores whatever edited values the form replays.
 - **Export**: standalone `/approvals/voucher?id=` renders the June-sample voucher layout for browser "Save as PDF" — no PDF library. Prints the Invoice/Receipt No, "Prepared by", and — with offices — the signer lines; a **Payment record** block (method, reference, paid by, paid date) prints whenever the fields exist, because the voucher is printable before payment (R5, plan §6.5).
@@ -81,6 +81,11 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 - **Invoice number**: required at voucher submission (400 when missing); a repeated number **warns, never blocks** (suppliers legitimately reuse numbers monthly) — response flag + `possible_duplicate_invoice` audit row + amber warning in the drawer and above the paid form.
 - **Voucher signatures**: at a voucher total ≥ S$5,000 the print shows **both** signers with offices (Purchase approved by + Payment approved by); below S$5,000 one Treasurer-side signature suffices (manual 4.1.1); recurring items keep "No approval required".
 - **Seven-year retention**: approval items, attachments and audit rows are kept for a minimum of seven years; no portal code path deletes them; any future cleanup job must respect the seven-year minimum.
+- **Declarations & evidence (Batch B)**: at a requested amount ≥ S$1,000 (before GST), create and edit require two comparison rows **or** a waiver reason, the budget declaration (tick + amount/officer/date — budget approvers are not portal users, so the amount is typed text), the conflict-of-interest and no-splitting ticks, and the cheapest-supplier Yes/No (No reveals a required reason; the AI preview informs the answer but never fills it). Comparison rows may carry an optional quotation date; a date older than twelve months shows an amber chip in the drawer — warn, never block.
+- **Board approval above S$10,000 (Batch B)**: purchase approve refuses with 409 until the item carries a board approval reference **and** at least one attached document (the minutes/approval email PDF). The reference text points the approver to the evidence; which file is the minutes stays a human judgement.
+- **Field-level audit (R1)**: the create and edit audit notes carry every changed field as `field: old → new` pairs (values truncate at 60 chars). Attachments stay excluded — they keep their own `attachments_added` rows. The audit CSV shape is unchanged; the detail lives in the note column.
+- **Remembered payment method (R6)**: the detail response returns `last_paid_method` — the method used on the most recent **paid** item in the same category (by category, not by payee) — and the paid form pre-selects it. The admin can always override.
+- **Tax Invoice checkbox (R7)**: each attached document can be ticked "This is the Tax Invoice" in the create form, the edit form and the drawer. At most one document per item is ticked (ticking one clears the other); the display always puts the ticked document first (API `ORDER BY is_tax_invoice DESC, id`), with a chip in the drawer and the ticked document listed first on the voucher print's document context.
 
 **Approval matrix** (R8 — verified line by line against the manual's authorisation matrix; the threshold constants in `src/constants/portal.ts` are the **single** place the amounts live, so a future policy change is a one-file edit). Amounts are the requested amount before GST; the voucher-print signature rule uses the voucher total:
 
@@ -88,11 +93,12 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 |--------|------------------------------|
 | Every decision | Signer's office recorded and displayed; requestor cannot decide their own request |
 | Every voucher | Invoice/receipt number required at submission; repeats warn, never block |
-| S$1,000 and above | Declarations + two quotations or a waiver reason *(Batch B)* |
+| S$1,000 and above | Two comparison rows (quotations) or a recorded waiver reason, else 400 *(live, Batch B)* |
+| S$1,000 and above | Declarations required at create/edit: budget tick + amount/officer/date (typed text), conflict-of-interest tick, no-splitting tick, cheapest-supplier Yes/No (No ⇒ reason) *(live, Batch B)* |
 | S$5,000 and above | Both approval stages forced on; printed voucher carries both signers |
-| S$6,000 – S$90,000 | Form reminder: obtain two written invitations to quote *(Batch B)* |
-| Above S$10,000 | Board approval reference + attached evidence required before purchase approval *(Batch B)* |
-| Above S$90,000 | Form reminder: formal tender required *(Batch B)* |
+| S$6,000 – S$90,000 | Form reminder: obtain two written invitations to quote *(live, Batch B — reminder only)* |
+| Above S$10,000 | Board approval reference + attached evidence required before purchase approval (409) *(live, Batch B)* |
+| Above S$90,000 | Form reminder: formal tender required *(live, Batch B — reminder only)* |
 | Always | Records kept at least seven years |
 
 ## 5. UI rules (`/approvals`)
@@ -127,7 +133,7 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 - Drawer tables (voucher, comparison, AI) use the responsive-table pattern (`display: block` + `overflow-x`): a wide table pans inside its own border box, so the AI summary and nearby cards never slide, and the drawer itself cannot be dragged sideways leaving an empty band.
 - Small grey text uses #4b5563; focus-visible rings cover the Remove buttons and checkboxes.
 
-## 6. Data model (migrations 009 + 010 + 011 + 012, backported into `schema.sql`)
+## 6. Data model (migrations 009 + 010 + 011 + 012 + 013, backported into `schema.sql`)
 
 **`approval_items`** — one row per request:
 
@@ -152,6 +158,12 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 | `created_by` | TEXT | Creator email |
 | `comparison` | TEXT | JSON `[{attachmentId, description}]` |
 | `ai_comparison` | TEXT | Nullable JSON: the AI analysis (version, generated at/by, models, FX date, per-file status notes, extracted quotations with S$ conversions, summary, recommendation). Added migration 011 |
+| `board_approval_ref` | TEXT | ≤500 chars; required by the purchase-approve guard ≥ S$10,000 (migration 013) |
+| `quotation_waiver_reason` | TEXT | ≤1,000 chars; substitutes for two comparison rows at ≥ S$1,000 (migration 013) |
+| `supplier_is_cheapest` | INTEGER | 0/1 answer; null = unanswered (migration 013) |
+| `supplier_choice_reason` | TEXT | ≤1,000 chars; required when the answer is No (migration 013) |
+| `budget_approved`, `budget_amount`, `budget_officer`, `budget_date` | INTEGER/TEXT | The budget declaration; the amount is typed text (≤50 chars) because budget approvers are not portal users (migration 013) |
+| `coi_declared`, `no_split_declared` | INTEGER | 0/1 declaration ticks (migration 013) |
 
 **`approval_attachments`** — `item_id` FK, UNIQUE `r2_key` under `approvals/<itemId>/`, filename/mime/size, `is_tax_invoice` INTEGER 0/1 (migration 012 — the "This is the Tax Invoice" tick; at most one per item, the ticked document always renders first). Add-only in v1; caps 10 files × 10 MB.
 

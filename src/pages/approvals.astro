@@ -58,7 +58,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
           <input type="text" id="ap-payee" class="form-input" maxlength="300" placeholder="Vendor or payee name" />
         </label>
         <label class="ap-field">
-          <span>Requested amount (S$, optional)</span>
+          <span>Requested amount (S$, before GST, optional)</span>
           <input type="number" id="ap-amount" class="form-input" min="0.01" max="10000000" step="0.01" inputmode="decimal" placeholder="e.g. 1250.00" />
         </label>
       </div>
@@ -107,6 +107,46 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
           <span id="ap-ai-msg" role="status" aria-live="polite" style="font-size:0.85rem;color:var(--text-muted);"></span>
         </div>
         <div id="ap-ai-preview" class="ap-ai-preview" hidden></div>
+      </div>
+
+      <!-- Compliance declarations (plan §7.4): shown live by the typed
+           amount — S$1,000 and above. The server re-validates everything;
+           this conditional UI is help, not the enforcement. -->
+      <div id="ap-compliance-box" style="margin-top:1rem;display:none;border:1px solid var(--swa-3);background:#faf7fc;padding:0.9rem 1rem;border-radius:0.5rem;">
+        <p style="margin:0 0 0.6rem;font-weight:600;color:var(--swa-2);">Declarations (S$1,000 and above)</p>
+        <label class="ap-check"><input type="checkbox" id="ap-budget-approved" /><span>Payment is within the approved budget</span></label>
+        <div class="ap-form-grid" style="margin-top:0.6rem;">
+          <label class="ap-field"><span>Budget amount</span>
+            <input type="text" id="ap-budget-amount" class="form-input" maxlength="50" placeholder="e.g. S$12,000" /></label>
+          <label class="ap-field"><span>Budget approving officer</span>
+            <input type="text" id="ap-budget-officer" class="form-input" maxlength="200" placeholder="Officer who approved the budget" /></label>
+          <label class="ap-field"><span>Budget approval date</span>
+            <input type="date" id="ap-budget-date" class="form-input" /></label>
+          <label class="ap-field"><span>Is the chosen supplier the cheapest of the quotations?</span>
+            <select id="ap-supplier-cheapest" class="form-input">
+              <option value="">— Answer —</option>
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </select></label>
+        </div>
+        <label class="ap-field" style="display:block;margin-top:0.6rem;" id="ap-supplier-reason-wrap" hidden>
+          <span>Reason for not choosing the cheapest (required)</span>
+          <textarea id="ap-supplier-reason" class="form-input" rows="2" maxlength="1000"></textarea>
+        </label>
+        <label class="ap-field" style="display:block;margin-top:0.6rem;" id="ap-waiver-wrap" hidden>
+          <span>Why fewer than two quotations are attached (required unless two are in the comparison table)</span>
+          <textarea id="ap-waiver-reason" class="form-input" rows="2" maxlength="1000"></textarea>
+        </label>
+        <label class="ap-check" style="margin-top:0.6rem;"><input type="checkbox" id="ap-coi-declared" /><span>No conflict of interest in this purchase</span></label>
+        <label class="ap-check" style="margin-top:0.4rem;"><input type="checkbox" id="ap-no-split-declared" /><span>The purchase is not split to stay under an approval limit</span></label>
+        <p id="ap-invitation-reminder" class="ap-reminder" style="display:none;">S$6,000 and above: obtain two written invitations to quote and attach them.</p>
+        <p id="ap-tender-reminder" class="ap-reminder" style="display:none;">Above S$90,000: a formal tender is required. Attach the tender documents.</p>
+        <div id="ap-board-box" style="display:none;margin-top:0.75rem;border-top:1px solid var(--swa-3);padding-top:0.6rem;">
+          <p style="margin:0 0 0.4rem;font-weight:600;color:var(--swa-2);">Board approval (S$10,000 and above)</p>
+          <label class="ap-field"><span>Board approval reference</span>
+            <input type="text" id="ap-board-ref" class="form-input" maxlength="500" placeholder="e.g. Board meeting 12 Aug 2026, item 4" /></label>
+          <p style="margin:0.35rem 0 0;font-size:0.8rem;color:var(--text-muted);">Attach the board minutes or the approval email PDF with the documents above.</p>
+        </div>
       </div>
 
       <div style="display:flex;align-items:center;gap:0.75rem;margin-top:1rem;flex-wrap:wrap;">
@@ -259,6 +299,43 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   /* display:flex would override the hidden attribute (same class of bug as
      the 2026-07-05 drawer fix) — restore it explicitly. */
   .ap-check[hidden] { display: none; }
+
+  /* Compliance reminders (S$6k invitations / S$90k tender) — amber notes. */
+  .ap-reminder {
+    margin: 0.6rem 0 0;
+    font-size: 0.85rem;
+    color: #7a5c00;
+    background: #fff7e6;
+    border-left: 3px solid #b45309;
+    padding: 0.45rem 0.6rem;
+    border-radius: 0 0.3rem 0.3rem 0;
+  }
+
+  /* Tax Invoice chip on a drawer attachment (R7). */
+  .ap-tax-chip {
+    display: inline-block;
+    background: var(--swa-4);
+    color: var(--swa-2);
+    border-radius: 9999px;
+    padding: 0.1rem 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  /* Amber staleness chip beside a quotation date older than 12 months
+     (plan §7.2 — warn, never block). */
+  .ap-quote-stale {
+    display: inline-block;
+    background: #fff7e6;
+    color: #7a5c00;
+    border-left: 3px solid #b45309;
+    border-radius: 0 0.25rem 0.25rem 0;
+    padding: 0.1rem 0.45rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: normal;
+  }
 
   /* Brand-coloured checkboxes and file pickers (approvals page only).
      Checkboxes are 20px: 16px is hard to tick accurately for older users.
@@ -678,6 +755,12 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
 
 <script>
   import { requireAuth, type SessionResponse } from '../scripts/auth-gate';
+  import {
+    APPROVAL_QUOTE_RULE_THRESHOLD,
+    APPROVAL_INVITATION_REMINDER_THRESHOLD,
+    APPROVAL_TENDER_REMINDER_THRESHOLD,
+    APPROVAL_BOARD_APPROVAL_THRESHOLD,
+  } from '../constants/portal';
 
   interface ApprovalItem {
     id: number;
@@ -708,9 +791,19 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     payment_method: string | null;
     payment_reference: string | null;
     created_by: string;
+    board_approval_ref: string | null;
+    quotation_waiver_reason: string | null;
+    supplier_is_cheapest: number | null;
+    supplier_choice_reason: string | null;
+    budget_approved: number | null;
+    budget_amount: string | null;
+    budget_officer: string | null;
+    budget_date: string | null;
+    coi_declared: number | null;
+    no_split_declared: number | null;
     created_at: string;
     updated_at: string;
-    comparison?: Array<{ attachmentId: number; description: string }> | null;
+    comparison?: Array<{ attachmentId: number; description: string; quoteDate?: string }> | null;
     ai_comparison?: AiAnalysis | null;
   }
 
@@ -726,6 +819,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     filename: string;
     mime_type: string;
     size: number;
+    is_tax_invoice: number;
     created_at: string;
   }
 
@@ -1059,10 +1153,16 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       body.innerHTML = '<p>Could not load this item.</p>';
       return;
     }
-    const data = (await res.json()) as { item: ApprovalItem; attachments: ApprovalAttachment[]; duplicate_invoice: { id: number; voucherNo: string | null } | null };
+    const data = (await res.json()) as {
+      item: ApprovalItem;
+      attachments: ApprovalAttachment[];
+      duplicate_invoice: { id: number; voucherNo: string | null } | null;
+      last_paid_method: string | null;
+    };
     const item = data.item;
     const attachments = data.attachments || [];
     const duplicateInvoice = data.duplicate_invoice || null;
+    const lastPaidMethod = data.last_paid_method || null;
     title.textContent = item.title;
 
     // The signer's office renders beside their name on every decision line
@@ -1137,9 +1237,12 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
               const preview = isImage
                 ? `<img src="${url}" alt="${esc(att.filename)}" loading="lazy" />`
                 : `<iframe src="${url}" title="${esc(att.filename)}" loading="lazy"></iframe>`;
+              // R7: the ticked Tax Invoice always renders first (the API
+              // orders it so) and carries a chip.
+              const taxChip = att.is_tax_invoice === 1 ? '<span class="ap-tax-chip">Tax Invoice</span>' : '';
               return `<div class="ap-attachment">
                 <div class="ap-attachment-head">
-                  <span class="ap-attachment-name">${esc(att.filename)}</span>
+                  <span class="ap-attachment-name">${taxChip} ${esc(att.filename)}</span>
                   <span class="ap-attachment-actions">
                     <span style="color:var(--text-muted);font-size:0.78rem;">${esc(fmtSize(att.size))}</span>
                     <a href="${url}" target="_blank" rel="noopener noreferrer">Open</a>
@@ -1152,13 +1255,25 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
             .join('');
 
     const comparisonRows = Array.isArray(item.comparison) ? item.comparison : [];
+    // Quotation dates (plan §7.2): each row's date renders beside it; older
+    // than twelve months shows an amber "fresh quotation needed" chip. The
+    // warning lives in the drawer only — where decisions happen.
+    const quoteDateCell = (row: { quoteDate?: string }): string => {
+      if (!row.quoteDate) return '';
+      const m = row.quoteDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!m) return esc(row.quoteDate);
+      const ageDays = (Date.now() - Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) / 86_400_000;
+      const stale = ageDays > 365;
+      const label = esc(fmtDateOnly(row.quoteDate));
+      return stale ? `${label} <span class="ap-quote-stale">older than 12 months, a fresh quotation is needed</span>` : label;
+    };
     const comparisonHtml =
       comparisonRows.length === 0
         ? ''
         : `<div>
             <h3 style="font-size:1rem;margin:0 0 0.5rem;">Comparison table</h3>
             <table class="ap-comparison-table">
-              <thead><tr><th>Quotation</th><th>Document</th></tr></thead>
+              <thead><tr><th>Quotation</th><th>Document</th><th style="width:11rem;">Quotation date</th></tr></thead>
               <tbody>
                 ${comparisonRows
                   .map((row) => {
@@ -1166,7 +1281,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
                     const link = att
                       ? `<a href="/api/approvals/${item.id}/attachment/${att.id}" target="_blank" rel="noopener noreferrer">${esc(att.filename)}</a>`
                       : '<span style="color:var(--text-muted);">Document unavailable</span>';
-                    return `<tr><td>${esc(row.description)}</td><td>${link}</td></tr>`;
+                    return `<tr><td>${esc(row.description)}</td><td>${link}</td><td>${quoteDateCell(row)}</td></tr>`;
                   })
                   .join('')}
               </tbody>
@@ -1286,6 +1401,53 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
               <textarea id="ap-edit-description" class="form-input" rows="4" maxlength="4000">${esc(item.description || '')}</textarea></label>
             <label class="ap-field" style="display:block;margin-top:0.75rem;"><span>Add documents (optional)</span>
               <input type="file" id="ap-edit-files" class="form-input" multiple accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" /></label>
+            ${attachments.length > 0
+              ? `<div style="margin-top:0.75rem;">
+                  <p style="margin:0 0 0.25rem;font-weight:600;font-size:0.85rem;">Tax Invoice</p>
+                  <p style="margin:0 0 0.4rem;font-size:0.75rem;color:var(--text-muted);">Tick the one document that is the tax invoice — it always shows first. Ticking one clears the other.</p>
+                  ${attachments
+                    .map(
+                      (att) => `<label class="ap-check" style="margin-top:0.25rem;"><input type="checkbox" class="ap-edit-tax" data-att="${att.id}" ${att.is_tax_invoice === 1 ? 'checked' : ''} /><span>${esc(att.filename)}</span></label>`,
+                    )
+                    .join('')}
+                </div>`
+              : ''}
+            <div id="ap-edit-compliance" style="margin-top:0.9rem;display:none;border:1px solid var(--swa-3);background:#faf7fc;padding:0.9rem 1rem;border-radius:0.5rem;">
+              <p style="margin:0 0 0.6rem;font-weight:600;color:var(--swa-2);">Declarations (S$1,000 and above)</p>
+              <label class="ap-check"><input type="checkbox" id="ap-edit-budget-approved" ${Number(item.budget_approved) === 1 ? 'checked' : ''} /><span>Payment is within the approved budget</span></label>
+              <div class="ap-form-grid" style="margin-top:0.6rem;">
+                <label class="ap-field"><span>Budget amount</span>
+                  <input type="text" id="ap-edit-budget-amount" class="form-input" maxlength="50" value="${esc(item.budget_amount || '')}" /></label>
+                <label class="ap-field"><span>Budget approving officer</span>
+                  <input type="text" id="ap-edit-budget-officer" class="form-input" maxlength="200" value="${esc(item.budget_officer || '')}" /></label>
+                <label class="ap-field"><span>Budget approval date</span>
+                  <input type="date" id="ap-edit-budget-date" class="form-input" value="${esc(item.budget_date || '')}" /></label>
+                <label class="ap-field"><span>Is the chosen supplier the cheapest of the quotations?</span>
+                  <select id="ap-edit-supplier-cheapest" class="form-input">
+                    <option value="">— Answer —</option>
+                    <option value="yes" ${item.supplier_is_cheapest === 1 ? 'selected' : ''}>Yes</option>
+                    <option value="no" ${item.supplier_is_cheapest === 0 ? 'selected' : ''}>No</option>
+                  </select></label>
+              </div>
+              <label class="ap-field" style="display:block;margin-top:0.6rem;" id="ap-edit-supplier-reason-wrap" ${item.supplier_is_cheapest === 0 ? '' : 'hidden'}>
+                <span>Reason for not choosing the cheapest (required)</span>
+                <textarea id="ap-edit-supplier-reason" class="form-input" rows="2" maxlength="1000">${esc(item.supplier_choice_reason || '')}</textarea>
+              </label>
+              <label class="ap-field" style="display:block;margin-top:0.6rem;" id="ap-edit-waiver-wrap" ${comparisonRows.length >= 2 ? 'hidden' : ''}>
+                <span>Why fewer than two quotations are attached (required unless two are in the comparison table)</span>
+                <textarea id="ap-edit-waiver" class="form-input" rows="2" maxlength="1000">${esc(item.quotation_waiver_reason || '')}</textarea>
+              </label>
+              <label class="ap-check" style="margin-top:0.6rem;"><input type="checkbox" id="ap-edit-coi-declared" ${Number(item.coi_declared) === 1 ? 'checked' : ''} /><span>No conflict of interest in this purchase</span></label>
+              <label class="ap-check" style="margin-top:0.4rem;"><input type="checkbox" id="ap-edit-no-split-declared" ${Number(item.no_split_declared) === 1 ? 'checked' : ''} /><span>The purchase is not split to stay under an approval limit</span></label>
+              <p id="ap-edit-invitation-reminder" class="ap-reminder" style="display:none;">S$6,000 and above: obtain two written invitations to quote and attach them.</p>
+              <p id="ap-edit-tender-reminder" class="ap-reminder" style="display:none;">Above S$90,000: a formal tender is required. Attach the tender documents.</p>
+              <div id="ap-edit-board-box" style="display:none;margin-top:0.75rem;border-top:1px solid var(--swa-3);padding-top:0.6rem;">
+                <p style="margin:0 0 0.4rem;font-weight:600;color:var(--swa-2);">Board approval (S$10,000 and above)</p>
+                <label class="ap-field"><span>Board approval reference</span>
+                  <input type="text" id="ap-edit-board-ref" class="form-input" maxlength="500" value="${esc(item.board_approval_ref || '')}" /></label>
+                <p style="margin:0.35rem 0 0;font-size:0.8rem;color:var(--text-muted);">Attach the board minutes or the approval email PDF with the documents above.</p>
+              </div>
+            </div>
             ${aiEditAvailable
               ? `<div style="margin-top:0.75rem;border:1px solid var(--swa-3);border-radius:0.4rem;padding:0.6rem 0.75rem;background:#faf7fc;">
                   <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
@@ -1312,6 +1474,34 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
             </div>
           </form>`
         : '';
+
+    // Compliance evidence card (plan §7.5): declarations, board reference,
+    // waiver, supplier choice — each line only when the field exists.
+    const yesNo = (v: number | null | undefined): string => (v === null || v === undefined ? '' : v === 1 ? 'Yes' : 'No');
+    const evRows: Array<[string, string, boolean?]> = [];
+    if (item.board_approval_ref) evRows.push(['Board approval reference', esc(item.board_approval_ref), true]);
+    if (item.quotation_waiver_reason) evRows.push(['Quotation waiver reason', esc(item.quotation_waiver_reason), true]);
+    if (item.supplier_is_cheapest !== null && item.supplier_is_cheapest !== undefined) {
+      evRows.push(['Chosen supplier is the cheapest', esc(yesNo(item.supplier_is_cheapest))]);
+      if (item.supplier_choice_reason) evRows.push(['Reason (not the cheapest)', esc(item.supplier_choice_reason), true]);
+    }
+    if (Number(item.budget_approved) === 1) {
+      evRows.push(['Budget approved', 'Yes']);
+      if (item.budget_amount) evRows.push(['Budget amount', esc(item.budget_amount)]);
+      if (item.budget_officer) evRows.push(['Budget approving officer', esc(item.budget_officer), true]);
+      if (item.budget_date) evRows.push(['Budget approval date', esc(fmtDateOnly(item.budget_date))]);
+    }
+    if (Number(item.coi_declared) === 1) evRows.push(['Conflict of interest', 'None declared']);
+    if (Number(item.no_split_declared) === 1) evRows.push(['Splitting to avoid limits', 'Not split (declared)']);
+    const evidenceHtml =
+      evRows.length === 0
+        ? ''
+        : `<div>
+            <h3 style="font-size:1rem;margin:0 0 0.5rem;">Declarations &amp; evidence</h3>
+            <dl class="ap-detail-grid">
+              ${evRows.map(([label, value, wide]) => `<div class="ap-detail-item${wide ? ' ap-detail-item--wide' : ''}"><dt>${label}</dt><dd>${value || '—'}</dd></div>`).join('')}
+            </dl>
+          </div>`;
 
     const voucherHtml =
       !hasVoucher
@@ -1354,6 +1544,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
         ${detailRows.map(([label, value, wide]) => `<div class="ap-detail-item${wide ? ' ap-detail-item--wide' : ''}"><dt>${label}</dt><dd>${value || '—'}</dd></div>`).join('')}
       </dl>
       ${item.description ? `<div><h3 style="font-size:1rem;margin:0 0 0.5rem;">Description</h3><p style="margin:0;font-size:0.9rem;white-space:pre-wrap;word-break:break-word;">${esc(item.description)}</p></div>` : ''}
+      ${evidenceHtml}
       ${voucherHtml}
       <div>
         <h3 style="font-size:1rem;margin:0 0 0.5rem;">Documents</h3>
@@ -1364,6 +1555,53 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     `;
 
     wireDrawerActions(item);
+
+    // R6: pre-select the category's last paid method on the paid form
+    // (remembered by category, not by payee — the admin can override).
+    if (lastPaidMethod) {
+      const methodSel = document.getElementById('ap-paid-method') as HTMLSelectElement | null;
+      if (methodSel && Array.from(methodSel.options).some((o) => o.value === lastPaidMethod)) {
+        methodSel.value = lastPaidMethod;
+      }
+    }
+
+    // Edit-form declarations block: visibility follows the typed amount
+    // (plan §7.4); the supplier reason box follows the Yes/No answer.
+    const editAmountEl = document.getElementById('ap-edit-amount') as HTMLInputElement | null;
+    const editTaxBoxes = Array.from(document.querySelectorAll<HTMLInputElement>('input.ap-edit-tax'));
+    const syncEditCompliance = (): void => {
+      const box = document.getElementById('ap-edit-compliance');
+      if (!box) return;
+      const raw = editAmountEl?.value.trim() || '';
+      const amt = raw ? Number(raw) : null;
+      const show = amt !== null && Number.isFinite(amt) && amt >= APPROVAL_QUOTE_RULE_THRESHOLD;
+      box.style.display = show ? '' : 'none';
+      if (!show) return;
+      const a = amt as number;
+      const inv = document.getElementById('ap-edit-invitation-reminder');
+      if (inv) inv.style.display = a >= APPROVAL_INVITATION_REMINDER_THRESHOLD && a <= APPROVAL_TENDER_REMINDER_THRESHOLD ? '' : 'none';
+      const tender = document.getElementById('ap-edit-tender-reminder');
+      if (tender) tender.style.display = a > APPROVAL_TENDER_REMINDER_THRESHOLD ? '' : 'none';
+      const board = document.getElementById('ap-edit-board-box');
+      if (board) board.style.display = a >= APPROVAL_BOARD_APPROVAL_THRESHOLD ? '' : 'none';
+      const storedCount = comparisonRows.length;
+      const waiverWrap = document.getElementById('ap-edit-waiver-wrap');
+      if (waiverWrap) waiverWrap.hidden = storedCount >= 2;
+    };
+    editAmountEl?.addEventListener('input', syncEditCompliance);
+    editTaxBoxes.forEach((box) => {
+      box.addEventListener('change', () => {
+        if (!box.checked) return;
+        editTaxBoxes.forEach((other) => {
+          if (other !== box) other.checked = false;
+        });
+      });
+    });
+    document.getElementById('ap-edit-supplier-cheapest')?.addEventListener('change', () => {
+      const wrap = document.getElementById('ap-edit-supplier-reason-wrap');
+      if (wrap) wrap.hidden = (document.getElementById('ap-edit-supplier-cheapest') as HTMLSelectElement).value !== 'no';
+    });
+    syncEditCompliance();
   }
 
   function setActMsg(text: string, ok: boolean): void {
@@ -1695,6 +1933,28 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       const aiRecoEl = document.getElementById('ap-edit-ai-reco') as HTMLTextAreaElement | null;
       if (aiSummaryEl) form.append('aiSummary', aiSummaryEl.value);
       if (aiRecoEl) form.append('aiRecommendation', aiRecoEl.value);
+      // Compliance evidence (plan §7.1): sent only while the declarations
+      // block is visible (effective amount ≥ S$1,000) — absent fields keep
+      // their stored values server-side.
+      const editCompliance = document.getElementById('ap-edit-compliance');
+      const gv = (id: string): string => (document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null)?.value.trim() || '';
+      const gc = (id: string): boolean => (document.getElementById(id) as HTMLInputElement | null)?.checked || false;
+      const gs = (id: string): string => (document.getElementById(id) as HTMLSelectElement | null)?.value || '';
+      if (editCompliance && editCompliance.style.display !== 'none') {
+        form.append('boardApprovalRef', gv('ap-edit-board-ref'));
+        form.append('quotationWaiverReason', gv('ap-edit-waiver'));
+        form.append('supplierIsCheapest', gs('ap-edit-supplier-cheapest'));
+        form.append('supplierChoiceReason', gv('ap-edit-supplier-reason'));
+        if (gc('ap-edit-budget-approved')) form.append('budgetApproved', 'true');
+        form.append('budgetAmount', gv('ap-edit-budget-amount'));
+        form.append('budgetOfficer', gv('ap-edit-budget-officer'));
+        form.append('budgetDate', gv('ap-edit-budget-date'));
+        if (gc('ap-edit-coi-declared')) form.append('coiDeclared', 'true');
+        if (gc('ap-edit-no-split-declared')) form.append('noSplitDeclared', 'true');
+      }
+      // R7: the ticked Tax Invoice (existing attachment id; empty = none).
+      const editTax = document.querySelector<HTMLInputElement>('input.ap-edit-tax:checked');
+      if (editTax?.dataset.att) form.append('taxInvoiceAttachmentId', editTax.dataset.att);
       const resubmit = document.getElementById('ap-edit-resubmit') as HTMLInputElement | null;
       if (resubmit?.checked) form.append('resubmit', 'true');
       try {
@@ -1743,9 +2003,13 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   const MAX_FILES = 10; // must match APPROVAL_MAX_FILES_PER_ITEM (portal.ts)
   const MAX_FILE_BYTES = 10 * 1024 * 1024; // must match APPROVAL_MAX_FILE_BYTES
   let chosenFiles: File[] = [];
-  // Typed comparison text and tick states survive file list changes,
-  // keyed by name|size so adding or removing a file keeps the others' text.
-  const comparisonDraft = new Map<string, { include: boolean; desc: string }>();
+  // Typed comparison text, tick states and quotation dates survive file list
+  // changes, keyed by name|size so adding or removing a file keeps the
+  // others' text.
+  const comparisonDraft = new Map<string, { include: boolean; desc: string; quoteDate: string }>();
+  // R7: the file ticked as the Tax Invoice (name; one per item — ticking one
+  // clears the other).
+  let taxInvoicePick = '';
 
   // ---- AI analysis state (form-time preview) -----------------------------
   // aiPreview holds the analysis the analyse-preview endpoint returned; it is
@@ -1824,7 +2088,13 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       chosenFiles
         .map(
           (file, index) => `<div class="ap-file-row">
-            <span class="ap-comp-name">${esc(file.name)} (${esc(fmtSize(file.size))})</span>
+            <span class="ap-comp-name">
+              <label class="ap-check" style="display:inline-flex;align-items:center;gap:0.35rem;font-size:0.78rem;color:var(--text-muted);">
+                <input type="checkbox" class="ap-tax-invoice" data-name="${esc(file.name)}" ${taxInvoicePick === file.name ? 'checked' : ''} />
+                <span>This is the Tax Invoice</span>
+              </label>
+              <br />${esc(file.name)} (${esc(fmtSize(file.size))})
+            </span>
             <button type="button" class="ap-file-remove" data-index="${index}" aria-label="Remove ${esc(file.name)}">Remove</button>
           </div>`,
         )
@@ -1834,11 +2104,28 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       btn.addEventListener('click', () => {
         const index = Number(btn.dataset.index);
         const [removed] = chosenFiles.splice(index, 1);
-        if (removed) comparisonDraft.delete(keyOf(removed));
+        if (removed) {
+          comparisonDraft.delete(keyOf(removed));
+          if (taxInvoicePick === removed.name) taxInvoicePick = '';
+        }
         invalidateAiPreview('Quotations changed — run the analysis again.');
         showFilesMsg('');
         renderFilesList();
         renderComparisonBuilder();
+      });
+    });
+    // R7: ticking one Tax Invoice clears the others (one per item).
+    list.querySelectorAll<HTMLInputElement>('.ap-tax-invoice').forEach((box) => {
+      box.addEventListener('change', () => {
+        const name = box.dataset.name || '';
+        if (box.checked) {
+          taxInvoicePick = name;
+          list.querySelectorAll<HTMLInputElement>('.ap-tax-invoice').forEach((other) => {
+            if (other !== box) other.checked = false;
+          });
+        } else if (taxInvoicePick === name) {
+          taxInvoicePick = '';
+        }
       });
     });
   }
@@ -1914,10 +2201,12 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
         const draft = comparisonDraft.get(keyOf(file));
         const include = draft ? draft.include : true;
         const desc = draft ? draft.desc : '';
+        const quoteDate = draft ? draft.quoteDate : '';
         return `<div class="ap-comp-row">
           <input type="checkbox" id="ap-comp-include-${index}" data-key="${esc(keyOf(file))}" ${include ? 'checked' : ''} />
           <label for="ap-comp-include-${index}" class="ap-comp-name">${esc(file.name)} (${esc(fmtSize(file.size))})</label>
           <input type="text" class="form-input" data-desc="${index}" data-key="${esc(keyOf(file))}" style="flex:1;min-width:200px;" maxlength="500" value="${esc(desc)}" placeholder="e.g. Grand Copthorne — S$1,350/table, 25 tables" />
+          <input type="date" class="form-input" data-quote="${index}" data-key="${esc(keyOf(file))}" style="width:9.5rem;" value="${esc(quoteDate)}" title="Quotation date (optional)" />
         </div>`;
       })
       .join('');
@@ -1928,21 +2217,74 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     comparisonRows.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((box) => {
       box.addEventListener('change', () => {
         const key = box.dataset.key || '';
-        const draft = comparisonDraft.get(key) || { include: true, desc: '' };
+        const draft = comparisonDraft.get(key) || { include: true, desc: '', quoteDate: '' };
         draft.include = box.checked;
         comparisonDraft.set(key, draft);
         invalidateAiPreview('Quotations changed — run the analysis again.');
+        updateComplianceVisibility();
       });
     });
     comparisonRows.querySelectorAll<HTMLInputElement>('input[data-desc]').forEach((inp) => {
       inp.addEventListener('input', () => {
         const key = inp.dataset.key || '';
-        const draft = comparisonDraft.get(key) || { include: true, desc: '' };
+        const draft = comparisonDraft.get(key) || { include: true, desc: '', quoteDate: '' };
         draft.desc = inp.value;
         comparisonDraft.set(key, draft);
       });
     });
+    comparisonRows.querySelectorAll<HTMLInputElement>('input[data-quote]').forEach((inp) => {
+      inp.addEventListener('change', () => {
+        const key = inp.dataset.key || '';
+        const draft = comparisonDraft.get(key) || { include: true, desc: '', quoteDate: '' };
+        draft.quoteDate = inp.value;
+        comparisonDraft.set(key, draft);
+      });
+    });
+    updateComplianceVisibility();
   }
+
+  // Ticked comparison rows among the chosen files — drives the waiver-reason
+  // visibility (two rows or a reason, plan §7.1). Approximate on purpose:
+  // the server counts the rows it actually stores.
+  function tickedComparisonCount(): number {
+    if (!comparisonToggle?.checked || !comparisonRows) return 0;
+    let n = 0;
+    comparisonRows.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((box) => {
+      if (box.checked) n += 1;
+    });
+    return n;
+  }
+
+  function typedCreateAmount(): number | null {
+    const raw = (document.getElementById('ap-amount') as HTMLInputElement | null)?.value.trim() || '';
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  /** Compliance card visibility, live by the typed amount (plan §7.4). */
+  function updateComplianceVisibility(): void {
+    const box = document.getElementById('ap-compliance-box');
+    if (!box) return;
+    const amt = typedCreateAmount();
+    const show = amt !== null && amt >= APPROVAL_QUOTE_RULE_THRESHOLD;
+    box.style.display = show ? '' : 'none';
+    if (!show) return;
+    const waiverWrap = document.getElementById('ap-waiver-wrap');
+    if (waiverWrap) waiverWrap.hidden = tickedComparisonCount() >= 2;
+    const inv = document.getElementById('ap-invitation-reminder');
+    if (inv) inv.style.display = amt >= APPROVAL_INVITATION_REMINDER_THRESHOLD && amt <= APPROVAL_TENDER_REMINDER_THRESHOLD ? '' : 'none';
+    const tender = document.getElementById('ap-tender-reminder');
+    if (tender) tender.style.display = amt > APPROVAL_TENDER_REMINDER_THRESHOLD ? '' : 'none';
+    const board = document.getElementById('ap-board-box');
+    if (board) board.style.display = amt >= APPROVAL_BOARD_APPROVAL_THRESHOLD ? '' : 'none';
+  }
+
+  document.getElementById('ap-amount')?.addEventListener('input', updateComplianceVisibility);
+  document.getElementById('ap-supplier-cheapest')?.addEventListener('change', () => {
+    const wrap = document.getElementById('ap-supplier-reason-wrap');
+    if (wrap) wrap.hidden = (document.getElementById('ap-supplier-cheapest') as HTMLSelectElement).value !== 'no';
+  });
 
   comparisonToggle?.addEventListener('change', () => {
     invalidateAiPreview();
@@ -2057,6 +2399,11 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     chosenFiles = [];
     comparisonDraft.clear();
     aiPreview = null;
+    taxInvoicePick = '';
+    const supplierReasonWrap = document.getElementById('ap-supplier-reason-wrap');
+    if (supplierReasonWrap) supplierReasonWrap.hidden = true;
+    const waiverWrap = document.getElementById('ap-waiver-wrap');
+    if (waiverWrap) waiverWrap.hidden = true;
     const previewBox = document.getElementById('ap-ai-preview');
     if (previewBox) {
       previewBox.hidden = true;
@@ -2099,6 +2446,30 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       return;
     }
 
+    // Compliance declarations (plan §7.4): the card only shows at S$1,000+.
+    // Client-side help — the server re-validates everything.
+    const complianceBox = document.getElementById('ap-compliance-box');
+    const val = (id: string): string => (document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null)?.value.trim() || '';
+    const sel = (id: string): string => (document.getElementById(id) as HTMLSelectElement | null)?.value || '';
+    const tick = (id: string): boolean => (document.getElementById(id) as HTMLInputElement | null)?.checked || false;
+    if (complianceBox && complianceBox.style.display !== 'none') {
+      const missing: string[] = [];
+      if (tickedComparisonCount() < 2 && !val('ap-waiver-reason')) missing.push('a waiver reason, or two rows in the comparison table');
+      if (!tick('ap-budget-approved')) missing.push('the budget tick');
+      if (!val('ap-budget-amount')) missing.push('the budget amount');
+      if (!val('ap-budget-officer')) missing.push('the budget approving officer');
+      if (!val('ap-budget-date')) missing.push('the budget approval date');
+      if (!tick('ap-coi-declared')) missing.push('the conflict-of-interest tick');
+      if (!tick('ap-no-split-declared')) missing.push('the no-splitting tick');
+      if (!sel('ap-supplier-cheapest')) missing.push('the cheapest-supplier answer');
+      if (sel('ap-supplier-cheapest') === 'no' && !val('ap-supplier-reason')) missing.push('the reason for not choosing the cheapest');
+      if (missing.length > 0) {
+        msg.style.color = '#b3261e';
+        msg.textContent = `Complete the declarations: ${missing.join('; ')}.`;
+        return;
+      }
+    }
+
     const form = new FormData();
     if (categorySelect) form.append('category', categorySelect.value);
     form.append('title', (document.getElementById('ap-title') as HTMLInputElement).value.trim());
@@ -2110,7 +2481,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
 
     for (const file of chosenFiles) form.append('files', file);
 
-    const comparison: Array<{ file: string; description: string }> = [];
+    const comparison: Array<{ file: string; description: string; quoteDate?: string }> = [];
     if (comparisonToggle?.checked) {
       comparisonRows?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((box) => {
         if (!box.checked) return;
@@ -2119,10 +2490,31 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
         if (!file) return;
         const row = box.closest('.ap-comp-row');
         const desc = row?.querySelector<HTMLInputElement>('input[data-desc]')?.value.trim() || '';
-        if (desc) comparison.push({ file: file.name, description: desc });
+        const quote = row?.querySelector<HTMLInputElement>('input[data-quote]')?.value || '';
+        if (desc) {
+          const entry: { file: string; description: string; quoteDate?: string } = { file: file.name, description: desc };
+          if (quote) entry.quoteDate = quote;
+          comparison.push(entry);
+        }
       });
     }
     if (comparison.length > 0) form.append('comparison', JSON.stringify(comparison));
+    // R7: the Tax Invoice tick rides the same POST (empty = none marked).
+    if (taxInvoicePick) form.append('taxInvoice', taxInvoicePick);
+    // Compliance evidence fields ride the same POST (plan §7.1). Empty
+    // strings parse to null server-side; absent ticks stay false.
+    if (complianceBox && complianceBox.style.display !== 'none') {
+      form.append('boardApprovalRef', val('ap-board-ref'));
+      form.append('quotationWaiverReason', val('ap-waiver-reason'));
+      form.append('supplierIsCheapest', sel('ap-supplier-cheapest'));
+      form.append('supplierChoiceReason', val('ap-supplier-reason'));
+      if (tick('ap-budget-approved')) form.append('budgetApproved', 'true');
+      form.append('budgetAmount', val('ap-budget-amount'));
+      form.append('budgetOfficer', val('ap-budget-officer'));
+      form.append('budgetDate', val('ap-budget-date'));
+      if (tick('ap-coi-declared')) form.append('coiDeclared', 'true');
+      if (tick('ap-no-split-declared')) form.append('noSplitDeclared', 'true');
+    }
     // Replay the previewed AI analysis with the request (plan §4.3): the
     // create endpoint never calls AI itself. The summary/recommendation
     // textareas carry any manual edits made to the AI text. Saved whenever a

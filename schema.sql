@@ -367,6 +367,18 @@ CREATE TABLE IF NOT EXISTS approval_items (
   paid_at                   TEXT,
   payment_method            TEXT,
   payment_reference         TEXT,
+  -- Compliance Batch B (migration 013): S$1,000-and-above evidence. All
+  -- nullable; the portal.ts thresholds do the gating.
+  board_approval_ref        TEXT,
+  quotation_waiver_reason   TEXT,
+  supplier_is_cheapest      INTEGER,
+  supplier_choice_reason    TEXT,
+  budget_approved           INTEGER,
+  budget_amount             TEXT,
+  budget_officer            TEXT,
+  budget_date               TEXT,
+  coi_declared              INTEGER,
+  no_split_declared         INTEGER,
   created_by                TEXT NOT NULL,
   description               TEXT,
   comparison                TEXT,
