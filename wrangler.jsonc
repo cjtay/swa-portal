@@ -67,5 +67,52 @@
   "vars": {
     "SWA_ADMIN_DOMAIN": "admin.singaporewomenassociation.org",
     "TURNSTILE_SITE_KEY": "0x4AAAAAADNT4-Bm-rzslbrc"
+  },
+  // Staging environment — docs/plans/staging-environment-plan.md.
+  // `wrangler deploy --env staging` deploys a second Worker named
+  // swa-portal-staging at swa-portal-staging.cjtay-4e0.workers.dev, wired to
+  // its own D1/KV/R2 (testers, own data). Bindings and vars do NOT inherit
+  // into environments, so each is repeated with staging resource IDs; assets,
+  // limits and observability DO inherit from the top level. No routes entry
+  // here on purpose — staging must never claim the production custom domain.
+  "env": {
+    "staging": {
+      "workers_dev": true,
+      // Empty routes on purpose: without this, the environment INHERITS the
+      // top-level custom domain and a staging deploy would reassign
+      // admin.singaporewomenassociation.org away from production
+      // (confirmed via `wrangler deploy --env staging --dry-run`, 2026-09-05).
+      "routes": [],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "swa-portal-staging",
+          "database_id": "9b78455e-56ee-4418-8208-5553f4a7c7ea"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "SWA_SESSION",
+          "id": "314f62835d7b41d1978e4de0c881ab55"
+        },
+        {
+          "binding": "SWA_CONFIG",
+          "id": "82d3e18a71914f72bb336bcbce633bce"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "R2_BUCKET",
+          "bucket_name": "swa-portal-staging-uploads"
+        }
+      ],
+      "ai": {
+        "binding": "AI"
+      },
+      "vars": {
+        "SWA_ADMIN_DOMAIN": "swa-portal-staging.cjtay-4e0.workers.dev",
+        "TURNSTILE_SITE_KEY": "0x4AAAAAADNT4-Bm-rzslbrc"
+      }
+    }
   }
 }

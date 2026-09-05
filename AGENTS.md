@@ -8,6 +8,7 @@ npm run dev              # Astro dev server at localhost:4321
 npm run dev:worker       # Wrangler dev (static + API) at localhost:8787
 npm run build            # Production build
 npm run deploy           # Build + deploy to Cloudflare Workers
+npm run deploy:staging   # Build + deploy to the staging Worker (needs owner setup, docs/plans/staging-environment-plan.md)
 npm run cf-typegen       # Regenerate worker-configuration.d.ts
 npm run db:clear:membership  # Clear local membership applications + approved test members (LOCAL only)
 ```
@@ -78,6 +79,8 @@ Three tiers. See `docs/specs/SWAPortal-Functional-Specs.md` for the full access 
 | R2 bucket    | `swa-portal-uploads` | —                                      |
 | Worker       | `swa-portal`         | —                                      |
 
+Staging equivalents (own isolated resources; IDs live in `wrangler.jsonc` `env.staging`): D1 `swa-portal-staging`, KV `SWA_SESSION_STAGING` + `SWA_CONFIG_STAGING`, R2 `swa-portal-staging-uploads`.
+
 Secrets: `OTP_SECRET`, `SESSION_SECRET`, `RESEND_API_KEY` (set interactively via `wrangler secret put`)
 
 ## Key Files
@@ -106,6 +109,7 @@ Secrets: `OTP_SECRET`, `SESSION_SECRET`, `RESEND_API_KEY` (set interactively via
 
 - **Platform**: Cloudflare Workers + Hono
 - **Deploy**: `npm run deploy`
+- **Staging**: `npm run deploy:staging` → `swa-portal-staging.cjtay-4e0.workers.dev` (own D1/KV/R2; `env.staging` in `wrangler.jsonc`; see `docs/plans/staging-environment-plan.md`)
 - **Dev URL**: `swa-portal.cjtay-4e0.workers.dev`
 - **Production**: `admin.singaporewomenassociation.org` (pending domain transfer)
 - **Secrets**: `npx wrangler secret put OTP_SECRET --name swa-portal`, `SESSION_SECRET`, and `RESEND_API_KEY`

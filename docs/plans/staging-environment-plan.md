@@ -1,6 +1,12 @@
 # Staging environment plan
 
-Date: 2026-08-29. Status: planned, not yet implemented.
+Date: 2026-08-29. Revised 2026-09-05: no seed data — the owner
+adds real data directly via the staging Members feature; repo-side
+config implemented (steps 2–3 done, below). Status: COMPLETE as of 2026-09-05 (all 8 steps — resources, config,
+schema, Turnstile verified, all 4 secrets, bootstrap admin, deploy
+`93b8febc`; owner finished steps 5–6 and logged in successfully; real
+approver lists swapped in for UAT and redeployed). Remaining: the
+step 8 E2E UAT walk with the real testers.
 
 ## The decision
 
@@ -45,15 +51,27 @@ not need its own repo. One repo, two deploy targets:
 
 - Turnstile: real captcha. Add the staging hostname to the existing
   widget, so testers see the production behaviour.
-- Staging database starts with `schema.sql` plus the three dummy seed
-  files (`seed-members.sql`, `seed-membership.sql`,
-  `scripts/seed-test-data.sql`). All seeded data is fabricated.
+- Staging database starts with `schema.sql` only (empty tables, no seed
+  files). The owner inserts one bootstrap row for the IT admin (step 7),
+  then adds all other real members directly in the staging Members UI.
 - Deploys are manual via `npm run deploy:staging`. Git auto-deploy from
   a branch (Workers Builds) can be added later.
 
 ## Implementation steps
 
-### Step 1 — Create staging resources (one-time)
+### Step 1 — Create staging resources (one-time) — DONE (2026-09-05)
+
+D1 `swa-portal-staging` (owner-created), KV `SWA_SESSION_STAGING`
+(`314f62835d7b41d1978e4de0c881ab55`), KV `SWA_CONFIG_STAGING`
+(`82d3e18a71914f72bb336bcbce633bce`) and R2
+`swa-portal-staging-uploads` all exist, and the real IDs are filled
+into the `env.staging` block of `wrangler.jsonc`. The local-dev
+remote-connect prompts were answered `n` (local dev keeps local
+emulators), and wrangler's offer to auto-add bindings to the config
+was declined — the bindings already exist in `env.staging` under their
+code names (`DB`, `SWA_SESSION`, `SWA_CONFIG`, `R2_BUCKET`).
+
+Original commands, kept for reference:
 
 ```
 npx wrangler d1 create swa-portal-staging
@@ -62,101 +80,112 @@ npx wrangler kv namespace create SWA_CONFIG_STAGING
 npx wrangler r2 bucket create swa-portal-staging-uploads
 ```
 
-Namespace titles are account-wide names. The binding names inside the
-code (`DB`, `SWA_SESSION`, `SWA_CONFIG`, `R2_BUCKET`) stay identical, so
-no code changes are needed.
+### Step 2 — Edit `wrangler.jsonc` — DONE (2026-09-05)
 
-### Step 2 — Edit `wrangler.jsonc`
+The `env.staging` block is in `wrangler.jsonc`. Bindings and vars do
+not inherit into environments, so the block repeats each one with
+staging resource IDs (real IDs, filled after step 1):
 
-Add an `env.staging` block. Bindings do not inherit into environments,
-so the block repeats every binding explicitly:
+- `d1_databases` → `swa-portal-staging`
+- `kv_namespaces` → the two staging namespaces
+- `r2_buckets` → `swa-portal-staging-uploads`
+- `ai` binding and `vars` (`SWA_ADMIN_DOMAIN` = staging URL, same
+  Turnstile site key)
 
-```jsonc
-"env": {
-  "staging": {
-    "workers_dev": true,
-    "d1_databases": [
-      { "binding": "DB", "database_name": "swa-portal-staging",
-        "database_id": "<from step 1>" }
-    ],
-    "kv_namespaces": [
-      { "binding": "SWA_SESSION", "id": "<from step 1>" },
-      { "binding": "SWA_CONFIG", "id": "<from step 1>" }
-    ],
-    "r2_buckets": [
-      { "binding": "R2_BUCKET", "bucket_name": "swa-portal-staging-uploads" }
-    ],
-    "ai": { "binding": "AI" },
-    "limits": { "max_request_body_size": 115343360 },
-    "observability": { "enabled": true },
-    "vars": {
-      "SWA_ADMIN_DOMAIN": "swa-portal-staging.cjtay-4e0.workers.dev",
-      "TURNSTILE_SITE_KEY": "<same key as production>"
-    }
-  }
-}
-```
+`assets`, `limits` and `observability` DO inherit from the top level,
+so staging serves `./dist` with `run_worker_first` and keeps the 110 MB
+upload ceiling without repeating them (confirmed by the bindings table
+in the dry-run output).
 
-The staging block has no `routes` entry, so a staging deploy can never
-claim `admin.singaporewomenassociation.org`. Production stays the
-top-level default and `npm run deploy` keeps working unchanged.
+The block pins `"routes": []` deliberately. A
+`wrangler deploy --env staging --dry-run` on 2026-09-05 proved that
+without it the environment inherits the top-level custom domain and a
+staging deploy would REASSIGN `admin.singaporewomenassociation.org`
+away from production — wrangler warns about exactly this. With the
+empty array, staging lives only on
+`swa-portal-staging.cjtay-4e0.workers.dev`. Production stays the
+top-level default and `npm run deploy` keeps working unchanged (it now
+prints a cosmetic advisory to pass `--env` explicitly because multiple
+environments exist).
 
-### Step 3 — Edit `package.json`
+### Step 3 — Edit `package.json` — DONE (2026-09-05)
 
-Add one script:
+Added script:
 
 ```
 "deploy:staging": "astro build && wrangler deploy --env staging"
 ```
 
-### Step 4 — Load schema and dummy data into staging D1
+### Step 4 — Load schema into staging D1 — DONE (2026-09-05)
+
+`schema.sql` is the complete structure (every table, including all
+migrated columns), so no migration files are needed on a fresh
+database. Applied 2026-09-05: 54 queries, 16 tables, verified via a
+`sqlite_master` table-list query. Kept for reference:
 
 ```
 npx wrangler d1 execute swa-portal-staging --remote --file=schema.sql
-npx wrangler d1 execute swa-portal-staging --remote --file=seed-members.sql
-npx wrangler d1 execute swa-portal-staging --remote --file=seed-membership.sql
-npx wrangler d1 execute swa-portal-staging --remote --file=scripts/seed-test-data.sql
 ```
 
-### Step 5 — Turnstile hostname (manual dashboard step)
+### Step 5 — Turnstile hostname (manual dashboard step) — DONE (2026-09-05)
 
 Turnstile site keys only work on hostnames allowlisted in the
 Cloudflare dashboard. Add
 `swa-portal-staging.cjtay-4e0.workers.dev` to the existing widget
-(site key `0x4AAAAAADNT4-Bm-rzslbrc`).
+(site key `0x4AAAAAADNT4-Bm-rzslbrc`). Two gotchas hit on 2026-09-05:
+the Edit Widget form only applies once you click Update at the bottom
+(unsaved hostname produces client error 110200), and the browser keeps
+retrying the failed challenge until a hard refresh. Verified working:
+a clean browser load renders the widget and issues a token invisibly
+(Managed mode).
 
-### Step 6 — Set secrets on the staging Worker
+### Step 6 — Set secrets on the staging Worker — 3 of 4 DONE (2026-09-05)
 
-Secrets are stored per Worker, so all three must be set again:
+Production carries FOUR secrets; staging needs all four. Set 2026-09-05:
+`OTP_SECRET` and `SESSION_SECRET` as fresh 64-hex random values
+(agent-uploaded, never displayed), and `RESEND_API_KEY` reused from
+production (value supplied by the owner in chat; exact-byte piped to
+avoid the Resend 502 gotcha). Still pending — `TURNSTILE_SECRET`, the
+widget's server-side secret key: without it `send-otp` fails closed
+with `500 CONFIG_ERROR` (send-otp.ts:79). Owner sets it interactively:
 
 ```
-npx wrangler secret put OTP_SECRET --env staging
-npx wrangler secret put SESSION_SECRET --env staging
-npx wrangler secret put RESEND_API_KEY --env staging
+npx wrangler secret put TURNSTILE_SECRET --env staging
 ```
+
+(The value is the Turnstile widget's Secret Key from the dashboard —
+same widget, so the same secret as production.)
 
 Use fresh values for `OTP_SECRET` and `SESSION_SECRET`, so production
 and staging never accept each other's sessions. Reuse the existing
 `RESEND_API_KEY` so staging sends real OTP emails from the verified
 domain.
 
-### Step 7 — First admin login
+### Step 7 — Bootstrap the first admin — DONE (2026-09-05)
 
-The dummy seed members use example.org emails, which cannot receive
-OTP emails. The IT admin email list is hardcoded
-(`src/constants/portal.ts`, `cjtay@singaporewomenassociation.org`). So
-the owner inserts one real member row for that email into staging D1,
-with `can_login = 1` and `category = 'admin'`. The owner runs this
-insert personally because it contains a real email address. Testers are
-then onboarded from the staging admin UI.
+With no seed data, the staging database starts empty. Login is
+impossible on an empty database: `send-otp` only emails addresses with a
+`can_login = 1` members row, and the Members UI itself needs a logged-in
+admin. One bootstrap row was inserted for the hardcoded IT admin email
+(`cjtay@singaporewomenassociation.org`, `src/constants/portal.ts`) with
+`can_login = 1` and `category = 'admin'`; verified by count only
+(`admin_rows = 1`), per the counts-only privacy rule. After the first
+login, every other member (real testers included) is added from the
+staging Members UI — no further manual SQL.
 
-### Step 8 — Deploy and verify
+### Step 8 — Deploy and verify — DEPLOYED 2026-09-05, E2E WALK PENDING
 
 ```
 npm run deploy:staging
 ```
 
-Then walk the full flow as a tester:
+Deployed 2026-09-05: Worker `swa-portal-staging` live at
+`https://swa-portal-staging.cjtay-4e0.workers.dev` (version
+`b0534182-cd3f-4527-bb73-7516db0c90a4`); `/login` serves HTTP 200.
+The E2E walk below is blocked until the owner finishes step 5 (Turnstile
+hostname) — until then the login page loads but the captcha fails with
+Turnstile error 110200 (hostname not allow-listed). Then walk the full
+flow as a tester:
 
 1. Load `https://swa-portal-staging.cjtay-4e0.workers.dev/login`,
    solve the captcha, receive the OTP email, log in.
@@ -174,10 +203,13 @@ uses the existing Resend account.
 
 ## Notes and cautions
 
-- Testers will key real personal data into staging. Keep the same
-  privacy rule there: verify with counts only, never read raw rows.
-- To reset staging data later, re-run step 4 (schema plus seeds). The
-  membership application table and approved members are wiped by design
-  in that flow, so only do it between test rounds.
+- Staging holds only real personal data (no dummy rows). Keep the same
+  privacy rule as production: verify with counts only, never read raw
+  rows.
+- To reset staging data later: `schema.sql` uses
+  `CREATE TABLE IF NOT EXISTS`, so re-running it does not clear existing
+  rows. A reset means deleting the staging D1 database, recreating it
+  (step 1), re-applying `schema.sql` (step 4) and the bootstrap admin
+  row (step 7). Only do it between test rounds.
 - Workers Builds auto-deploy from a `staging` git branch is a possible
   later addition, not part of this plan.

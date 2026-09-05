@@ -16,6 +16,7 @@
     "preview": "astro preview",
     "dev:worker": "astro build && wrangler dev",
     "deploy": "astro build && wrangler deploy",
+    "deploy:staging": "astro build && wrangler deploy --env staging",
     "astro": "astro",
     "typecheck": "astro check",
     "typecheck:worker": "tsc -p src/worker/tsconfig.json",
