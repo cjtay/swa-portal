@@ -157,8 +157,8 @@ export const APPROVAL_PURCHASE_APPROVER_EMAILS = [
 	// Dev/test only (shared inbox the owner controls):
 	"approval@singaporewomenassociation.org",
 	// Production (swap in at ship time):
-	// 'roxanne.zhang@singaporewomenassociation.org',
-	// 'angela.wong@singaporewomenassociation.org',
+	'roxanne.zhang@singaporewomenassociation.org',
+	'angela.wong@singaporewomenassociation.org',
 ] as const;
 
 // Stage two — finance approvers. IT admins are deliberately NOT added here:
@@ -168,8 +168,8 @@ export const APPROVAL_FINANCE_APPROVER_EMAILS = [
 	// Dev/test only (shared inbox the owner controls):
 	"finance@singaporewomenassociation.org",
 	// Production — owner confirms YS's and Joyce's real addresses at ship time:
-	// 'ys.<surname>@singaporewomenassociation.org',
-	// 'joyce.<surname>@singaporewomenassociation.org',
+	'wong.ys@singaporewomenassociation.org',
+	'joyce.yeo@singaporewomenassociation.org',
 ] as const;
 
 /**

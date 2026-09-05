@@ -20,7 +20,7 @@ Permission groups (email lists in `src/constants/portal.ts`, on top of the base 
 
 Session flags `is_purchase_approver` / `is_finance_approver` reach the browser via `/api/session` and drive the Approvals nav item and board actions. Ordinary committee members have no access — financial data.
 
-**Dev note**: the lists hold shared owner-controlled inboxes (`approval@`, `finance@singaporewomenassociation.org`) until ship time; production addresses are swapped in by the owner.
+**Dev note**: the real approvers (purchase: `roxanne.zhang@`, `angela.wong@`; finance: `wong.ys@`, `joyce.yeo@`) were added by the owner on 2026-09-05 for staging UAT, alongside the shared owner-controlled inboxes (`approval@`, `finance@`). The same lists ship to production on the next `npm run deploy` — they are the intended go-live names. In local dev, `lib/notify-recipients.ts` redirects all approval mail to the shared inboxes (forms → `cjtay@`), so a laptop can never email the real approvers.
 
 ## 3. API permissions
 
