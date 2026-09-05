@@ -1115,6 +1115,7 @@ async function seedVoucherReadyItem(title = 'Voucher test item'): Promise<number
   return (await res.json<{ id: number }>()).id;
 }
 
+let voucherInvoiceCounter = 0;
 function voucherBody(voucherDate: string, lines?: Array<Partial<VoucherLineInput>>) {
   const finalLines =
     lines !== undefined
@@ -1125,7 +1126,11 @@ function voucherBody(voucherDate: string, lines?: Array<Partial<VoucherLineInput
             { no: null, date: null, description: 'Less: 1st deposit paid', amount: -12139.88 },
             { no: null, date: null, description: 'DBS: Account No: 003-XXXXXXX-0', amount: null },
           ];
-  return JSON.stringify({ voucherDate, lines: finalLines });
+  // Compliance Batch A: the invoice number is required at voucher
+  // submission. Each call gets a unique number so no duplicate-invoice
+  // warning rows leak into the audit-log assertions.
+  voucherInvoiceCounter += 1;
+  return JSON.stringify({ voucherDate, lines: finalLines, invoiceNo: `INV-TEST-${voucherInvoiceCounter}` });
 }
 
 interface VoucherLineInput {
@@ -1421,12 +1426,21 @@ describe('POST /api/approvals/:id/paid', () => {
 
   it('payment reference is optional', async () => {
     const id = await seedFinanceApprovedItem();
+    // R4 (owner discussion 2026-08-29): GIRO replaces Cheque in the paid step.
     const res = await SELF.fetch(`https://example.com/api/approvals/${id}/paid`, {
+      method: 'POST',
+      headers: { Cookie: await adminCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paidBy: 'Treasurer', paidDate: '2026-08-24', paymentMethod: 'giro' }),
+    });
+    expect(res.status).toBe(200);
+    // ...and cheque is gone from the accepted list.
+    const id2 = await seedFinanceApprovedItem();
+    const cheque = await SELF.fetch(`https://example.com/api/approvals/${id2}/paid`, {
       method: 'POST',
       headers: { Cookie: await adminCookie(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ paidBy: 'Treasurer', paidDate: '2026-08-24', paymentMethod: 'cheque' }),
     });
-    expect(res.status).toBe(200);
+    expect(cheque.status).toBe(400);
   });
 
   it('validates fields (who/date/method)', async () => {

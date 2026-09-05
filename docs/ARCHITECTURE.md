@@ -285,7 +285,19 @@ path returns 404 in production. See AGENTS.md, "Local dev login".
   (form-time, stores nothing) and `POST /api/approvals/:id/analyse`
   (regeneration, reachable only from the edit form and only while the item is
   editable; stores `ai_comparison` + audit row) — served by
-  `src/worker/lib/ai-comparison.ts`. Guards: an IT-admin kill-switch
+  `src/worker/lib/ai-comparison.ts`. The finance-policy compliance build
+  (2026-09-05, Batch A, migration 012) adds: the self-approval ban (the
+  creator gets 403 at all four decision endpoints), decision offices
+  (`purchase_decision_office` / `finance_decision_office` from
+  `APPROVAL_OFFICE_LABELS`, shown in drawer/emails/voucher print), the
+  S$5,000 two-stage force at create and edit, the voucher invoice number
+  (required at first submission; duplicates warn via `duplicateInvoice` /
+  `duplicate_invoice` + a `possible_duplicate_invoice` audit row, never
+  block), the two-signature voucher print at totals ≥ S$5,000 with the
+  payment-record block, GIRO replacing Cheque in the paid step, and the
+  `is_tax_invoice` attachment column (ticked document renders first).
+  Threshold constants live in `src/constants/portal.ts` only — see
+  `docs/plans/approvals-finance-compliance-implementation-plan.md`. Guards: an IT-admin kill-switch
   (`swa:ai_config` in SWA_CONFIG, surfaced as `ai_comparison_enabled` on
   `/api/session`), a 10/hour per-email rate bucket, and a portal-wide daily
   cap of 50 analyses (KV counter). S$ conversion happens in code from a

@@ -1,10 +1,6 @@
 # Approvals: Finance Policy Compliance — Implementation Plan
 
-> **Status**: ready to build. All decisions settled 2026-08-29. Eight further
-> requirements from the owner discussion of 2026-08-29 are recorded in §17:
-> five fold into Batches A and B as code, R8 is a documentation rule across
-> both batches, and two form Batch C. Change-request document:
-> `docs/plans/approvals-additional-requirements-2026-08-29.md`.
+> **Status**: **Batch A built** (2026-09-05) — migration 012 + schema backport, self-approval guard, decision offices, S$5,000 two-stage force, invoice number + duplicate warning, R4 (GIRO), R5 (voucher print), the R7 `is_tax_invoice` column, and the R8 matrix printed in the spec + guide; tests + docs landed in the same commit. **Batch B and Batch C remain — build next** (§13 B1-B4, then §17.2). All eight owner requirements recorded in §17: five fold into Batches A and B as code, R8 is a documentation rule across both batches, and two form Batch C. Change-request document: `docs/plans/approvals-additional-requirements-2026-08-29.md`.
 > **Source**: `docs/plans/approvals-finance-policy-compliance.md` (gap analysis,
 > settled decisions in its §12.1), `docs/specs/features/approvals.md` (feature
 > spec), `docs/plans/Approval-Workflow-Implementation-Plan.md` (original build).

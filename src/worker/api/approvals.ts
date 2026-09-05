@@ -14,9 +14,11 @@ import {
   APPROVAL_CATEGORIES,
   APPROVAL_MAX_FILES_PER_ITEM,
   APPROVAL_MAX_FILE_BYTES,
+  APPROVAL_TWO_STAGE_THRESHOLD,
   canRaiseApprovalItem,
   isPurchaseApprover,
   isFinanceApprover,
+  approvalOfficeFor,
 } from '../../constants/portal';
 import {
   isAiComparisonEnabled,
@@ -398,6 +400,13 @@ export async function handleApprovalsCreate(c: AppContext) {
     const flag = String(form['approvalRequired']).trim().toLowerCase();
     if (flag === 'true' || flag === '1' || flag === 'on') approvalRequired = true;
     else if (flag === 'false' || flag === '0') approvalRequired = false;
+  }
+
+  // Manual money rule (plan §6.3): at S$5,000 and above both stages are
+  // forced on, even for recurring categories. Runs before the document
+  // check below, so a forced item also needs its documents.
+  if (requestedAmount !== null && requestedAmount >= APPROVAL_TWO_STAGE_THRESHOLD) {
+    approvalRequired = true;
   }
 
   // --- Validate files ---
@@ -928,9 +937,9 @@ export async function handleApprovalDetail(c: AppContext) {
   try {
     const item = await c.env.DB.prepare(
       'SELECT id, category, title, payee, description, requested_amount, approval_required, status, rejected_stage, ' +
-        'purchase_decision_by, purchase_decision_at, rejection_reason, ' +
-        'voucher_no, voucher_date, voucher_lines, voucher_submitted_by, voucher_submitted_at, ' +
-        'finance_decision_by, finance_decision_at, finance_rejection_reason, ' +
+        'purchase_decision_by, purchase_decision_at, purchase_decision_office, rejection_reason, ' +
+        'voucher_no, voucher_date, voucher_lines, voucher_submitted_by, voucher_submitted_at, invoice_no, ' +
+        'finance_decision_by, finance_decision_at, finance_decision_office, finance_rejection_reason, ' +
         'paid_by, paid_at, payment_method, payment_reference, created_by, comparison, ai_comparison, created_at, updated_at ' +
         'FROM approval_items WHERE id = ?',
     )
@@ -941,8 +950,9 @@ export async function handleApprovalDetail(c: AppContext) {
       return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
     }
 
+    // R7: the ticked Tax Invoice always renders first, then upload order.
     const attachmentsResult = await c.env.DB.prepare(
-      'SELECT id, filename, mime_type, size, created_at FROM approval_attachments WHERE item_id = ? ORDER BY id',
+      'SELECT id, filename, mime_type, size, is_tax_invoice, created_at FROM approval_attachments WHERE item_id = ? ORDER BY is_tax_invoice DESC, id',
     )
       .bind(Number(id))
       .all();
@@ -966,10 +976,25 @@ export async function handleApprovalDetail(c: AppContext) {
       }
     }
 
+    // Same duplicate-invoice warning as the voucher step (plan §6.4), so the
+    // drawer and the payment form can warn without an extra call.
+    let duplicateInvoice: { id: number; voucherNo: string | null } | null = null;
+    if (item.invoice_no) {
+      const dup = await c.env.DB.prepare(
+        'SELECT id, voucher_no FROM approval_items WHERE invoice_no = ? COLLATE NOCASE AND id != ? LIMIT 1',
+      )
+        .bind(String(item.invoice_no), Number(id))
+        .first<{ id: number; voucher_no: string | null }>();
+      if (dup) {
+        duplicateInvoice = { id: Number(dup.id), voucherNo: dup.voucher_no ? String(dup.voucher_no) : null };
+      }
+    }
+
     return c.json({
       success: true,
       item: { ...item, comparison, ai_comparison: aiComparison },
       attachments: attachmentsResult.results || [],
+      duplicate_invoice: duplicateInvoice,
     });
   } catch (err) {
     return handleApiError(c, endpoint, err, 'Could not load the approval item.', {
@@ -1058,21 +1083,33 @@ export async function handleApprovalPurchaseApprove(c: AppContext) {
   if (!item) {
     return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
   }
+  // Manual rule (plan §6.1): the requestor cannot decide their own request.
+  // Closes the IT-admin path — an IT admin who creates an item is also a
+  // purchase approver through the IT-admin union.
+  if (String(item.created_by || '').toLowerCase() === email.toLowerCase()) {
+    return c.json(
+      { success: false, error_code: 'FORBIDDEN', message: 'You raised this request, so you cannot approve or reject it. Another approver must decide.' },
+      403,
+    );
+  }
 
   try {
     // The item column stores the printed name (the voucher shows "Approved
-    // by <name>"); the audit row keeps the email for traceability.
+    // by <name>"); the audit row keeps the email for traceability. The office
+    // column records the signer's office (President, Treasurer, …) — null
+    // when the address holds no mapped office (plan §6.2).
     const deciderName = getSessionName(c) || email;
+    const deciderOffice = approvalOfficeFor(email);
     const changed = await applyTransition(
       c,
       c.env.DB.prepare(
         `UPDATE approval_items
-            SET status = 'purchase_approved', purchase_decision_by = ?, purchase_decision_at = datetime('now'), updated_at = datetime('now')
+            SET status = 'purchase_approved', purchase_decision_by = ?, purchase_decision_office = ?, purchase_decision_at = datetime('now'), updated_at = datetime('now')
           WHERE id = ? AND status = 'pending'`,
-      ).bind(deciderName, Number(id)),
+      ).bind(deciderName, deciderOffice, Number(id)),
       c.env.DB.prepare(
-        'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, NULL)',
-      ).bind(Number(id), 'purchase_approved', email, deciderName),
+        'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)',
+      ).bind(Number(id), 'purchase_approved', email, deciderName, deciderOffice ? `office=${deciderOffice}` : null),
     );
     if (!changed) {
       return c.json(
@@ -1088,6 +1125,7 @@ export async function handleApprovalPurchaseApprove(c: AppContext) {
     sendPurchaseDecisionEmail(c.env, await loadEmailItem(c, Number(id), item), {
       approved: true,
       decidedBy: getSessionName(c) || email,
+      decidedByOffice: approvalOfficeFor(email) ?? undefined,
     }).catch(() => { /* logged inside */ }),
   );
 
@@ -1138,20 +1176,27 @@ export async function handleApprovalPurchaseReject(c: AppContext) {
   if (!item) {
     return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
   }
+  if (String(item.created_by || '').toLowerCase() === email.toLowerCase()) {
+    return c.json(
+      { success: false, error_code: 'FORBIDDEN', message: 'You raised this request, so you cannot approve or reject it. Another approver must decide.' },
+      403,
+    );
+  }
 
   try {
     const deciderName = getSessionName(c) || email;
+    const deciderOffice = approvalOfficeFor(email);
     const changed = await applyTransition(
       c,
       c.env.DB.prepare(
         `UPDATE approval_items
             SET status = 'rejected', rejected_stage = 'purchase', rejection_reason = ?,
-                purchase_decision_by = ?, purchase_decision_at = datetime('now'), updated_at = datetime('now')
+                purchase_decision_by = ?, purchase_decision_office = ?, purchase_decision_at = datetime('now'), updated_at = datetime('now')
           WHERE id = ? AND status = 'pending'`,
-      ).bind(reason, deciderName, Number(id)),
+      ).bind(reason, deciderName, deciderOffice, Number(id)),
       c.env.DB.prepare(
         'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)',
-      ).bind(Number(id), 'purchase_rejected', email, deciderName, reason),
+      ).bind(Number(id), 'purchase_rejected', email, deciderName, reason + (deciderOffice ? `; office=${deciderOffice}` : '')),
     );
     if (!changed) {
       return c.json(
@@ -1168,6 +1213,7 @@ export async function handleApprovalPurchaseReject(c: AppContext) {
       approved: false,
       reason,
       decidedBy: getSessionName(c) || email,
+      decidedByOffice: approvalOfficeFor(email) ?? undefined,
     }).catch(() => { /* logged inside */ }),
   );
 
@@ -1205,7 +1251,7 @@ export async function handleApprovalEdit(c: AppContext) {
   let item: Record<string, unknown> | null = null;
   try {
     item = await c.env.DB.prepare(
-      'SELECT id, status, rejected_stage, approval_required, category, created_by, ai_comparison FROM approval_items WHERE id = ?',
+      'SELECT id, status, rejected_stage, approval_required, category, created_by, ai_comparison, requested_amount FROM approval_items WHERE id = ?',
     )
       .bind(Number(id))
       .first<Record<string, unknown>>();
@@ -1274,6 +1320,18 @@ export async function handleApprovalEdit(c: AppContext) {
       updates.push('requested_amount = ?');
       params.push(null);
     }
+  }
+
+  // Manual money rule (plan §6.3): at S$5,000 and above both stages are
+  // forced on, even for recurring categories. "Effective" = the form value
+  // when provided, otherwise the stored value. Edit only runs while the
+  // item is pending or purchase-rejected, so this can never flip a decided
+  // item. No bind param — the clause is a literal.
+  const storedAmount = item.requested_amount === null || item.requested_amount === undefined ? null : Number(item.requested_amount);
+  const formAmountProvided = form['requestedAmount'] !== undefined && String(form['requestedAmount']).trim().length > 0;
+  const effectiveAmount = formAmountProvided ? Number(String(form['requestedAmount']).trim()) : storedAmount;
+  if (effectiveAmount !== null && effectiveAmount >= APPROVAL_TWO_STAGE_THRESHOLD) {
+    updates.push('approval_required = 1');
   }
 
   // --- AI analysis text edits (owner decision 26-08-2026) ---
@@ -1702,6 +1760,16 @@ export async function handleApprovalVoucher(c: AppContext) {
     return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: 'Voucher date must be a valid date (YYYY-MM-DD).' }, 400);
   }
 
+  // --- Invoice/receipt number (plan §6.4) ---
+  const MAX_INVOICE_NO_LENGTH = 100;
+  const invoiceNoRaw = typeof body['invoiceNo'] === 'string' ? body['invoiceNo'].trim() : '';
+  if (invoiceNoRaw.length > MAX_INVOICE_NO_LENGTH) {
+    return c.json(
+      { success: false, error_code: 'VALIDATION_ERROR', message: `Invoice/receipt number must be ${MAX_INVOICE_NO_LENGTH} characters or fewer.` },
+      400,
+    );
+  }
+
   // --- Lines ---
   const rawLines = body['lines'];
   if (!Array.isArray(rawLines) || rawLines.length < 1 || rawLines.length > MAX_VOUCHER_LINES) {
@@ -1740,7 +1808,7 @@ export async function handleApprovalVoucher(c: AppContext) {
   let item: Record<string, unknown> | null = null;
   try {
     item = await c.env.DB.prepare(
-      'SELECT id, title, payee, category, status, rejected_stage, voucher_no, created_by FROM approval_items WHERE id = ?',
+      'SELECT id, title, payee, category, status, rejected_stage, voucher_no, invoice_no, created_by FROM approval_items WHERE id = ?',
     )
       .bind(Number(id))
       .first<Record<string, unknown>>();
@@ -1757,6 +1825,35 @@ export async function handleApprovalVoucher(c: AppContext) {
       { success: false, error_code: 'CONFLICT', message: 'Vouchers can be submitted once the purchase stage is approved, or resubmitted after a finance rejection.' },
       409,
     );
+  }
+
+  // --- Invoice number: required on first submission; a resubmission may
+  //     omit it and keeps the stored value (plan §6.4). ---
+  if (!isResubmission && invoiceNoRaw.length === 0) {
+    return c.json(
+      { success: false, error_code: 'VALIDATION_ERROR', message: 'An invoice or receipt number is required with the voucher.' },
+      400,
+    );
+  }
+  const invoiceNo = invoiceNoRaw.length > 0 ? invoiceNoRaw : item.invoice_no ? String(item.invoice_no) : '';
+
+  // --- Duplicate-invoice check: warns, never blocks (settled decision 5 —
+  //     suppliers legitimately reuse invoice numbers monthly). The flag rides
+  //     the response so the payment step can warn without another call. ---
+  let duplicateInvoice: { id: number; voucherNo: string | null } | null = null;
+  if (invoiceNo) {
+    try {
+      const dup = await c.env.DB.prepare(
+        'SELECT id, voucher_no FROM approval_items WHERE invoice_no = ? COLLATE NOCASE AND id != ? LIMIT 1',
+      )
+        .bind(invoiceNo, Number(id))
+        .first<{ id: number; voucher_no: string | null }>();
+      if (dup) {
+        duplicateInvoice = { id: Number(dup.id), voucherNo: dup.voucher_no ? String(dup.voucher_no) : null };
+      }
+    } catch (err) {
+      return handleApiError(c, endpoint, err, 'Could not check the invoice number.', { error_type: 'D1_SELECT_APPROVAL_INVOICE_DUP', http_status: 500 });
+    }
   }
 
   // --- Save (with number assignment + UNIQUE retry) ---
@@ -1786,13 +1883,13 @@ export async function handleApprovalVoucher(c: AppContext) {
           c,
           c.env.DB.prepare(
             `UPDATE approval_items
-                SET voucher_no = ?, voucher_date = ?, voucher_lines = ?,
+                SET voucher_no = ?, voucher_date = ?, voucher_lines = ?, invoice_no = ?,
                     voucher_submitted_by = ?, voucher_submitted_at = datetime('now'),
                     status = 'finance_check', rejected_stage = NULL,
                     finance_decision_by = NULL, finance_decision_at = NULL, finance_rejection_reason = NULL,
                     updated_at = datetime('now')
               WHERE id = ? AND (status = 'purchase_approved' OR (status = 'rejected' AND rejected_stage = 'finance'))`,
-          ).bind(assignedNo, voucherDate, linesJson, actorName, Number(id)),
+          ).bind(assignedNo, voucherDate, linesJson, invoiceNo || null, actorName, Number(id)),
           c.env.DB.prepare(
             'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)',
           ).bind(Number(id), 'voucher_submitted', session.email, actorName, `voucher_no=${assignedNo}; resubmitted=${isResubmission ? 1 : 0}`),
@@ -1822,6 +1919,28 @@ export async function handleApprovalVoucher(c: AppContext) {
     return handleApiError(c, endpoint, err, 'Could not save the voucher.', { error_type: 'D1_UPDATE_APPROVAL_VOUCHER', http_status: 500 });
   }
 
+  // --- Duplicate-invoice audit row (best-effort, same philosophy as the
+  //     other audit writes: the state change is the source of truth). ---
+  if (duplicateInvoice) {
+    try {
+      await c.env.DB.prepare('INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)').bind(
+        Number(id),
+        'possible_duplicate_invoice',
+        session.email,
+        actorName,
+        `invoice_no=${invoiceNo}; matches item ${duplicateInvoice.id} (${duplicateInvoice.voucherNo || 'no voucher'})`,
+      ).run();
+    } catch (err) {
+      await logError(c.env, {
+        endpoint: 'approvals-voucher-audit',
+        error_type: 'D1_AUDIT',
+        error_message: `duplicate-invoice audit insert failed: ${err instanceof Error ? err.message : String(err)}`,
+        http_status: 500,
+        user_email: session.email,
+      });
+    }
+  }
+
   // --- Email the finance approvers (plan §10) ---
   try {
     const fresh = await c.env.DB.prepare(
@@ -1837,7 +1956,7 @@ export async function handleApprovalVoucher(c: AppContext) {
     // Email payload read failed — the voucher itself is saved; do not fail.
   }
 
-  return c.json({ success: true, voucher_no: assignedNo, status: 'finance_check', resubmitted: isResubmission });
+  return c.json({ success: true, voucher_no: assignedNo, status: 'finance_check', resubmitted: isResubmission, duplicateInvoice });
 }
 
 /* ----------------------------------------------------
@@ -1871,20 +1990,27 @@ export async function handleFinanceApprove(c: AppContext) {
   if (!item) {
     return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
   }
+  if (String(item.created_by || '').toLowerCase() === email.toLowerCase()) {
+    return c.json(
+      { success: false, error_code: 'FORBIDDEN', message: 'You raised this request, so you cannot approve or reject it. Another approver must decide.' },
+      403,
+    );
+  }
 
   try {
     // Name for the voucher's "Payment approved by" line; audit keeps email.
     const deciderName = getSessionName(c) || email;
+    const deciderOffice = approvalOfficeFor(email);
     const changed = await applyTransition(
       c,
       c.env.DB.prepare(
         `UPDATE approval_items
-            SET status = 'finance_approved', finance_decision_by = ?, finance_decision_at = datetime('now'), updated_at = datetime('now')
+            SET status = 'finance_approved', finance_decision_by = ?, finance_decision_office = ?, finance_decision_at = datetime('now'), updated_at = datetime('now')
           WHERE id = ? AND status = 'finance_check'`,
-      ).bind(deciderName, Number(id)),
+      ).bind(deciderName, deciderOffice, Number(id)),
       c.env.DB.prepare(
-        'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, NULL)',
-      ).bind(Number(id), 'finance_approved', email, deciderName),
+        'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)',
+      ).bind(Number(id), 'finance_approved', email, deciderName, deciderOffice ? `office=${deciderOffice}` : null),
     );
     if (!changed) {
       return c.json(
@@ -1900,6 +2026,7 @@ export async function handleFinanceApprove(c: AppContext) {
     sendFinanceDecisionEmail(c.env, await loadVoucherEmailItem(c, Number(id), item), {
       approved: true,
       decidedBy: getSessionName(c) || email,
+      decidedByOffice: approvalOfficeFor(email) ?? undefined,
     }).catch(() => { /* logged inside */ }),
   );
 
@@ -1951,20 +2078,27 @@ export async function handleFinanceReject(c: AppContext) {
   if (!item) {
     return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
   }
+  if (String(item.created_by || '').toLowerCase() === email.toLowerCase()) {
+    return c.json(
+      { success: false, error_code: 'FORBIDDEN', message: 'You raised this request, so you cannot approve or reject it. Another approver must decide.' },
+      403,
+    );
+  }
 
   try {
     const deciderName = getSessionName(c) || email;
+    const deciderOffice = approvalOfficeFor(email);
     const changed = await applyTransition(
       c,
       c.env.DB.prepare(
         `UPDATE approval_items
             SET status = 'rejected', rejected_stage = 'finance', finance_rejection_reason = ?,
-                finance_decision_by = ?, finance_decision_at = datetime('now'), updated_at = datetime('now')
+                finance_decision_by = ?, finance_decision_office = ?, finance_decision_at = datetime('now'), updated_at = datetime('now')
           WHERE id = ? AND status = 'finance_check'`,
-      ).bind(reason, deciderName, Number(id)),
+      ).bind(reason, deciderName, deciderOffice, Number(id)),
       c.env.DB.prepare(
         'INSERT INTO approval_audit_log (item_id, action, actor_email, actor_name, note) VALUES (?, ?, ?, ?, ?)',
-      ).bind(Number(id), 'finance_rejected', email, deciderName, reason),
+      ).bind(Number(id), 'finance_rejected', email, deciderName, reason + (deciderOffice ? `; office=${deciderOffice}` : '')),
     );
     if (!changed) {
       return c.json(
@@ -1981,6 +2115,7 @@ export async function handleFinanceReject(c: AppContext) {
       approved: false,
       reason,
       decidedBy: getSessionName(c) || email,
+      decidedByOffice: approvalOfficeFor(email) ?? undefined,
     }).catch(() => { /* logged inside */ }),
   );
 
@@ -1993,7 +2128,10 @@ export async function handleFinanceReject(c: AppContext) {
    and an optional reference. Allowed only from
    finance_approved — the final state change to 'paid'.
    ---------------------------------------------------- */
-const PAYMENT_METHODS = ['paynow', 'bank_transfer', 'cheque', 'cash', 'other'] as const;
+// R4 (owner discussion 2026-08-29): GIRO replaces Cheque. Approvals only —
+// the members fee-payment page keeps its own options. Nothing has shipped,
+// so no old rows need converting.
+const PAYMENT_METHODS = ['paynow', 'bank_transfer', 'giro', 'cash', 'other'] as const;
 const MAX_PAID_BY_LENGTH = 200;
 const MAX_PAYMENT_REFERENCE_LENGTH = 200;
 

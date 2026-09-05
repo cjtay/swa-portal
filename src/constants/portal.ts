@@ -167,6 +167,9 @@ export const APPROVAL_PURCHASE_APPROVER_EMAILS = [
 export const APPROVAL_FINANCE_APPROVER_EMAILS = [
 	// Dev/test only (shared inbox the owner controls):
 	"finance@singaporewomenassociation.org",
+	// Dev-only Assistant Treasurer stand-in (compliance plan §5, settled
+	// decision 1) — the second finance signature in local testing.
+	"internal@singaporewomenassociation.org",
 	// Production — owner confirms YS's and Joyce's real addresses at ship time:
 	'wong.ys@singaporewomenassociation.org',
 	'joyce.yeo@singaporewomenassociation.org',
@@ -225,3 +228,38 @@ export const APPROVAL_CATEGORIES: readonly ApprovalCategory[] = [
 // Attachment caps: 10 files per item, 10 MB per file (plan §9).
 export const APPROVAL_MAX_FILES_PER_ITEM = 10;
 export const APPROVAL_MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+// ── Finance-policy money rules ─────────────────────────────────────────────
+//
+// Thresholds from the "Finance Policy, Accounting and Procedure Manual",
+// SWA, version 2, 15 December 2024. Amounts are the requested amount before
+// GST. This file is the SINGLE place the numbers live (R8): the feature
+// spec and user guide print the matrix but reference these constants, so a
+// future policy change is a one-file edit.
+// See docs/plans/approvals-finance-compliance-implementation-plan.md §3.
+export const APPROVAL_QUOTE_RULE_THRESHOLD = 1_000; // declarations + quotes/waiver
+export const APPROVAL_TWO_STAGE_THRESHOLD = 5_000; // both stages forced on
+export const APPROVAL_BOARD_APPROVAL_THRESHOLD = 10_000;
+export const APPROVAL_INVITATION_REMINDER_THRESHOLD = 6_000; // form reminder only
+export const APPROVAL_TENDER_REMINDER_THRESHOLD = 90_000; // form reminder only
+
+// Office held by each approver address, shown beside the decider's name on
+// the board, drawer, emails and voucher print. Local dev uses the shared
+// test addresses; production addresses are owner-swapped at ship time.
+// system@ holds no office and stays unmapped on purpose.
+export const APPROVAL_OFFICE_LABELS: Record<string, string> = {
+	"approval@singaporewomenassociation.org": "President",
+	"cjtay@singaporewomenassociation.org": "1st Vice President",
+	"finance@singaporewomenassociation.org": "Treasurer",
+	"internal@singaporewomenassociation.org": "Assistant Treasurer",
+	// Production (owner swaps in at ship time):
+	// 'roxanne.zhang@singaporewomenassociation.org': 'President',
+	// 'angela.wong@singaporewomenassociation.org': '1st Vice President',
+	// 'wong.ys@singaporewomenassociation.org': 'Treasurer',
+	// 'joyce.yeo@singaporewomenassociation.org': 'Assistant Treasurer',
+};
+
+/** The office label for an approver email, or null when none is mapped. */
+export function approvalOfficeFor(email: string): string | null {
+	return APPROVAL_OFFICE_LABELS[email.toLowerCase()] ?? null;
+}

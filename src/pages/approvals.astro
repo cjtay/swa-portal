@@ -691,6 +691,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     rejected_stage: string | null;
     purchase_decision_by: string | null;
     purchase_decision_at: string | null;
+    purchase_decision_office: string | null;
     rejection_reason: string | null;
     finance_rejection_reason: string | null;
     voucher_no: string | null;
@@ -698,8 +699,10 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     voucher_lines: string | null;
     voucher_submitted_by: string | null;
     voucher_submitted_at: string | null;
+    invoice_no: string | null;
     finance_decision_by: string | null;
     finance_decision_at: string | null;
+    finance_decision_office: string | null;
     paid_by: string | null;
     paid_at: string | null;
     payment_method: string | null;
@@ -767,7 +770,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   const PAYMENT_METHOD_LABELS: Record<string, string> = {
     paynow: 'PayNow',
     bank_transfer: 'Bank transfer',
-    cheque: 'Cheque',
+    giro: 'GIRO',
     cash: 'Cash',
     other: 'Other',
   };
@@ -1056,10 +1059,16 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       body.innerHTML = '<p>Could not load this item.</p>';
       return;
     }
-    const data = (await res.json()) as { item: ApprovalItem; attachments: ApprovalAttachment[] };
+    const data = (await res.json()) as { item: ApprovalItem; attachments: ApprovalAttachment[]; duplicate_invoice: { id: number; voucherNo: string | null } | null };
     const item = data.item;
     const attachments = data.attachments || [];
+    const duplicateInvoice = data.duplicate_invoice || null;
     title.textContent = item.title;
+
+    // The signer's office renders beside their name on every decision line
+    // (plan §6.2) — "Name, Office".
+    const nameWithOffice = (name: string | null, office: string | null): string =>
+      office ? `${name ?? ''}, ${office}` : name || '';
 
     // Third tuple element marks rows whose values can be long (emails,
     // payment references) — they span both grid columns and never wrap.
@@ -1074,16 +1083,24 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
           ? ([
               // The purchase decision was a rejection — the "approved" label
               // would be wrong; the rejection banner above carries the reason.
-              ['Purchase decision by', esc(item.purchase_decision_by)],
+              ['Purchase decision by', esc(nameWithOffice(item.purchase_decision_by, item.purchase_decision_office))],
               ['Decided at (SG)', esc(fmtDateSg(item.purchase_decision_at))],
             ] as Array<[string, string, boolean?]>)
           : ([
-              ['Purchase approved by', esc(item.purchase_decision_by)],
+              ['Purchase approved by', esc(nameWithOffice(item.purchase_decision_by, item.purchase_decision_office))],
               ['Approved at (SG)', esc(fmtDateSg(item.purchase_decision_at))],
             ] as Array<[string, string, boolean?]>))
         : []),
+      ...(item.finance_decision_by
+        ? ([
+            [item.status === 'rejected' && item.rejected_stage === 'finance' ? 'Finance decision by' : 'Payment approved by',
+              esc(nameWithOffice(item.finance_decision_by, item.finance_decision_office))],
+            ['Decided at (SG)', esc(fmtDateSg(item.finance_decision_at))],
+          ] as Array<[string, string, boolean?]>)
+        : []),
       ['Voucher No', esc(item.voucher_no || '')],
       ['Voucher date', esc(fmtDateOnly(item.voucher_date))],
+      ['Invoice/Receipt No', esc(item.invoice_no || '')],
       ['Raised by', esc(item.created_by), true],
       ['Raised at (SG)', esc(fmtDateSg(item.created_at))],
       ...(item.paid_by
@@ -1102,6 +1119,12 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     }
     if (item.rejected_stage === 'finance' && item.finance_rejection_reason) {
       notesHtml += `<div class="ap-note"><strong>Rejected at finance stage:</strong> ${esc(item.finance_rejection_reason)}</div>`;
+    }
+    // Duplicate invoice: warns, never blocks (settled decision 5).
+    if (duplicateInvoice) {
+      notesHtml += `<div class="ap-note" style="border-left-color:#b45309;background:#fff7e6;"><strong>Possible duplicate invoice:</strong> this invoice number also appears on item #${duplicateInvoice.id}${
+        duplicateInvoice.voucherNo ? ` (${esc(duplicateInvoice.voucherNo)})` : ''
+      }. Suppliers legitimately reuse numbers monthly — check before paying.</div>`;
     }
 
     const attachmentsHtml =
@@ -1202,6 +1225,11 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
             <button type="button" class="btn btn-danger" id="ap-act-finance-reject-confirm" style="margin-top:0.5rem;">Confirm rejection</button>
           </div>
           <form id="ap-paid-form" hidden>
+            ${duplicateInvoice
+              ? `<div class="ap-note" style="margin:0 0 0.75rem;border-left-color:#b45309;background:#fff7e6;"><strong>Possible duplicate invoice:</strong> this invoice number also appears on item #${duplicateInvoice.id}${
+                  duplicateInvoice.voucherNo ? ` (${esc(duplicateInvoice.voucherNo)})` : ''
+                }. Check before recording payment.</div>`
+              : ''}
             <div class="ap-form-grid">
               <label class="ap-field"><span>Who made the payment</span>
                 <input type="text" id="ap-paid-by" class="form-input" maxlength="200" placeholder="e.g. Jolene Lim (SWA DBS app)" required /></label>
@@ -1211,7 +1239,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
                 <select id="ap-paid-method" class="form-input" required>
                   <option value="paynow">PayNow</option>
                   <option value="bank_transfer">Bank transfer</option>
-                  <option value="cheque">Cheque</option>
+                  <option value="giro">GIRO</option>
                   <option value="cash">Cash</option>
                   <option value="other">Other</option>
                 </select></label>
@@ -1227,6 +1255,8 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
             <div class="ap-form-grid">
               <label class="ap-field"><span>Voucher date</span>
                 <input type="date" id="ap-voucher-date" class="form-input" value="${esc(item.voucher_date || todayIso())}" required /></label>
+              <label class="ap-field"><span>Invoice/receipt number (required)</span>
+                <input type="text" id="ap-voucher-invoice" class="form-input" maxlength="100" placeholder="e.g. INV-2026-0812" value="${esc(item.invoice_no || '')}" required /></label>
               <label class="ap-field"><span>Payable to (carried from the item)</span>
                 <input type="text" class="form-input" value="${esc(item.payee || '')}" disabled /></label>
             </div>
@@ -1310,7 +1340,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
             <p style="margin:0.5rem 0 0;font-size:0.8rem;color:var(--text-muted);">
               Prepared by ${esc(item.voucher_submitted_by || '')}${item.voucher_submitted_at ? ` (${fmtDateSg(item.voucher_submitted_at)})` : ''}.
               ${item.finance_decision_by
-                ? `Payment approved by ${esc(item.finance_decision_by)}${item.finance_decision_at ? ` (${fmtDateSg(item.finance_decision_at)})` : ''}.`
+                ? `Payment approved by ${esc(nameWithOffice(item.finance_decision_by, item.finance_decision_office))}${item.finance_decision_at ? ` (${fmtDateSg(item.finance_decision_at)})` : ''}.`
                 : item.status === 'finance_check'
                   ? 'Awaiting finance approval.'
                   : ''}
@@ -1499,6 +1529,13 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
         msg('Pick a voucher date.');
         return;
       }
+      // Required on first submission; the API keeps the stored number when a
+      // resubmission omits it (plan §6.4) — the field is prefilled anyway.
+      const invoiceNo = (document.getElementById('ap-voucher-invoice') as HTMLInputElement | null)?.value.trim() || '';
+      if (!invoiceNo) {
+        msg('An invoice or receipt number is required with the voucher.');
+        return;
+      }
       const lines: VoucherLine[] = [];
       for (const row of Array.from(voucherLinesBox.querySelectorAll('.ap-vline-row'))) {
         const desc = (row.querySelector('.ap-vline-desc') as HTMLInputElement).value.trim();
@@ -1524,7 +1561,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
         const res = await fetch(`/api/approvals/${item.id}/voucher`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ voucherDate, lines }),
+          body: JSON.stringify({ voucherDate, lines, invoiceNo }),
         });
         const body = (await res.json()) as { success: boolean; message?: string };
         if (body.success) {

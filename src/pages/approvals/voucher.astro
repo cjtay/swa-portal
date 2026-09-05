@@ -76,6 +76,16 @@
       margin-top: 2rem;
     }
     .voucher-signatures p { margin: 0; }
+    /* Payment record block (R5): printed whenever the fields exist — the
+       voucher is printable before payment, so the block stays hidden until
+       then. */
+    .voucher-payment {
+      margin-top: 1.5rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    .voucher-payment div { margin: 0.15rem 0; }
     .voucher-note {
       margin: 1.5rem 0 0;
       font-size: 0.8rem;
@@ -109,6 +119,7 @@
       <div class="voucher-meta">
         <div><strong>Voucher No:</strong> <span id="v-no"></span></div>
         <div><strong>Date:</strong> <span id="v-date"></span></div>
+        <div id="v-invoice-row" hidden><strong>Invoice/Receipt No:</strong> <span id="v-invoice"></span></div>
       </div>
     </div>
     <p class="voucher-payee"><strong>Payable to:</strong> <span id="v-payee"></span></p>
@@ -126,7 +137,12 @@
     </table>
     <div class="voucher-signatures">
       <p><strong>Prepared by:</strong> <span id="v-prepared"></span></p>
+      <p id="v-sig-purchase" hidden><strong>Purchase approved by:</strong> <span id="v-purchase"></span></p>
       <p><strong>Payment approved by:</strong> <span id="v-approved"></span></p>
+    </div>
+    <div class="voucher-payment" id="v-payment-block" hidden>
+      <p style="margin:0 0 0.35rem;"><strong>Payment record</strong></p>
+      <div id="v-payment-lines"></div>
     </div>
     <p class="voucher-note" id="v-note" hidden></p>
     <div class="no-print">
@@ -135,6 +151,8 @@
   </div>
 
   <script>
+    import { APPROVAL_TWO_STAGE_THRESHOLD } from '../../constants/portal';
+
     interface VoucherLine {
       no: number | null;
       date: string | null;
@@ -153,9 +171,28 @@
       voucher_lines: string | null;
       voucher_submitted_by: string | null;
       voucher_submitted_at: string | null;
+      invoice_no: string | null;
+      purchase_decision_by: string | null;
+      purchase_decision_at: string | null;
+      purchase_decision_office: string | null;
       finance_decision_by: string | null;
       finance_decision_at: string | null;
+      finance_decision_office: string | null;
+      paid_by: string | null;
+      paid_at: string | null;
+      payment_method: string | null;
+      payment_reference: string | null;
     }
+
+    // Mirrors PAYMENT_METHODS in src/worker/api/approvals.ts (R4: GIRO
+    // replaces Cheque).
+    const PAYMENT_METHOD_LABELS: Record<string, string> = {
+      paynow: 'PayNow',
+      bank_transfer: 'Bank transfer',
+      giro: 'GIRO',
+      cash: 'Cash',
+      other: 'Other',
+    };
 
     function esc(value: unknown): string {
       return String(value ?? '')
@@ -246,16 +283,64 @@
       total = Math.round(total * 100) / 100;
       document.getElementById('v-total')!.textContent = money(total);
 
+      // Invoice/receipt number (plan §6.5): printed whenever present.
+      const invoiceRow = document.getElementById('v-invoice-row');
+      if (invoiceRow) {
+        if (item.invoice_no) {
+          document.getElementById('v-invoice')!.textContent = item.invoice_no;
+          invoiceRow.removeAttribute('hidden');
+        } else {
+          invoiceRow.setAttribute('hidden', '');
+        }
+      }
+
       document.getElementById('v-prepared')!.textContent = item.voucher_submitted_by || '—';
+      const withOffice = (name: string | null, office: string | null): string =>
+        office ? `${name ?? '—'}, ${office}` : name || '—';
       const approvedEl = document.getElementById('v-approved')!;
+      const purchaseRow = document.getElementById('v-sig-purchase');
+      const purchaseEl = document.getElementById('v-purchase');
       if (item.approval_required === 0) {
         // Recurring items never email approvers; the sample voucher shows
         // "No approval required" (plan §4, sample PV26-0611).
         approvedEl.textContent = 'No approval required';
-      } else if (item.finance_decision_by) {
-        approvedEl.textContent = `${item.finance_decision_by} (approved ${fmtVoucherDate(item.finance_decision_at?.slice(0, 10) || null)})`;
+        purchaseRow?.setAttribute('hidden', '');
       } else {
-        approvedEl.textContent = 'Pending finance approval';
+        // Manual 4.1.1 / plan §6.5: at S$5,000 and above (voucher total) the
+        // print carries BOTH signers with their offices; below it one
+        // Treasurer-side signature is enough.
+        if (total >= APPROVAL_TWO_STAGE_THRESHOLD) {
+          if (purchaseRow && purchaseEl) {
+            purchaseEl.textContent = item.purchase_decision_by
+              ? `${withOffice(item.purchase_decision_by, item.purchase_decision_office)} (${fmtVoucherDate(item.purchase_decision_at?.slice(0, 10) || null)})`
+              : 'Pending purchase approval';
+            purchaseRow.removeAttribute('hidden');
+          }
+        } else {
+          purchaseRow?.setAttribute('hidden', '');
+        }
+        approvedEl.textContent = item.finance_decision_by
+          ? `${withOffice(item.finance_decision_by, item.finance_decision_office)} (${fmtVoucherDate(item.finance_decision_at?.slice(0, 10) || null)})`
+          : 'Pending finance approval';
+      }
+
+      // Payment record (R5): method, reference, paid by and paid date — each
+      // printed only when present, because the voucher is printable before
+      // payment.
+      const paymentBlock = document.getElementById('v-payment-block');
+      const paymentLinesEl = document.getElementById('v-payment-lines');
+      if (paymentBlock && paymentLinesEl) {
+        const rows: string[] = [];
+        if (item.payment_method) rows.push(`Payment method: ${PAYMENT_METHOD_LABELS[item.payment_method] || item.payment_method}`);
+        if (item.payment_reference) rows.push(`Payment reference: ${item.payment_reference}`);
+        if (item.paid_by) rows.push(`Paid by: ${item.paid_by}`);
+        if (item.paid_at) rows.push(`Paid date: ${fmtVoucherDate(item.paid_at.slice(0, 10))}`);
+        if (rows.length > 0) {
+          paymentLinesEl.innerHTML = rows.map((r) => `<div>${esc(r)}</div>`).join('');
+          paymentBlock.removeAttribute('hidden');
+        } else {
+          paymentBlock.setAttribute('hidden', '');
+        }
       }
 
       if (item.approval_required === 0) {

@@ -3,6 +3,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
 const SECTIONS = [
   { id: 'workflow', title: 'The workflow at a glance' },
+  { id: 'money-rules', title: 'The money rules' },
   { id: 'office-admin', title: 'Office admin: raise, voucher, pay' },
   { id: 'purchase-approver', title: 'Purchase approver: approve purchases' },
   { id: 'finance-approver', title: 'Finance approver: check vouchers' },
@@ -78,6 +79,27 @@ const SECTIONS = [
           </a>
           <figcaption>The Approvals board. The tabs at the top show how many requests are waiting at each stage. Click the picture to enlarge it.</figcaption>
         </figure>
+      </section>
+
+      <section id="money-rules" class="guide-section">
+        <h2>The money rules</h2>
+        <p>
+          The portal follows the authorisation matrix in the SWA Finance
+          Policy, Accounting and Procedure Manual (version 2, 15 December
+          2024). Amounts are the requested amount you enter, before GST.
+        </p>
+        <ul class="guide-rules">
+          <li><strong>Every decision:</strong> whoever decided is recorded with their office (for example &ldquo;President&rdquo; or &ldquo;Treasurer&rdquo;), shown beside their name on the request, in emails and on the printed voucher. Nobody can approve or reject a request they raised themselves.</li>
+          <li><strong>Every voucher:</strong> an invoice or receipt number is required. If the same number already appears on another request, an amber warning appears — check it, then continue if this is genuinely a new bill. Suppliers legitimately reuse invoice numbers every month, so the portal warns but never blocks.</li>
+          <li><strong>S$5,000 and above:</strong> both approval stages always apply, even for regular costs like payroll, and the printed voucher carries both signatures with their offices.</li>
+          <li><strong>Seven years:</strong> approvals, their documents and the audit log are kept for at least seven years. Nothing in the portal deletes them.</li>
+        </ul>
+        <p>
+          The remaining thresholds from the manual — declarations and
+          quotations from S$1,000, two written invitations to quote from
+          S$6,000, board approval with evidence above S$10,000, and a formal
+          tender above S$90,000 — arrive with the declarations update.
+        </p>
       </section>
 
       <section id="office-admin" class="guide-section">
@@ -190,7 +212,7 @@ const SECTIONS = [
         <h3>Step 6: Prepare the payment voucher</h3>
         <p>
           Once the purchase is approved, open the request and click <strong>Prepare voucher</strong>. The form comes pre-filled with the
-          payee and amount. Each line has a date, a description and an amount.
+          payee and amount. You also fill in the <strong>invoice or receipt number</strong> — it is required, and the portal warns you if the same number already appears on another request. Each line has a date, a description and an amount.
           Lines may have negative amounts (a deposit already paid) or no amount
           at all (a note such as bank details). The voucher number is assigned
           when you first submit, and it stays with the voucher even if finance
@@ -213,7 +235,11 @@ const SECTIONS = [
         <p>
           Once finance has approved, click <strong>View voucher</strong>. The
           finished voucher opens on its own clean page with the names of who
-          prepared it and who approved the payment already filled in. Click <strong>Print / Save as PDF</strong> and choose &ldquo;Save as PDF&rdquo; in the print dialog.
+          prepared it and who approved the payment already filled in, plus the
+          invoice/receipt number. For vouchers of S$5,000 and above it carries
+          <strong>both</strong> signatures with their offices. Once the payment
+          is recorded, the method, reference, payer and date print on it too.
+          Click <strong>Print / Save as PDF</strong> and choose &ldquo;Save as PDF&rdquo; in the print dialog.
         </p>
         <figure class="guide-figure">
           <a href="/guide/approval/14-voucher-export.png">
@@ -225,7 +251,10 @@ const SECTIONS = [
         <h3>Step 8: Record the payment</h3>
         <p>
           After paying the vendor, open the request, click <strong>Record payment</strong> and fill in who made the payment, the date, the method
-          and a reference. The request then shows <em>Paid</em>, the end of the
+          (PayNow, bank transfer, GIRO, cash or other) and a reference. If the
+          invoice number appeared on another request before, an amber warning
+          shows above the form — check it, then continue if this is genuinely a
+          new bill. The request then shows <em>Paid</em>, the end of the
           journey.
         </p>
         <figure class="guide-figure">
@@ -362,6 +391,12 @@ const SECTIONS = [
           <dd>The portal limits how many actions each person can make in a short period, to keep it safe. Wait a few minutes and try again.</dd>
           <dt>The printed voucher shows the wrong name</dt>
           <dd>The &ldquo;Prepared by&rdquo; and &ldquo;Payment approved by&rdquo; names come from whoever was logged in at the time. If you prepared a voucher while logged in as a colleague, ask the IT admin. The audit log records the true account.</dd>
+          <dt>The portal says I cannot approve my own request</dt>
+          <dd>That is a finance-policy rule: whoever raised a request never decides on it, at either stage. Ask another approver to decide. The rule keeps the money chain clean.</dd>
+          <dt>An amber &ldquo;possible duplicate invoice&rdquo; warning appeared</dt>
+          <dd>The invoice or receipt number matches one already used on another request. Suppliers legitimately reuse the same number every month, so the portal warns but never blocks. Check the other request, then continue if this is genuinely a new bill.</dd>
+          <dt>How long are approvals kept?</dt>
+          <dd>Every request, its documents and the audit log are kept for at least seven years, following the finance manual. Nothing in the portal deletes them.</dd>
         </dl>
       </section>
     </div>
@@ -467,6 +502,12 @@ const SECTIONS = [
   }
   .guide-flow li {
     margin-bottom: 0.5rem;
+  }
+  .guide-rules {
+    padding-left: 1.25rem;
+  }
+  .guide-rules li {
+    margin-bottom: 0.6rem;
   }
 
   .guide-figure {

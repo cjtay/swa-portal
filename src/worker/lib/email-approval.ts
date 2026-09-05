@@ -114,18 +114,25 @@ export function buildApprovalRequestEmail(env: Env, item: ApprovalEmailItem, kin
 }
 
 /** Approve / reject decision — goes to the creator. */
-export function buildPurchaseDecisionEmail(env: Env, item: ApprovalEmailItem, decision: { approved: boolean; reason?: string; decidedBy: string }): string {
+export function buildPurchaseDecisionEmail(
+  env: Env,
+  item: ApprovalEmailItem,
+  decision: { approved: boolean; reason?: string; decidedBy: string; decidedByOffice?: string },
+): string {
   const heading = decision.approved ? 'Purchase Approved' : 'Purchase Rejected';
   const intro = decision.approved
     ? 'Your request was approved at the purchase stage. You can now prepare the payment voucher.'
     : 'Your request was rejected at the purchase stage. Edit the item and resubmit it when ready.';
+  // Office beside the name (plan §6.6): "Name (Office)" when the signer
+  // holds a mapped office, the plain name otherwise.
+  const decidedBy = decision.decidedByOffice ? `${decision.decidedBy} (${decision.decidedByOffice})` : decision.decidedBy;
   let inner =
     header(heading, item.title) +
     `<div style="padding:20px 24px;"><p style="margin:0 0 12px 0;color:#374151;font-size:14px;">${intro}</p>` +
     row('Title', item.title) +
     row('Payable to', item.payee || '') +
     row('Requested amount', money(item.requestedAmount)) +
-    row('Decided by', decision.decidedBy) +
+    row('Decided by', decidedBy) +
     '</table>';
   if (!decision.approved && decision.reason) {
     inner +=
@@ -179,7 +186,11 @@ export async function sendApprovalRequestEmail(env: Env, item: ApprovalEmailItem
   await sendViaResend(env, resolvePurchaseApproverRecipients(env), subject, buildApprovalRequestEmail(env, item, kind), 'approvals-request-email');
 }
 
-export async function sendPurchaseDecisionEmail(env: Env, item: ApprovalEmailItem, decision: { approved: boolean; reason?: string; decidedBy: string }): Promise<void> {
+export async function sendPurchaseDecisionEmail(
+  env: Env,
+  item: ApprovalEmailItem,
+  decision: { approved: boolean; reason?: string; decidedBy: string; decidedByOffice?: string },
+): Promise<void> {
   const subject = (decision.approved ? 'Approved: ' : 'Rejected: ') + item.title;
   await sendViaResend(env, [item.createdBy], subject, buildPurchaseDecisionEmail(env, item, decision), 'approvals-decision-email');
 }
@@ -228,11 +239,17 @@ export function buildVoucherEmail(env: Env, item: VoucherEmailItem, kind: 'new' 
 }
 
 /** Finance approve / reject decision — goes to the creator. */
-export function buildFinanceDecisionEmail(env: Env, item: VoucherEmailItem, decision: { approved: boolean; reason?: string; decidedBy: string }): string {
+export function buildFinanceDecisionEmail(
+  env: Env,
+  item: VoucherEmailItem,
+  decision: { approved: boolean; reason?: string; decidedBy: string; decidedByOffice?: string },
+): string {
   const heading = decision.approved ? 'Voucher Approved by Finance' : 'Voucher Rejected by Finance';
   const intro = decision.approved
     ? 'Your payment voucher was approved by finance. You can now export the voucher as a PDF and record the payment.'
     : 'Your payment voucher was rejected at the finance stage. Edit the voucher and resubmit it when ready.';
+  // Office beside the name (plan §6.6), same as the purchase decision email.
+  const decidedBy = decision.decidedByOffice ? `${decision.decidedBy} (${decision.decidedByOffice})` : decision.decidedBy;
   let inner =
     header(heading, item.title) +
     `<div style="padding:20px 24px;"><p style="margin:0 0 12px 0;color:#374151;font-size:14px;">${intro}</p>` +
@@ -240,7 +257,7 @@ export function buildFinanceDecisionEmail(env: Env, item: VoucherEmailItem, deci
     row('Voucher No', item.voucherNo) +
     row('Payable to', item.payee || '') +
     row('Total payable', moneySigned(item.total ?? 0)) +
-    row('Decided by', decision.decidedBy) +
+    row('Decided by', decidedBy) +
     '</table>';
   if (!decision.approved && decision.reason) {
     inner +=
@@ -257,7 +274,11 @@ export async function sendVoucherEmail(env: Env, item: VoucherEmailItem, kind: '
   await sendViaResend(env, resolveFinanceApproverRecipients(env), prefix + `${item.title} (${item.voucherNo})`, buildVoucherEmail(env, item, kind), 'approvals-voucher-email');
 }
 
-export async function sendFinanceDecisionEmail(env: Env, item: VoucherEmailItem, decision: { approved: boolean; reason?: string; decidedBy: string }): Promise<void> {
+export async function sendFinanceDecisionEmail(
+  env: Env,
+  item: VoucherEmailItem,
+  decision: { approved: boolean; reason?: string; decidedBy: string; decidedByOffice?: string },
+): Promise<void> {
   const subject = (decision.approved ? 'Finance approved: ' : 'Finance rejected: ') + `${item.title} (${item.voucherNo})`;
   await sendViaResend(env, [item.createdBy], subject, buildFinanceDecisionEmail(env, item, decision), 'approvals-finance-decision-email');
 }

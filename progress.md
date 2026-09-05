@@ -12,6 +12,102 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-09-05 (session 31): Approvals compliance Batch A implemented
+
+Executed Phases A1-A4 of
+`docs/plans/approvals-finance-compliance-implementation-plan.md` (§6 + §13).
+Verified locally, nothing deployed. Migration 012 applied to LOCAL D1 only —
+remote is the owner-gated ship step (§14).
+
+### Done
+- `migrations/012_approvals_compliance_rules.sql` + `schema.sql` backport:
+  purchase/finance decision offices, `invoice_no` (indexed, non-unique —
+  repeats warn), `approval_attachments.is_tax_invoice`.
+- `src/constants/portal.ts`: five money-rule thresholds (single source of the
+  amounts, R8), `APPROVAL_OFFICE_LABELS` + `approvalOfficeFor()` (dev:
+  approval@=President, cjtay@=1st VP, finance@=Treasurer, internal@=
+  Assistant Treasurer; production commented), `internal@` joins the finance
+  approver list (second signature for walkthroughs).
+- `src/worker/api/approvals.ts`: self-approval 403 in all four decision
+  handlers; office capture in the decision UPDATEs + audit notes
+  (`; office=…`); S$5,000 two-stage force at create AND edit; voucher
+  `invoiceNo` required on first submission (keep-old on resubmission) +
+  NOCASE duplicate check → `duplicateInvoice` on the response,
+  `duplicate_invoice` on detail, `possible_duplicate_invoice` audit row;
+  attachments ordered `is_tax_invoice DESC, id`; `PAYMENT_METHODS` =
+  paynow/bank_transfer/giro/cash/other (R4).
+- `src/worker/lib/email-approval.ts`: decision emails render "Name (Office)".
+- `src/pages/approvals/voucher.astro`: Invoice/Receipt No line; signature
+  block shows BOTH signers with offices at voucher totals ≥ S$5,000
+  (threshold imported from portal.ts); Payment record block (method,
+  reference, paid by, paid date) prints whenever present (R5).
+- `src/pages/approvals.astro`: voucher form gains the required invoice field
+  (prefilled on resubmit); drawer decision lines show offices, finance
+  decision rows + invoice row added; duplicate-invoice amber warnings in the
+  drawer and above the paid form; GIRO replaces Cheque in the dropdown and
+  labels.
+- `src/pages/approvals/guide.astro`: new "The money rules" section (the
+  approval matrix), updated voucher/payment steps, FAQ entries for
+  self-approval, duplicate invoices and the seven-year retention.
+- Docs: feature spec (rules, columns, new audit action, matrix, retention),
+  `docs/ARCHITECTURE.md`, plan + change-request status lines.
+- Tests: new `src/worker/api/__tests__/approvals-compliance.test.ts` (8
+  cases: both self-approval 403s, President/Treasurer office capture,
+  S$6,000 payroll forced pending vs S$4,999.99 skipping purchase, invoice
+  400, duplicate warning + audit + detail flag). `approvals.test.ts` voucher
+  payloads gain `invoiceNo`; the paid-step test now proves giro passes and
+  cheque fails.
+
+### Verify
+`npm run typecheck`, `typecheck:worker`, `build` clean; `npm run test:run`
+303/303 (20 files). Migration 012 applied to local D1.
+
+### Next
+Batch B (plan §7, phases B1-B4): migration 013 (10 evidence columns), the
+S$1,000 declarations + quotation rules, quotation dates with the 12-month
+warning, the S$10,000 board-approval guard, R1 field-level audit notes, R6
+remembered payment method per category, R7 checkbox UI. Then Batch C (R2
+auditor role, R3 status-tab CSV export).
+
+---
+
+## 2026-09-05 (session 30): Approvals R1-R8 — baseline verified, build plan ready to execute
+
+Re-verified the codebase after sessions 28-29 (staging env, real approver
+emails, local-dev email redirect — commits ee35854, 7d20656, 887864c, tree
+clean). None of that work touches compliance code: R1-R8 all remain NOT
+IMPLEMENTED. Evidence: migrations end at 011; `PAYMENT_METHODS`
+(src/worker/api/approvals.ts:1996) still includes cheque with no giro; no
+`is_tax_invoice`, `APPROVAL_AUDITOR_EMAILS`, `/api/approvals/export`, or
+payment fields on the voucher print (src/pages/approvals/voucher.astro);
+audit rows are action-only (no field old→new detail).
+
+The settled build plan needs no rework —
+`docs/plans/approvals-finance-compliance-implementation-plan.md` is ready
+to execute (Batches A/B in the main body, R1-R8 in §17, Batch C in §17.2).
+A continuing session starts at Phase A1.
+
+### R1-R8 status (all NOT IMPLEMENTED) and landing place
+| #  | Requirement                              | Lands in              | First files                                                                                            |
+| -- | ---------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------ |
+| R4 | Remove Cheque, add GIRO                  | Batch A               | `PAYMENT_METHODS` approvals.ts:1996; label map + dropdown approvals.astro:767/1214                     |
+| R5 | All voucher+payment fields on the print  | Batch A               | voucher.astro — method/reference/paid-by/paid-date lines (when present) + `VoucherItem` fields         |
+| R7 | Tax Invoice checkbox, ticked doc first   | Batch A schema + B UI | `is_tax_invoice INTEGER` in migration 012; checkbox UI; `ORDER BY is_tax_invoice DESC, id`             |
+| R1 | Audit trail records every field change   | Batch B               | diff old vs new in create/`handleApprovalEdit` (approvals.ts:1187+); note `field: old → new`; attachments excluded |
+| R6 | Categories remember payment method       | Batch B               | pre-select method of most recent paid item in same category (by category, not payee)                   |
+| R2 | View-only auditor role                   | Batch C               | `APPROVAL_AUDITOR_EMAILS` portal.ts; `is_approvals_viewer` session flag; GET-only middleware entry; viewer-gated UI |
+| R3 | CSV export of the board list             | Batch C               | `GET /api/approvals/export?status=…` + Export button (admin/IT-admin only; auditor cannot export)      |
+| R8 | Approval matrix matches finance policy   | Docs, across A+B      | print §3 matrix (S$1,000/5,000/10,000/90,000 bands) in feature spec + user guide; portal.ts thresholds stay the single source |
+
+### Next
+Execute the plan §13 in order: Phase A1 (migration 012 + `schema.sql`
+backport + constants: office map, thresholds, GIRO) → A2 handlers/emails →
+A3 pages → A4 tests+docs → B1-B4 (migration 013, validation, UI, tests) →
+Batch C (§17.2's 10-file list). Verify each phase: `npm run typecheck`,
+`typecheck:worker`, `test:run`, `build`.
+
+---
+
 ## 2026-09-05 (session 29): Local-dev email redirect — laptops never email real members
 
 Owner concern: with the real approvers now in portal.ts, local manual testing

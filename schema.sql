@@ -351,14 +351,17 @@ CREATE TABLE IF NOT EXISTS approval_items (
   rejected_stage            TEXT CHECK (rejected_stage IN ('purchase', 'finance') OR rejected_stage IS NULL),
   purchase_decision_by      TEXT,
   purchase_decision_at      TEXT,
+  purchase_decision_office  TEXT,
   rejection_reason          TEXT,
   voucher_no                TEXT UNIQUE,
   voucher_date              TEXT,
   voucher_lines             TEXT,
   voucher_submitted_by      TEXT,
   voucher_submitted_at      TEXT,
+  invoice_no                TEXT,
   finance_decision_by       TEXT,
   finance_decision_at       TEXT,
+  finance_decision_office   TEXT,
   finance_rejection_reason  TEXT,
   paid_by                   TEXT,
   paid_at                   TEXT,
@@ -374,15 +377,18 @@ CREATE TABLE IF NOT EXISTS approval_items (
 
 CREATE INDEX IF NOT EXISTS idx_approval_items_status     ON approval_items(status);
 CREATE INDEX IF NOT EXISTS idx_approval_items_created_at ON approval_items(created_at);
+-- Non-unique on purpose: a repeated invoice number warns, never blocks.
+CREATE INDEX IF NOT EXISTS idx_approval_items_invoice_no  ON approval_items(invoice_no);
 
 CREATE TABLE IF NOT EXISTS approval_attachments (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  item_id     INTEGER NOT NULL REFERENCES approval_items(id),
-  r2_key      TEXT NOT NULL UNIQUE,
-  filename    TEXT NOT NULL,
-  mime_type   TEXT NOT NULL,
-  size        INTEGER NOT NULL,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id        INTEGER NOT NULL REFERENCES approval_items(id),
+  r2_key         TEXT NOT NULL UNIQUE,
+  filename       TEXT NOT NULL,
+  mime_type      TEXT NOT NULL,
+  size           INTEGER NOT NULL,
+  is_tax_invoice INTEGER NOT NULL DEFAULT 0,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_approval_attachments_item ON approval_attachments(item_id);

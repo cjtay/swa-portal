@@ -1,6 +1,6 @@
 # Approval Workflow — Functional Spec
 
-> **Status**: live (Phases 1–5 complete, 2026-08-23; not yet deployed to production)
+> **Status**: live (Phases 1–5 complete, 2026-08-23; not yet deployed to production). Finance-policy compliance **Batch A** (self-approval ban, approver offices, S$5,000 two-stage force, invoice number + duplicate warning, GIRO payment method, full voucher print, tax-invoice column) added 2026-09-05 — `docs/plans/approvals-finance-compliance-implementation-plan.md` §6.
 > **Plan**: `docs/plans/Approval-Workflow-Implementation-Plan.md` (v2, owner decisions)
 > **Owner decisions**: two-stage approval (purchase then finance), no signatures, office admin raises items, built-in comparison table, insert-only audit log, browser "Save as PDF".
 
@@ -20,7 +20,9 @@ Permission groups (email lists in `src/constants/portal.ts`, on top of the base 
 
 Session flags `is_purchase_approver` / `is_finance_approver` reach the browser via `/api/session` and drive the Approvals nav item and board actions. Ordinary committee members have no access — financial data.
 
-**Dev note**: the real approvers (purchase: `roxanne.zhang@`, `angela.wong@`; finance: `wong.ys@`, `joyce.yeo@`) were added by the owner on 2026-09-05 for staging UAT, alongside the shared owner-controlled inboxes (`approval@`, `finance@`). The same lists ship to production on the next `npm run deploy` — they are the intended go-live names. In local dev, `lib/notify-recipients.ts` redirects all approval mail to the shared inboxes (forms → `cjtay@`), so a laptop can never email the real approvers.
+**Dev note**: the real approvers (purchase: `roxanne.zhang@`, `angela.wong@`; finance: `wong.ys@`, `joyce.yeo@`) were added by the owner on 2026-09-05 for staging UAT, alongside the shared owner-controlled inboxes (`approval@`, `finance@`, and `internal@` — the Assistant Treasurer stand-in for the second finance signature in the compliance walkthroughs). The same lists ship to production on the next `npm run deploy` — they are the intended go-live names. In local dev, `lib/notify-recipients.ts` redirects all approval mail to the shared inboxes (forms → `cjtay@`), so a laptop can never email the real approvers.
+
+**Offices** (`APPROVAL_OFFICE_LABELS` + `approvalOfficeFor()`, compliance plan §5): every decision records the signer's office (`purchase_decision_office` / `finance_decision_office`) and shows it beside their name on the board drawer, emails and voucher print — dev map: `approval@` = President, `cjtay@` = 1st Vice President, `finance@` = Treasurer, `internal@` = Assistant Treasurer; production addresses are owner-swapped at ship time; `system@` holds no office by design.
 
 ## 3. API permissions
 
@@ -30,16 +32,16 @@ Entry gate (middleware 7c): all `/api/approvals*` methods require admin, purchas
 |----------|--------|---------------------------|---------|
 | `GET /api/approvals` | GET | — | Board list + per-status counts |
 | `POST /api/approvals` | POST | Item creator | Multipart create: fields, ≤10 files, comparison rows. ≥1 file required when `approvalRequired` resolves true (400 otherwise) |
-| `GET /api/approvals/:id` | GET | — | Detail with attachments + parsed comparison |
+| `GET /api/approvals/:id` | GET | — | Detail with attachments (tax invoice first, `ORDER BY is_tax_invoice DESC, id`) + parsed comparison + `duplicate_invoice` warning |
 | `GET /api/approvals/:id/attachment/:attId` | GET | — | Stream attachment (`?download=1`); nosniff + sanitised filename |
-| `POST /api/approvals/:id/approve` | POST | Purchase approver | Atomic pending → purchase_approved; emails creator |
-| `POST /api/approvals/:id/reject` | POST | Purchase approver | Reason required; resubmission returns to pending |
-| `POST /api/approvals/:id/edit` | POST | Item creator | Edit fields, add attachments, comparison rebuild, AI summary/recommendation text edits, resubmit |
+| `POST /api/approvals/:id/approve` | POST | Purchase approver | Atomic pending → purchase_approved; emails creator. **403 when the caller raised the item** (self-approval ban, plan §6.1) |
+| `POST /api/approvals/:id/reject` | POST | Purchase approver | Reason required; resubmission returns to pending. Same self-approval 403 |
+| `POST /api/approvals/:id/edit` | POST | Item creator | Edit fields, add attachments, comparison rebuild, AI summary/recommendation text edits, resubmit. Effective amount ≥ S$5,000 forces `approval_required = 1` (plan §6.3) |
 | `POST /api/approvals/:id/remind` | POST | Item creator | Re-send the waiting stage's email (pending or finance_check) |
-| `POST /api/approvals/:id/voucher` | POST | Item creator | Submit/resubmit voucher; assigns PV number; → finance_check |
-| `POST /api/approvals/:id/finance-approve` | POST | Finance approver only | Atomic finance_check → finance_approved; emails creator |
-| `POST /api/approvals/:id/finance-reject` | POST | Finance approver only | Reason required; resubmission returns to finance_check |
-| `POST /api/approvals/:id/paid` | POST | Item creator | Records who/date/method/reference; → paid |
+| `POST /api/approvals/:id/voucher` | POST | Item creator | Submit/resubmit voucher; assigns PV number; → finance_check. **`invoiceNo` (1–100 chars) required on first submission**; optional on resubmission (keeps the stored value). Response carries `duplicateInvoice` when the number already exists on another item (NOCASE match — warns, never blocks, plan §6.4) |
+| `POST /api/approvals/:id/finance-approve` | POST | Finance approver only | Atomic finance_check → finance_approved; emails creator. Same self-approval 403 |
+| `POST /api/approvals/:id/finance-reject` | POST | Finance approver only | Reason required; resubmission returns to finance_check. Same self-approval 403 |
+| `POST /api/approvals/:id/paid` | POST | Item creator | Records who/date/method/reference; → paid. Method list: **PayNow / Bank transfer / GIRO / Cash / Other** (R4 — Cheque removed, nothing shipped so no rows to convert) |
 | `POST /api/approvals/analyse-preview` | POST | Item creator | Form-time AI comparison of the ticked quotation files (multipart). Stores nothing; the result is replayed to `POST /api/approvals` as `aiComparison`. Guards: kill-switch 503, daily cap 429, ≥2 files, same MIME allowlist |
 | `POST /api/approvals/:id/analyse` | POST | Item creator | Regenerates the AI comparison from the item's ticked comparison attachments (R2), stores it in `ai_comparison`, writes an `ai_comparison_generated` audit row. Reached only from the edit form (owner decision 26-08-2026 — the drawer Regenerate button was removed); refuses non-editable items with 409, matching the fields-freeze rule. Same guards |
 | `GET /api/approvals/audit/export?from=YYYY-MM-DD&to=YYYY-MM-DD` | GET | IT admin only (owner decision 24-08-2026) | Audit CSV for the required date range (both days inclusive, UTC; oldest first, ≤5000 rows, injection-guarded). Missing/inverted ranges → 400. Reached from the Settings page card — no approvals-page UI |
@@ -69,7 +71,29 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 - **Comparison table**: rows typed by the creator, each linking to one attached document.
 - **AI quotation comparison** (2026-08-26, `docs/plans/AI-Quotation-Comparison-Plan.md`): Workers AI reads the ticked quotations (PDF text via `toMarkdown`, photos via a vision model), extracts vendor/item/prices/currency/GST/validity/lead time per document, converts prices to S$ **in code** from a daily KV-cached FX table (open.er-api.com), then a text model writes a 3–4 sentence summary and a one-line value-based recommendation. Unreadable files (scanned PDFs, unsupported types) get per-file notes, never silent skips; Cloudflare reader edge failures (e.g. error 1031) surface as a friendly "usually temporary — run Analyse again" note (2026-08-27). HEIC photos are converted to JPEG in the browser at pick time. Every result carries the label "AI-generated — verify against the original documents". Single-attempt AI calls with 30 s timeouts; no automatic retries anywhere.
 - **AI texts are editable fields** (owner decision 26-08-2026): the summary and recommendation render as textareas in the create-form preview and in the edit form, so the admin can correct the AI wording before approval. They ride the same UPDATE as every other field, so they freeze at purchase approval like title/payee/amount, and the create endpoint stores whatever edited values the form replays.
-- **Export**: standalone `/approvals/voucher?id=` renders the June-sample voucher layout for browser "Save as PDF" — no PDF library. "Prepared by" / "Payment approved by" print session names.
+- **Export**: standalone `/approvals/voucher?id=` renders the June-sample voucher layout for browser "Save as PDF" — no PDF library. Prints the Invoice/Receipt No, "Prepared by", and — with offices — the signer lines; a **Payment record** block (method, reference, paid by, paid date) prints whenever the fields exist, because the voucher is printable before payment (R5, plan §6.5).
+
+**Finance-policy rules** (compliance Batch A, 2026-09-05; manual = "Finance Policy, Accounting and Procedure Manual", SWA, v2, 15 Dec 2024):
+
+- **Self-approval ban**: whoever raised an item can never approve or reject it, at either stage (403, all four decision endpoints). Closes the IT-admin union path by design.
+- **Offices recorded**: every decision stores the signer's office and prints it beside their name (drawer, decision emails, voucher print).
+- **S$5,000 two-stage force**: at the requested amount ≥ S$5,000 (before GST), `approval_required` is forced on at create and edit — even recurring categories start at `pending` and need their documents.
+- **Invoice number**: required at voucher submission (400 when missing); a repeated number **warns, never blocks** (suppliers legitimately reuse numbers monthly) — response flag + `possible_duplicate_invoice` audit row + amber warning in the drawer and above the paid form.
+- **Voucher signatures**: at a voucher total ≥ S$5,000 the print shows **both** signers with offices (Purchase approved by + Payment approved by); below S$5,000 one Treasurer-side signature suffices (manual 4.1.1); recurring items keep "No approval required".
+- **Seven-year retention**: approval items, attachments and audit rows are kept for a minimum of seven years; no portal code path deletes them; any future cleanup job must respect the seven-year minimum.
+
+**Approval matrix** (R8 — verified line by line against the manual's authorisation matrix; the threshold constants in `src/constants/portal.ts` are the **single** place the amounts live, so a future policy change is a one-file edit). Amounts are the requested amount before GST; the voucher-print signature rule uses the voucher total:
+
+| Moment | Rule enforced by the portal |
+|--------|------------------------------|
+| Every decision | Signer's office recorded and displayed; requestor cannot decide their own request |
+| Every voucher | Invoice/receipt number required at submission; repeats warn, never block |
+| S$1,000 and above | Declarations + two quotations or a waiver reason *(Batch B)* |
+| S$5,000 and above | Both approval stages forced on; printed voucher carries both signers |
+| S$6,000 – S$90,000 | Form reminder: obtain two written invitations to quote *(Batch B)* |
+| Above S$10,000 | Board approval reference + attached evidence required before purchase approval *(Batch B)* |
+| Above S$90,000 | Form reminder: formal tender required *(Batch B)* |
+| Always | Records kept at least seven years |
 
 ## 5. UI rules (`/approvals`)
 
@@ -103,7 +127,7 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 - Drawer tables (voucher, comparison, AI) use the responsive-table pattern (`display: block` + `overflow-x`): a wide table pans inside its own border box, so the AI summary and nearby cards never slide, and the drawer itself cannot be dragged sideways leaving an empty band.
 - Small grey text uses #4b5563; focus-visible rings cover the Remove buttons and checkboxes.
 
-## 6. Data model (migrations 009 + 010 + 011, backported into `schema.sql`)
+## 6. Data model (migrations 009 + 010 + 011 + 012, backported into `schema.sql`)
 
 **`approval_items`** — one row per request:
 
@@ -113,22 +137,25 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 | `category` | TEXT | Key from `APPROVAL_CATEGORIES` (8 categories) |
 | `title`, `payee`, `description` | TEXT | Description capped 4,000 chars |
 | `requested_amount` | REAL | Optional; when present must exceed 0 for any category (owner decision 29-08-2026 — a payment request is never for S$0; enforced at create and edit) |
-| `approval_required` | INTEGER | Default from category, flippable per item |
+| `approval_required` | INTEGER | Default from category, flippable per item; **forced on at ≥ S$5,000** (migration-era rule, plan §6.3) |
 | `status` | TEXT | CHECK: the six statuses above |
 | `rejected_stage` | TEXT | `purchase`/`finance`; cleared on resubmit |
 | `purchase_decision_by/at`, `rejection_reason` | TEXT | Name + timestamp + reason |
+| `purchase_decision_office` | TEXT | Office of the purchase signer (migration 012); null when unmapped |
 | `voucher_no` | TEXT | UNIQUE, `PV<YY>-<MM><NN>` |
 | `voucher_date`, `voucher_lines` | TEXT | Date + JSON rows |
 | `voucher_submitted_by/at` | TEXT | Name + timestamp |
+| `invoice_no` | TEXT | Invoice/receipt number, required at voucher submission (migration 012). Indexed **non-unique** — repeats warn, never block |
 | `finance_decision_by/at`, `finance_rejection_reason` | TEXT | Finance decision |
+| `finance_decision_office` | TEXT | Office of the finance signer (migration 012) |
 | `paid_by`, `paid_at`, `payment_method`, `payment_reference` | TEXT | The paid step |
 | `created_by` | TEXT | Creator email |
 | `comparison` | TEXT | JSON `[{attachmentId, description}]` |
 | `ai_comparison` | TEXT | Nullable JSON: the AI analysis (version, generated at/by, models, FX date, per-file status notes, extracted quotations with S$ conversions, summary, recommendation). Added migration 011 |
 
-**`approval_attachments`** — `item_id` FK, UNIQUE `r2_key` under `approvals/<itemId>/`, filename/mime/size. Add-only in v1; caps 10 files × 10 MB.
+**`approval_attachments`** — `item_id` FK, UNIQUE `r2_key` under `approvals/<itemId>/`, filename/mime/size, `is_tax_invoice` INTEGER 0/1 (migration 012 — the "This is the Tax Invoice" tick; at most one per item, the ticked document always renders first). Add-only in v1; caps 10 files × 10 MB.
 
-**`approval_audit_log`** — insert-only (no UPDATE/DELETE path exists). `item_id`, `action`, `actor_email`, `actor_name`, `note`. Actions: item_created, purchase_approved/rejected, item_edited, item_resubmitted, attachments_added, voucher_submitted, finance_approved/rejected, paid_recorded, reminder_sent, ai_comparison_generated.
+**`approval_audit_log`** — insert-only (no UPDATE/DELETE path exists). `item_id`, `action`, `actor_email`, `actor_name`, `note`. Actions: item_created, purchase_approved/rejected, item_edited, item_resubmitted, attachments_added, voucher_submitted, finance_approved/rejected, paid_recorded, reminder_sent, ai_comparison_generated, **possible_duplicate_invoice** (note: `invoice_no=<n>; matches item <id> (<voucher_no>)`). Decision rows append `; office=<label>` when the signer holds a mapped office.
 
 ## 7. Emails (`src/worker/lib/email-approval.ts`, Resend, non-blocking)
 
@@ -139,4 +166,4 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 
 ## 8. Tests
 
-`src/worker/api/__tests__/approvals.test.ts` (integration: role gates, create validation — including the ≥1-document rule for approval-required items — comparison mapping, numbering + 99-cap, race 409s, resubmit routing, IT-admin-excluded-from-finance proof, paid step, CSV with date-range filter + 400 guards, AI-analysis replay at create) and `src/worker/lib/__tests__/ai-comparison.test.ts` (pipeline against a fake AI binding — JSON extraction, S$ conversion maths, kill-switch default, daily breaker, per-file skip/error notes, endpoint guards that return before any AI call). The csv-guard tripwire watches the audit exporter.
+`src/worker/api/__tests__/approvals.test.ts` (integration: role gates, create validation — including the ≥1-document rule for approval-required items — comparison mapping, numbering + 99-cap, race 409s, resubmit routing, IT-admin-excluded-from-finance proof, paid step, CSV with date-range filter + 400 guards, AI-analysis replay at create) and `src/worker/lib/__tests__/ai-comparison.test.ts` (pipeline against a fake AI binding — JSON extraction, S$ conversion maths, kill-switch default, daily breaker, per-file skip/error notes, endpoint guards that return before any AI call). The csv-guard tripwire watches the audit exporter. `src/worker/api/__tests__/approvals-compliance.test.ts` (compliance Batch A: self-approval 403 at both stages, office capture President/Treasurer, S$6,000 payroll forced to pending vs S$4,999.99 skipping purchase, invoice-number 400, duplicate warning + `possible_duplicate_invoice` audit row + detail flag, GIRO accepted / cheque rejected).
