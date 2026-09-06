@@ -61,6 +61,7 @@ import {
   handleApprovalAuditExport,
   handleApprovalListExport,
 } from './api/approvals';
+import { handleDashboardSummary } from './api/dashboard-summary';
 
 const app = new Hono<AppEnv>();
 
@@ -102,6 +103,9 @@ app.post('/api/verify-otp', handleVerifyOtp);
 // Dev-only role-picker login (local + *.workers.dev only — handlers 404 in prod)
 app.get('/api/dev/members', handleDevMembers);
 app.post('/api/dev/login', handleDevLogin);
+
+// Dashboard — role-scoped counts (sectioned by permission; see handler)
+app.get('/api/dashboard/summary', handleDashboardSummary);
 
 // Office Bookings
 app.get('/api/bookings', handleBookings);

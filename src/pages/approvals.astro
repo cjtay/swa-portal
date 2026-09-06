@@ -2428,6 +2428,21 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
 
   // ---- Boot -------------------------------------------------------------
 
+  // Deep link from the dashboard: /approvals?status=<status> activates the
+  // matching tab before the first render. ?item= (below) keeps drawer priority.
+  function applyDeepLinkTab(): void {
+    const status = new URLSearchParams(window.location.search).get('status');
+    if (!status) return;
+    const btn = Array.from(document.querySelectorAll<HTMLButtonElement>('.ap-tab'))
+      .find((el) => el.dataset.status === status);
+    if (!btn) return;
+    currentTab = status;
+    document.querySelectorAll('.ap-tab').forEach((el) => {
+      el.classList.toggle('active', el === btn);
+      el.setAttribute('aria-selected', el === btn ? 'true' : 'false');
+    });
+  }
+
   requireAuth({
     onAuthenticated(data: SessionResponse) {
       sessionData = data;
@@ -2436,6 +2451,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
       const bar = document.getElementById('ap-create-bar');
       if (bar) bar.style.display = data.is_admin ? 'flex' : 'none';
       syncApprovalDefault();
+      applyDeepLinkTab();
       void loadList().then(() => {
         // Deep link from approval emails: /approvals?item=<id>
         const deep = new URLSearchParams(window.location.search).get('item');

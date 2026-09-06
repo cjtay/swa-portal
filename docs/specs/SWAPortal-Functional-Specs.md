@@ -76,6 +76,7 @@ Beyond base roles, specific powers are granted by email lists in `src/constants/
 
 - **Middleware tiers** (`src/worker/middleware.ts`): public paths; authenticated-by-default; IT-admin-only set; admin-write sets (GET open, writes admin); `reg_role` gates for the gala module; gate 7c for `/api/approvals` (admin or either approval group; R2 auditors admitted to GET reads only).
 - **Handlers re-check finer rules** (defence in depth) — e.g. finance decisions re-check `isFinanceApprover`; audit export is IT-admin only (middleware set, handler re-checks the admin tier).
+- **Dashboard summary** (`GET /api/dashboard/summary`, added 2026-09-06): one role-scoped response powering the dashboard's "Needs your attention" panel, approvals status strip and arrivals widget. Each section is included only when the caller may see the underlying surface — `approvals` (per-status counts + `pending_under_1000` for the finance approvers' small-purchase authority) only for admin, either approver list or the R2 auditor; `forms` (pending membership applications + 30-day volunteer/laughter signups) only for admin or committee base roles; `events` (arrival totals) only when the events flag is on and the caller can see any event surface. A plain committee member never receives the approvals key — financial data stays off their dashboard. Writes: none.
 - **Writes are rate-limited** per email per endpoint (`src/worker/lib/rate-limit.ts`); public form endpoints are IP rate-limited.
 - **New feature rule**: one row in the §3.3 matrix below + one spec file in `docs/specs/features/`.
 
@@ -100,7 +101,7 @@ Rules:
 
 | Feature | Committee | Admin | IT Admin | Spec |
 |---------|-----------|-------|----------|------|
-| Dashboard | View | View | View | (no restrictions) |
+| Dashboard | View — form queues only; never approvals data | View — attention panel + approvals strip per role | 〃 | §3.1 (dashboard summary) |
 | Office Booking — view/create/cancel own | Yes | Yes | Yes | `features/office-booking.md` |
 | Office Booking — cancel any | No | Yes | Yes | 〃 |
 | Member Directory — view | Yes | Yes | Yes | `features/members.md` |

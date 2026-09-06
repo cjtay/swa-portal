@@ -12,6 +12,48 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-09-06 (session 36): Role-aware dashboard
+
+The home page was a static grid of link cards; it now shows live,
+role-scoped counts. Nothing deployed.
+
+### Done
+- **`GET /api/dashboard/summary`** (`src/worker/api/dashboard-summary.ts`):
+  one role-scoped response — `approvals` (per-status counts +
+  `pending_under_1000` for the finance approvers' small-purchase authority)
+  only for admin/either approver list/R2 auditor; `forms` (pending
+  membership applications + 30-day volunteer/laughter signups) only for
+  admin/committee; `events` (arrival totals) only when the events flag is on
+  and the caller can see any event surface. A plain committee member never
+  receives the approvals key — no financial data.
+- **Dashboard rebuild** (`src/pages/index.astro`): greeting with role chips;
+  "Needs your attention" panel with per-role action cards deep-linking into
+  filtered views (purchase approver → pending queue; finance approver →
+  finance_check + under-S$1,000 small purchases; admin → vouchers to
+  prepare, payments to record, rejected items, form queues; committee →
+  form queues only; auditors get the strip but no action cards); approvals
+  status strip (seven chips → `/approvals?status=`); arrivals widget when
+  the events flag is on; quick links kept underneath.
+- **Fixes found on the way**: the dashboard Approvals card now also shows
+  for the R2 view-only auditor (was missed); check-in volunteers
+  (role `volunteer`) no longer see Members/Forms cards — they get a single
+  check-in card; `/approvals?status=` tab deep link added (dashboard chips
+  are its target; `?item=` keeps drawer priority).
+- Tests: `dashboard-summary.test.ts` (10) — role scoping, count maths incl.
+  the under-S$1,000 boundary (999.99 in, 1000 out, null fails closed),
+  events-flag gating, reg_volunteer admission, 401.
+
+### Verify
+`vitest run` 341/341; `astro check` 0 errors; browser-verified at 1200 px
+and 375 px as admin, finance approver and plain committee (local KV keeps
+feature flags off, so the events widget stayed hidden — correct).
+
+### Next
+Owner may want a fees-overdue (admin) and upcoming-bookings widget later;
+the summary endpoint is the natural home for both.
+
+---
+
 ## 2026-09-06 (session 35): Declarations moved offline; board-document upload; voucher stage stamp
 
 Owner decisions taken live with the finance manual open. Verified locally

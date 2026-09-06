@@ -39,7 +39,14 @@ See `docs/specs/SWAPortal-Functional-Specs.md` (core: roles, access matrix, conv
 
 - **Build mode confirmation** — Before creating, editing, or deleting any files, list every file path and the planned operation (create/edit/delete), then ask for confirmation before proceeding.
 - **Package safety** — Before running `npm install <package>` or downloading any external library/asset, explain what the package does, why it is needed, and any transitive dependencies it introduces. Ask for confirmation before installing. This prevents supply chain attacks and unnecessary bloat.
-- **Verify changes** — Run the project's typecheck/lint/build command before committing to catch errors.
+- **Verify changes (proportional)** — Scale verification to the change's blast radius, don't run the full suite for trivial edits:
+  - Docs/comments/config-only — no verification needed
+  - UI/CSS-only — `npm run typecheck`
+  - Astro pages or front-end scripts — `npm run typecheck` + directly related test files (`npx vitest run <path>`)
+  - Worker API/lib code — full `npm run test:run` + `npm run typecheck` + `npm run typecheck:worker`
+  - Always full `npm run test:run` before any deploy
+
+  This saves tokens and avoids the pool-workers teardown hang on trivial changes; when unsure which tier applies, use the higher one.
 - **Pre-commit review** — A `.githooks/pre-commit` script lists all staged files (new, deleted, modified) and prompts for confirmation before every `git commit`. Enable on fresh clone: `git config core.hooksPath .githooks`
 - **Destructive local scripts are user-invoked only** — Never run `npm run db:clear:membership`, `npm run db:setup`, or `npm run db:seed` autonomously, even for test cleanup. Only run them when the user explicitly asks in the current message.
 

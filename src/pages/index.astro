@@ -3,52 +3,406 @@ import AdminLayout from '../layouts/AdminLayout.astro';
 ---
 <AdminLayout title="Dashboard — SWA Admin Portal" currentPath="/">
   <h1>Dashboard</h1>
-  <p style="color:var(--text-muted);margin-bottom:2rem;">Welcome to the SWA Admin Portal.</p>
+  <p class="dash-greeting" id="dash-greeting" hidden>
+    Welcome back, <strong id="dash-greet-name"></strong><span id="dash-role-chips" class="dash-chips"></span>
+  </p>
 
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;">
-    <a href="/members" class="card" style="text-decoration:none;color:inherit;display:block;">
+  <section id="dash-attention" class="card" hidden aria-labelledby="dash-attention-h">
+    <h2 id="dash-attention-h">Needs your attention</h2>
+    <div id="dash-action-list" class="dash-actions"></div>
+    <p id="dash-allclear" hidden class="dash-allclear">Nothing needs your attention right now.</p>
+  </section>
+
+  <section id="dash-approvals" class="card" hidden>
+    <h2>Approvals</h2>
+    <p class="dash-muted">Where payment requests stand across the two-stage workflow.</p>
+    <div id="dash-approval-chips" class="dash-chips dash-chips-wrap"></div>
+  </section>
+
+  <section id="dash-events" class="card" data-feature="events" hidden>
+    <h2>Event arrivals</h2>
+    <div id="dash-events-stats" class="dash-stats"></div>
+    <a href="/reg/dashboard" class="dash-more">Open the arrivals dashboard</a>
+  </section>
+
+  <h2 class="dash-links-heading">Quick links</h2>
+  <div class="dash-grid">
+    <a href="/members" class="card dash-card" id="card-members" hidden>
       <h2>Members</h2>
-      <p style="color:var(--text-muted);font-size:0.85rem;">View and manage the member directory.</p>
+      <p>View and manage the member directory.</p>
     </a>
-    <a href="/admin/forms" class="card" style="text-decoration:none;color:inherit;display:block;">
+    <a href="/admin/forms" class="card dash-card" id="card-forms" hidden>
       <h2>Forms</h2>
-      <p style="color:var(--text-muted);font-size:0.85rem;">Review online form submissions — membership, volunteer and laughter yoga.</p>
+      <p>Review online form submissions — membership, volunteer and laughter yoga.</p>
     </a>
-    <a href="/approvals" class="card" id="card-approvals" style="text-decoration:none;color:inherit;display:block;" hidden>
+    <a href="/approvals" class="card dash-card" id="card-approvals" hidden>
       <h2>Approvals</h2>
-      <p style="color:var(--text-muted);font-size:0.85rem;">Raise and track payment approvals with two-stage sign-off.</p>
+      <p>Raise and track payment approvals with two-stage sign-off.</p>
     </a>
-    <a href="/office-booking" class="card" data-feature="office_booking" style="text-decoration:none;color:inherit;display:block;" hidden>
+    <a href="/reg/volunteer" class="card dash-card" id="card-checkin" hidden>
+      <h2>Guest check-in</h2>
+      <p>Search bookings and check guests in at the door.</p>
+    </a>
+    <a href="/office-booking" class="card dash-card" data-feature="office_booking" hidden>
       <h2>Office Booking</h2>
-      <p style="color:var(--text-muted);font-size:0.85rem;">Book the SWA office space and manage reservations.</p>
+      <p>Book the SWA office space and manage reservations.</p>
     </a>
-    <a href="/reg/admin/bookings" class="card" data-feature="events" style="text-decoration:none;color:inherit;display:block;" hidden>
+    <a href="/reg/admin/bookings" class="card dash-card" data-feature="events" hidden>
       <h2>Registration</h2>
-      <p style="color:var(--text-muted);font-size:0.85rem;">Manage gala dinner bookings, guest lists, and arrival tracking.</p>
+      <p>Manage gala dinner bookings, guest lists, and arrival tracking.</p>
     </a>
-    <a href="/reg/dashboard" class="card" data-feature="events" style="text-decoration:none;color:inherit;display:block;" hidden>
+    <a href="/reg/dashboard" class="card dash-card" data-feature="events" hidden>
       <h2>Arrivals Dashboard</h2>
-      <p style="color:var(--text-muted);font-size:0.85rem;">Live arrival monitoring for event night.</p>
+      <p>Live arrival monitoring for event night.</p>
     </a>
   </div>
 </AdminLayout>
 
-<script>
-  import { requireAuth } from '../scripts/auth-gate';
+<style is:global>
+  .dash-greeting { color: var(--text-muted); margin-bottom: 2rem; }
+  .dash-greeting strong { color: var(--text); }
 
-  // Feature-gated cards ship hidden and are revealed once the session's
-  // feature flags arrive; the Approvals card follows the same role rule as
-  // the nav item (admins + purchase/finance approvers).
+  .dash-chips { display: inline-flex; gap: 0.4rem; margin-left: 0.6rem; flex-wrap: wrap; vertical-align: middle; }
+  .dash-chips-wrap { margin-left: 0; margin-top: 0.75rem; }
+  .dash-chip {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    background: var(--swa-4);
+    color: var(--swa-2);
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .dash-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.75rem; }
+  .dash-action {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 1rem 1.25rem;
+    min-height: 44px;
+    transition: box-shadow 0.15s, border-color 0.15s;
+  }
+  .dash-action:hover { box-shadow: 0 1px 3px rgba(0,0,0,0.08); border-color: var(--swa-3); }
+  .dash-action .dash-action-count {
+    display: block;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--swa-1);
+    line-height: 1.2;
+  }
+  .dash-action.alert .dash-action-count { color: #b91c1c; }
+  .dash-action .dash-action-label { color: var(--text); font-size: 0.95rem; }
+  .dash-action .dash-action-hint { display: block; color: var(--text-muted); font-size: 0.8rem; margin-top: 0.25rem; }
+
+  .dash-allclear { color: var(--text-muted); margin: 0; }
+
+  .dash-muted { color: var(--text-muted); font-size: 0.85rem; margin: -0.25rem 0 0.75rem; }
+
+  .dash-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-bottom: 0.75rem; }
+  .dash-stat { border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.75rem 1rem; }
+  .dash-stat .dash-stat-value { display: block; font-size: 1.4rem; font-weight: 700; color: var(--swa-1); }
+  .dash-stat .dash-stat-label { color: var(--text-muted); font-size: 0.78rem; }
+
+  .dash-more { font-size: 0.85rem; color: var(--swa-3); text-decoration: none; font-weight: 600; }
+  .dash-more:hover { text-decoration: underline; }
+
+  .dash-links-heading { margin-top: 0.5rem; }
+  .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+  .dash-card { text-decoration: none; color: inherit; display: block; margin-bottom: 0; }
+  .dash-card h2 { margin-bottom: 0.35rem; }
+  .dash-card p { color: var(--text-muted); font-size: 0.85rem; margin: 0; }
+
+  /* display:block above would defeat the hidden attribute's UA rule — the
+     role/feature gating on this page depends on hidden working. */
+  .dash-greeting[hidden],
+  #dash-attention[hidden],
+  #dash-approvals[hidden],
+  #dash-events[hidden],
+  .dash-card[hidden] { display: none; }
+</style>
+
+<script>
+  import { requireAuth, type SessionResponse } from '../scripts/auth-gate';
+
+  interface ApprovalCounts {
+    pending: number;
+    purchase_approved: number;
+    finance_check: number;
+    finance_approved: number;
+    rejected: number;
+    paid: number;
+    all: number;
+  }
+  interface DashboardSummary {
+    approvals?: { counts: ApprovalCounts; pending_under_1000: number };
+    forms?: { membership_pending: number; volunteer_recent: number; laughter_recent: number };
+    events?: { total_expected: number; total_arrived: number; walk_in_count: number; arrival_pct: number };
+  }
+
+  const APPROVAL_TABS: Array<[keyof ApprovalCounts, string]> = [
+    ['pending', 'For approval'],
+    ['purchase_approved', 'Approved'],
+    ['finance_check', 'In finance check'],
+    ['finance_approved', 'Finance approved'],
+    ['rejected', 'Rejected'],
+    ['paid', 'Paid'],
+  ];
+
+  function pluralise(n: number, singular: string, plural?: string): string {
+    return n === 1 ? singular : (plural || `${singular}s`);
+  }
+
+  function actionCard(href: string, count: number, label: string, hint: string, alert = false): HTMLElement {
+    const a = document.createElement('a');
+    a.href = href;
+    a.className = 'dash-action' + (alert ? ' alert' : '');
+    const strong = document.createElement('strong');
+    strong.className = 'dash-action-count';
+    strong.textContent = String(count);
+    const span = document.createElement('span');
+    span.className = 'dash-action-label';
+    span.textContent = label;
+    const small = document.createElement('small');
+    small.className = 'dash-action-hint';
+    small.textContent = hint;
+    a.append(strong, span, small);
+    return a;
+  }
+
+  function chip(text: string, quiet = false): HTMLElement {
+    const span = document.createElement('span');
+    span.className = 'dash-chip';
+    span.textContent = text;
+    if (quiet) span.style.opacity = '0.55';
+    return span;
+  }
+
+  function buildRoleChips(data: SessionResponse): void {
+    const host = document.getElementById('dash-role-chips');
+    if (!host) return;
+    const chips: string[] = [];
+    if (data.is_it_admin) chips.push('IT admin');
+    else if (data.is_admin) chips.push('Admin');
+    if (data.is_purchase_approver) chips.push('Purchase approver');
+    if (data.is_finance_approver) chips.push('Finance approver');
+    if (data.is_approvals_viewer) chips.push('Approvals auditor');
+    if (data.role === 'committee') chips.push('Committee member');
+    if (data.regRole === 'reg_admin') chips.push('Gala registration admin');
+    if (data.regRole === 'reg_volunteer') chips.push('Check-in volunteer');
+    host.replaceChildren(...chips.map((label) => chip(label)));
+  }
+
+  function show(id: string): void {
+    document.getElementById(id)?.removeAttribute('hidden');
+  }
+
+  function buildAttentionPanel(data: SessionResponse, s: DashboardSummary): void {
+    const isCommittee = data.role === 'committee';
+    // Auditors read the board but hold no actions anywhere — the strip below
+    // serves them; the attention panel stays an actor's surface.
+    const attentionEligible = data.is_admin || data.is_purchase_approver || data.is_finance_approver || isCommittee;
+    if (!attentionEligible) return;
+
+    const list = document.getElementById('dash-action-list');
+    const panel = document.getElementById('dash-attention');
+    if (!list || !panel) return;
+
+    const cards: HTMLElement[] = [];
+
+    // Approver queues — the two-stage workflow's decision points.
+    const ap = s.approvals;
+    if (ap) {
+      if (data.is_purchase_approver && ap.counts.pending > 0) {
+        cards.push(actionCard(
+          '/approvals?status=pending',
+          ap.counts.pending,
+          `purchase ${pluralise(ap.counts.pending, 'request')} awaiting approval`,
+          'Decide at the purchase stage',
+          true,
+        ));
+      }
+      if (data.is_finance_approver) {
+        if (ap.counts.finance_check > 0) {
+          cards.push(actionCard(
+            '/approvals?status=finance_check',
+            ap.counts.finance_check,
+            `voucher${ap.counts.finance_check === 1 ? '' : 's'} awaiting your check`,
+            'Decide at the finance stage',
+            true,
+          ));
+        }
+        if (ap.pending_under_1000 > 0) {
+          cards.push(actionCard(
+            '/approvals?status=pending',
+            ap.pending_under_1000,
+            `small ${pluralise(ap.pending_under_1000, 'purchase')} awaiting decision (under S$1,000)`,
+            'The Treasurer may sign these at the purchase stage',
+            true,
+          ));
+        }
+      }
+    }
+
+    // Admin creator duties in the approval workflow.
+    if (data.is_admin && ap) {
+      if (ap.counts.purchase_approved > 0) {
+        cards.push(actionCard(
+          '/approvals?status=purchase_approved',
+          ap.counts.purchase_approved,
+          `voucher${ap.counts.purchase_approved === 1 ? '' : 's'} to prepare`,
+          'Purchase approved — prepare the payment voucher',
+        ));
+      }
+      if (ap.counts.finance_approved > 0) {
+        cards.push(actionCard(
+          '/approvals?status=finance_approved',
+          ap.counts.finance_approved,
+          `payment${ap.counts.finance_approved === 1 ? '' : 's'} to record`,
+          'Finance approved — record the payment',
+        ));
+      }
+      if (ap.counts.rejected > 0) {
+        cards.push(actionCard(
+          '/approvals?status=rejected',
+          ap.counts.rejected,
+          `rejected ${pluralise(ap.counts.rejected, 'item')} to fix`,
+          'Edit and resubmit',
+        ));
+      }
+    }
+
+    // Online form queues — admins and committee reviewers.
+    if (s.forms) {
+      if (s.forms.membership_pending > 0) {
+        cards.push(actionCard(
+          '/admin/forms/membership',
+          s.forms.membership_pending,
+          `membership ${pluralise(s.forms.membership_pending, 'application')} to review`,
+          'Pending review',
+          true,
+        ));
+      }
+      if (s.forms.volunteer_recent > 0) {
+        cards.push(actionCard(
+          '/admin/forms/volunteer',
+          s.forms.volunteer_recent,
+          `volunteer ${pluralise(s.forms.volunteer_recent, 'signup')} in the last 30 days`,
+          'New submissions to read',
+        ));
+      }
+      if (s.forms.laughter_recent > 0) {
+        cards.push(actionCard(
+          '/admin/forms/laughter-yoga',
+          s.forms.laughter_recent,
+          `laughter yoga ${pluralise(s.forms.laughter_recent, 'signup')} in the last 30 days`,
+          'New submissions to read',
+        ));
+      }
+    }
+
+    if (cards.length > 0) {
+      list.replaceChildren(...cards);
+    } else {
+      document.getElementById('dash-allclear')?.removeAttribute('hidden');
+    }
+    panel.removeAttribute('hidden');
+  }
+
+  function buildApprovalsStrip(s: DashboardSummary): void {
+    if (!s.approvals) return;
+    const host = document.getElementById('dash-approval-chips');
+    const panel = document.getElementById('dash-approvals');
+    if (!host || !panel) return;
+
+    const links: HTMLElement[] = [];
+    const entries: Array<[keyof ApprovalCounts | 'all', string, number]> = [
+      ...APPROVAL_TABS.map(([status, label]) => [status, label, s.approvals!.counts[status] ?? 0] as [keyof ApprovalCounts, string, number]),
+      ['all', 'All', s.approvals.counts.all],
+    ];
+    for (const [status, label, count] of entries) {
+      const a = document.createElement('a');
+      a.href = `/approvals?status=${status}`;
+      a.className = 'dash-chip';
+      a.style.textDecoration = 'none';
+      a.textContent = `${label} · ${count}`;
+      if (count === 0) a.style.opacity = '0.55';
+      links.push(a);
+    }
+    host.replaceChildren(...links);
+    panel.removeAttribute('hidden');
+  }
+
+  function buildEventsWidget(s: DashboardSummary): void {
+    if (!s.events) return;
+    const host = document.getElementById('dash-events-stats');
+    const panel = document.getElementById('dash-events');
+    if (!host || !panel) return;
+
+    const tiles: HTMLElement[] = [];
+    const entries: Array<[number | string, string]> = [
+      [s.events.total_expected, 'Expected'],
+      [s.events.total_arrived, 'Arrived'],
+      [s.events.walk_in_count, 'Walk-ins'],
+      [`${s.events.arrival_pct}%`, 'Arrival rate'],
+    ];
+    for (const [value, label] of entries) {
+      const div = document.createElement('div');
+      div.className = 'dash-stat';
+      const strong = document.createElement('strong');
+      strong.className = 'dash-stat-value';
+      strong.textContent = String(value);
+      const span = document.createElement('span');
+      span.className = 'dash-stat-label';
+      span.textContent = label;
+      div.append(strong, span);
+      tiles.push(div);
+    }
+    host.replaceChildren(...tiles);
+    panel.removeAttribute('hidden');
+  }
+
   requireAuth({
     onAuthenticated(data) {
-      document.querySelectorAll<HTMLElement>('[data-feature]').forEach((el) => {
-        const key = el.dataset.feature as keyof typeof data.features | undefined;
-        if (!key || data.features[key]) el.removeAttribute('hidden');
-      });
-      const approvalsCard = document.getElementById('card-approvals');
-      if (approvalsCard && (data.is_admin || data.is_purchase_approver || data.is_finance_approver)) {
-        approvalsCard.removeAttribute('hidden');
+      buildRoleChips(data);
+      const nameEl = document.getElementById('dash-greet-name');
+      if (nameEl) nameEl.textContent = data.name || data.email || '';
+      show('dash-greeting');
+
+      // Check-in volunteers are scoped to /reg/volunteer/* — the dashboard
+      // shows only their surfaces (AdminLayout hides the nav for them).
+      const isCheckinVolunteer = data.role === 'volunteer';
+      if (isCheckinVolunteer) {
+        show('card-checkin');
+      } else {
+        show('card-members');
+        show('card-forms');
+        // Same audience rule as the Approvals nav item — including the R2
+        // view-only auditor, which the old card gate missed.
+        if (data.is_admin || data.is_purchase_approver || data.is_finance_approver || data.is_approvals_viewer) {
+          show('card-approvals');
+        }
       }
+
+      document.querySelectorAll<HTMLElement>('#dash-events[data-feature]').forEach((el) => {
+        const key = el.dataset.feature as keyof typeof data.features | undefined;
+        if (key && data.features[key]) el.removeAttribute('hidden');
+      });
+
+      fetch('/api/dashboard/summary')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((summary: DashboardSummary | null) => {
+          if (!summary) return;
+          buildAttentionPanel(data, summary);
+          buildApprovalsStrip(summary);
+          buildEventsWidget(summary);
+        })
+        .catch(() => {
+          // Counts are an enhancement — the quick links below work without them.
+        });
     },
   });
 </script>

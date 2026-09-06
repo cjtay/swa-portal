@@ -435,6 +435,7 @@ All 69 routes registered in `src/worker/index.ts`, verified 23-08-2026.
 | Routes | Purpose |
 |---|---|
 | `DELETE /api/session` (1) | Logout |
+| `GET /api/dashboard/summary` (1) | Role-scoped counts for the dashboard's attention panel and status strip — each section (approvals / forms / events) included only when the caller's role may see it |
 | `GET/POST /api/bookings`, `GET /api/bookings/:id`, `PATCH /api/bookings/:id/cancel` (4) | Office bookings |
 | `GET/POST /api/members`; `GET/PATCH/DELETE /api/members/:id`; `GET /api/members/:id/dependencies`; `GET/POST /api/members/:id/payments` (8) | Member CRUD + fees |
 | `GET/POST /api/reg/admin/bookings`, `GET …/:id`, `POST /api/reg/admin/guests`, `PATCH/DELETE …/guests/:id`, `GET /api/reg/admin/export`, `GET /api/reg/admin/guest-list`, `POST /api/reg/admin/send-magic-link/:bookingId` (9) | Gala admin |
@@ -447,7 +448,7 @@ All 69 routes registered in `src/worker/index.ts`, verified 23-08-2026.
 | `GET/POST /api/namecards`, `POST /api/namecards/bulk`, `GET /api/namecards/me`, `GET/PATCH/DELETE /api/namecards/:id`, `PATCH …/:id/slug`, `PATCH …/:id/toggle`, `POST/DELETE …/:id/photo` (11) | Namecard admin + self-service |
 | `GET /api/approvals`, `POST /api/approvals`, `POST /api/approvals/analyse-preview`, `GET /api/approvals/:id`, `GET /api/approvals/:id/attachment/:attId`, `POST …/:id/approve`, `POST …/:id/reject`, `POST …/:id/edit`, `POST …/:id/remind`, `POST …/:id/voucher`, `POST …/:id/analyse`, `POST …/:id/finance-approve`, `POST …/:id/finance-reject`, `POST …/:id/paid`, `GET /api/approvals/audit/export` (15; audit export IT-admin only; analyse routes admin only + kill-switch + daily cap) | Approval workflow, complete: board + create + attachments (Phase 2); purchase stage (Phase 3); voucher + finance stage (Phase 4); paid step + audit CSV (Phase 5); AI quotation comparison (2026-08-26) |
 
-Totals: 19 public + 58 authenticated = 77.
+Totals: 19 public + 59 authenticated = 78.
 
 ## 9. Public registration forms
 
