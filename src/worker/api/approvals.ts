@@ -18,6 +18,7 @@ import {
   APPROVAL_TWO_STAGE_THRESHOLD,
   APPROVAL_BOARD_APPROVAL_THRESHOLD,
   canRaiseApprovalItem,
+  canDecidePurchaseStage,
   isPurchaseApprover,
   isFinanceApprover,
   approvalOfficeFor,
@@ -202,154 +203,27 @@ function contentDisposition(type: 'inline' | 'attachment', filename: string): st
    Compliance helpers (Batch B, plan §7)
    ---------------------------------------------------- */
 
-// Multipart tick parsing: a checkbox sends 'on' (or 'true'/'1') when ticked
-// and nothing when not.
-function formTick(form: Record<string, unknown>, key: string): boolean {
-  const v = form[key];
-  if (v === undefined || v === null || v === '') return false;
-  const s = String(v).trim().toLowerCase();
-  return s === 'on' || s === 'true' || s === '1';
+// Owner decision 2026-09-06: the S$1,000 declarations (budget, cheapest
+// supplier, quotation waiver, conflict of interest, no-splitting) are no
+// longer captured in the portal — that evidence is handled offline on the
+// paper Purchase Requisition Form (manual Annex A). The approval_items
+// declaration columns stay in the schema but dormant. Only the
+// board-approval reference remains a portal field; above S$10,000 the
+// purchase-approve guard requires it plus the flagged board document
+// (migration 014, is_board_approval).
+function parseBoardApprovalRef(form: Record<string, unknown>): string | null {
+  const v = form['boardApprovalRef'];
+  if (v === undefined || v === null) return null;
+  const s = String(v).trim();
+  return s.length > 0 ? s : null;
 }
 
-// Yes/No radio: 'yes'/'true' → true, 'no'/'false' → false, absent → null
-// (the question is unanswered — an error at S$1,000 and above).
-function formYesNo(form: Record<string, unknown>, key: string): boolean | null {
-  const v = form[key];
-  if (v === undefined || v === null || v === '') return null;
-  const s = String(v).trim().toLowerCase();
-  if (s === 'yes' || s === 'true' || s === '1') return true;
-  if (s === 'no' || s === 'false' || s === '0') return false;
-  return null;
-}
-
-interface EvidenceInput {
-  boardApprovalRef: string | null;
-  quotationWaiverReason: string | null;
-  supplierIsCheapest: boolean | null;
-  supplierChoiceReason: string | null;
-  budgetApproved: boolean;
-  budgetAmount: string | null;
-  budgetOfficer: string | null;
-  budgetDate: string | null;
-  coiDeclared: boolean;
-  noSplitDeclared: boolean;
-}
-
-/** Parse the evidence fields from a multipart form. Every field optional. */
-function parseEvidenceForm(form: Record<string, unknown>): EvidenceInput {
-  const str = (key: string): string | null => {
-    const v = form[key];
-    if (v === undefined || v === null) return null;
-    const s = String(v).trim();
-    return s.length > 0 ? s : null;
-  };
-  return {
-    boardApprovalRef: str('boardApprovalRef'),
-    quotationWaiverReason: str('quotationWaiverReason'),
-    supplierIsCheapest: formYesNo(form, 'supplierIsCheapest'),
-    supplierChoiceReason: str('supplierChoiceReason'),
-    budgetApproved: formTick(form, 'budgetApproved'),
-    budgetAmount: str('budgetAmount'),
-    budgetOfficer: str('budgetOfficer'),
-    budgetDate: str('budgetDate'),
-    coiDeclared: formTick(form, 'coiDeclared'),
-    noSplitDeclared: formTick(form, 'noSplitDeclared'),
-  };
-}
-
-/** Stored evidence off an item row, normalised to the EvidenceInput shape
- *  (booleans from 0/1, nulls for absent). */
-function storedEvidence(row: Record<string, unknown> | null): EvidenceInput {
-  if (!row) {
-    return {
-      boardApprovalRef: null, quotationWaiverReason: null, supplierIsCheapest: null,
-      supplierChoiceReason: null, budgetApproved: false, budgetAmount: null,
-      budgetOfficer: null, budgetDate: null, coiDeclared: false, noSplitDeclared: false,
-    };
-  }
-  const str = (k: string): string | null => (row[k] === null || row[k] === undefined ? null : String(row[k]));
-  return {
-    boardApprovalRef: str('board_approval_ref'),
-    quotationWaiverReason: str('quotation_waiver_reason'),
-    supplierIsCheapest: row.supplier_is_cheapest === null || row.supplier_is_cheapest === undefined ? null : Number(row.supplier_is_cheapest) === 1,
-    supplierChoiceReason: str('supplier_choice_reason'),
-    budgetApproved: Number(row.budget_approved) === 1,
-    budgetAmount: str('budget_amount'),
-    budgetOfficer: str('budget_officer'),
-    budgetDate: str('budget_date'),
-    coiDeclared: Number(row.coi_declared) === 1,
-    noSplitDeclared: Number(row.no_split_declared) === 1,
-  };
-}
-
-/**
- * Validate the evidence fields (plan §7.1). Cap checks run whenever a value
- * is provided; the required-field checks run only when the EFFECTIVE
- * requested amount is S$1,000 or above ("effective" = the form value when
- * provided, otherwise the stored value — the caller merges before calling
- * with an already-effective input).
- */
-function validateEvidence(
-  input: EvidenceInput,
-  comparisonRowCount: number,
-  effectiveAmount: number | null,
-): { ok: true } | { ok: false; message: string } {
-  if (input.boardApprovalRef !== null && input.boardApprovalRef.length > 500) {
+/** Cap check for the board-approval reference (runs whenever a value is sent). */
+function validBoardApprovalRef(ref: string | null): { ok: true } | { ok: false; message: string } {
+  if (ref !== null && ref.length > 500) {
     return { ok: false, message: 'Board approval reference must be 500 characters or fewer.' };
   }
-  if (input.quotationWaiverReason !== null && input.quotationWaiverReason.length > 1000) {
-    return { ok: false, message: 'Quotation waiver reason must be 1,000 characters or fewer.' };
-  }
-  if (input.supplierChoiceReason !== null && input.supplierChoiceReason.length > 1000) {
-    return { ok: false, message: 'Supplier choice reason must be 1,000 characters or fewer.' };
-  }
-  if (input.budgetAmount !== null && input.budgetAmount.length > 50) {
-    return { ok: false, message: 'Budget amount must be 50 characters or fewer.' };
-  }
-  if (input.budgetOfficer !== null && input.budgetOfficer.length > 200) {
-    return { ok: false, message: 'Budget approving officer must be 200 characters or fewer.' };
-  }
-  if (input.budgetDate !== null && !isRealDate(input.budgetDate)) {
-    return { ok: false, message: 'Budget approval date must be a valid date (YYYY-MM-DD).' };
-  }
-
-  if (effectiveAmount === null || effectiveAmount < APPROVAL_QUOTE_RULE_THRESHOLD) {
-    return { ok: true };
-  }
-
-  if (comparisonRowCount < 2 && input.quotationWaiverReason === null) {
-    return { ok: false, message: 'Attach at least two quotations in the comparison table, or give a waiver reason.' };
-  }
-  if (!input.budgetApproved) return { ok: false, message: 'Tick "Payment within the approved budget".' };
-  if (input.budgetAmount === null) return { ok: false, message: 'Enter the budget amount.' };
-  if (input.budgetOfficer === null) return { ok: false, message: 'Enter the budget approving officer.' };
-  if (input.budgetDate === null) return { ok: false, message: 'Enter the budget approval date (YYYY-MM-DD).' };
-  if (!input.coiDeclared) return { ok: false, message: 'Tick the conflict-of-interest declaration.' };
-  if (!input.noSplitDeclared) return { ok: false, message: 'Tick the declaration that the purchase is not split to avoid approval limits.' };
-  if (input.supplierIsCheapest === null) {
-    return { ok: false, message: 'Answer whether the chosen supplier is the cheapest of the quotations.' };
-  }
-  if (input.supplierIsCheapest === false && input.supplierChoiceReason === null) {
-    return { ok: false, message: 'Give a reason for choosing a supplier that is not the cheapest.' };
-  }
   return { ok: true };
-}
-
-/** Merge form evidence over stored evidence: the form value when provided,
- *  otherwise the stored value (plan §7.1 "effective" rule at edit). */
-function mergeEvidence(form: EvidenceInput, stored: EvidenceInput): EvidenceInput {
-  return {
-    boardApprovalRef: form.boardApprovalRef ?? stored.boardApprovalRef,
-    quotationWaiverReason: form.quotationWaiverReason ?? stored.quotationWaiverReason,
-    supplierIsCheapest: form.supplierIsCheapest ?? stored.supplierIsCheapest,
-    supplierChoiceReason: form.supplierChoiceReason ?? stored.supplierChoiceReason,
-    budgetApproved: form.budgetApproved || stored.budgetApproved,
-    budgetAmount: form.budgetAmount ?? stored.budgetAmount,
-    budgetOfficer: form.budgetOfficer ?? stored.budgetOfficer,
-    budgetDate: form.budgetDate ?? stored.budgetDate,
-    coiDeclared: form.coiDeclared || stored.coiDeclared,
-    noSplitDeclared: form.noSplitDeclared || stored.noSplitDeclared,
-  };
 }
 
 /** R1: one `field: old → new` audit pair, or null when unchanged. Values
@@ -698,12 +572,45 @@ export async function handleApprovalsCreate(c: AppContext) {
     }
   }
 
-  // --- Compliance evidence (plan §7.1): parsed at every amount, enforced at
-  //     S$1,000 and above. A null amount triggers nothing. ---
-  const evidence = parseEvidenceForm(form);
-  const evidenceCheck = validateEvidence(evidence, comparisonRows.length, requestedAmount);
-  if (!evidenceCheck.ok) {
-    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: evidenceCheck.message }, 400);
+  // Owner decision 2026-09-06: the board-approval document (minutes or the
+  // approval email) rides its own form field so it can be flagged as THE
+  // board evidence (is_board_approval). Same type/size rules as any
+  // attachment, and it counts toward the per-item file cap.
+  let boardApprovalFilename: string | null = null;
+  const boardFileRaw = form['boardApprovalFile'];
+  if (boardFileRaw instanceof File && boardFileRaw.size > 0) {
+    if (!ALLOWED_ATTACHMENT_MIME.has(boardFileRaw.type)) {
+      return c.json(
+        {
+          success: false,
+          error_code: 'VALIDATION_ERROR',
+          message: `"${boardFileRaw.name}" is not an accepted type. Only PDF, JPG, PNG, WebP, HEIC and HEIF files are allowed.`,
+        },
+        400,
+      );
+    }
+    if (boardFileRaw.size > APPROVAL_MAX_FILE_BYTES) {
+      return c.json(
+        { success: false, error_code: 'VALIDATION_ERROR', message: `"${boardFileRaw.name}" is larger than 10 MB.` },
+        400,
+      );
+    }
+    if (fileList.length >= APPROVAL_MAX_FILES_PER_ITEM) {
+      return c.json(
+        { success: false, error_code: 'VALIDATION_ERROR', message: `At most ${APPROVAL_MAX_FILES_PER_ITEM} files per item.` },
+        400,
+      );
+    }
+    fileList.push(boardFileRaw);
+    boardApprovalFilename = boardFileRaw.name;
+  }
+
+  // Owner decision 2026-09-06: the board-approval reference is the only
+  // evidence field the portal still stores (declarations moved offline).
+  const boardApprovalRef = parseBoardApprovalRef(form);
+  const boardRefCheck = validBoardApprovalRef(boardApprovalRef);
+  if (!boardRefCheck.ok) {
+    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: boardRefCheck.message }, 400);
   }
 
   // --- Optional AI analysis produced by /api/approvals/analyse-preview ---
@@ -727,10 +634,8 @@ export async function handleApprovalsCreate(c: AppContext) {
   let itemId: number;
   try {
     const res = await c.env.DB.prepare(
-      `INSERT INTO approval_items (category, title, payee, description, requested_amount, approval_required, status, created_by, ai_comparison,
-         board_approval_ref, quotation_waiver_reason, supplier_is_cheapest, supplier_choice_reason,
-         budget_approved, budget_amount, budget_officer, budget_date, coi_declared, no_split_declared)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO approval_items (category, title, payee, description, requested_amount, approval_required, status, created_by, ai_comparison, board_approval_ref)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         category.key,
@@ -742,16 +647,7 @@ export async function handleApprovalsCreate(c: AppContext) {
         status,
         session.email,
         aiComparisonJson,
-        evidence.boardApprovalRef,
-        evidence.quotationWaiverReason,
-        evidence.supplierIsCheapest === null ? null : evidence.supplierIsCheapest ? 1 : 0,
-        evidence.supplierChoiceReason,
-        evidence.budgetApproved ? 1 : 0,
-        evidence.budgetAmount,
-        evidence.budgetOfficer,
-        evidence.budgetDate,
-        evidence.coiDeclared ? 1 : 0,
-        evidence.noSplitDeclared ? 1 : 0,
+        boardApprovalRef,
       )
       .run();
     itemId = Number(res.meta?.last_row_id);
@@ -842,8 +738,15 @@ export async function handleApprovalsCreate(c: AppContext) {
     try {
       const statements = uploadedKeys.map(({ file, r2Key }) =>
         c.env.DB.prepare(
-          'INSERT INTO approval_attachments (item_id, r2_key, filename, mime_type, size) VALUES (?, ?, ?, ?, ?)',
-        ).bind(itemId, r2Key, file.name, file.type, file.size),
+          'INSERT INTO approval_attachments (item_id, r2_key, filename, mime_type, size, is_board_approval) VALUES (?, ?, ?, ?, ?, ?)',
+        ).bind(
+          itemId,
+          r2Key,
+          file.name,
+          file.type,
+          file.size,
+          boardApprovalFilename !== null && file.name === boardApprovalFilename ? 1 : 0,
+        ),
       );
       batchResults = await c.env.DB.batch(statements);
     } catch (err) {
@@ -1197,8 +1100,7 @@ export async function handleApprovalDetail(c: AppContext) {
         'voucher_no, voucher_date, voucher_lines, voucher_submitted_by, voucher_submitted_at, invoice_no, ' +
         'finance_decision_by, finance_decision_at, finance_decision_office, finance_rejection_reason, ' +
         'paid_by, paid_at, payment_method, payment_reference, created_by, comparison, ai_comparison, ' +
-        'board_approval_ref, quotation_waiver_reason, supplier_is_cheapest, supplier_choice_reason, ' +
-        'budget_approved, budget_amount, budget_officer, budget_date, coi_declared, no_split_declared, ' +
+        'board_approval_ref, ' +
         'created_at, updated_at ' +
         'FROM approval_items WHERE id = ?',
     )
@@ -1211,7 +1113,7 @@ export async function handleApprovalDetail(c: AppContext) {
 
     // R7: the ticked Tax Invoice always renders first, then upload order.
     const attachmentsResult = await c.env.DB.prepare(
-      'SELECT id, filename, mime_type, size, is_tax_invoice, created_at FROM approval_attachments WHERE item_id = ? ORDER BY is_tax_invoice DESC, id',
+      'SELECT id, filename, mime_type, size, is_tax_invoice, is_board_approval, created_at FROM approval_attachments WHERE item_id = ? ORDER BY is_tax_invoice DESC, is_board_approval DESC, id',
     )
       .bind(Number(id))
       .all();
@@ -1332,8 +1234,10 @@ export async function handleApprovalAttachment(c: AppContext) {
 export async function handleApprovalPurchaseApprove(c: AppContext) {
   const endpoint = 'approvals-purchase-approve';
   const email = getSessionEmail(c);
-  if (!isPurchaseApprover(email)) {
-    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Only purchase approvers can approve at this stage.' }, 403);
+  // Coarse entry: either approver list. The amount-aware rule after the item
+  // load decides whether a finance approver may actually sign this item.
+  if (!isPurchaseApprover(email) && !isFinanceApprover(email)) {
+    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Only purchase or finance approvers can decide at this stage.' }, 403);
   }
   const id = c.req.param('id') || '';
   if (!/^\d+$/.test(id)) {
@@ -1362,11 +1266,21 @@ export async function handleApprovalPurchaseApprove(c: AppContext) {
       403,
     );
   }
+  // Finance-policy alignment: under S$1,000 the finance approvers (Treasurer/
+  // Assistant Treasurer) may also decide this stage — policy §3.2 puts
+  // "Below $1000" with the Treasurer/Secretary. At S$1,000+ (or unknown
+  // amount — fail closed) purchase approvers only.
+  const approveAmount = item.requested_amount === null || item.requested_amount === undefined ? null : Number(item.requested_amount);
+  if (!canDecidePurchaseStage(email, approveAmount)) {
+    return c.json(
+      { success: false, error_code: 'FORBIDDEN', message: 'This request needs a purchase approver — finance approvers may only decide purchases under S$1,000.' },
+      403,
+    );
+  }
   // Manual 3.3 / plan §7.3: above S$10,000 the board's approval — a recorded
   // reference plus at least one attached document (the minutes or approval
   // email PDF) — must exist before the purchase decision. The reference
   // points the approver to the evidence; the approver's eyes confirm it.
-  const approveAmount = item.requested_amount === null || item.requested_amount === undefined ? null : Number(item.requested_amount);
   if (approveAmount !== null && approveAmount >= APPROVAL_BOARD_APPROVAL_THRESHOLD) {
     if (!item.board_approval_ref || String(item.board_approval_ref).trim().length === 0) {
       return c.json(
@@ -1378,11 +1292,18 @@ export async function handleApprovalPurchaseApprove(c: AppContext) {
         409,
       );
     }
-    const attCount = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM approval_attachments WHERE item_id = ?')
+    // Owner decision 2026-09-06: the evidence must be the flagged board
+    // document (is_board_approval), not just any attachment.
+    const attCount = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM approval_attachments WHERE item_id = ? AND is_board_approval = 1',
+    )
       .bind(Number(id))
       .first<{ n: number }>();
     if (Number(attCount?.n || 0) === 0) {
-      return c.json({ success: false, error_code: 'CONFLICT', message: 'Attach the board minutes or the approval email before approving.' }, 409);
+      return c.json(
+        { success: false, error_code: 'CONFLICT', message: 'Attach the board minutes or the approval email (marked as the board approval document) before approving.' },
+        409,
+      );
     }
   }
 
@@ -1434,8 +1355,10 @@ export async function handleApprovalPurchaseApprove(c: AppContext) {
 export async function handleApprovalPurchaseReject(c: AppContext) {
   const endpoint = 'approvals-purchase-reject';
   const email = getSessionEmail(c);
-  if (!isPurchaseApprover(email)) {
-    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Only purchase approvers can reject at this stage.' }, 403);
+  // Coarse entry: either approver list — the amount-aware rule after the item
+  // load decides whether a finance approver may actually sign this item.
+  if (!isPurchaseApprover(email) && !isFinanceApprover(email)) {
+    return c.json({ success: false, error_code: 'FORBIDDEN', message: 'Only purchase or finance approvers can decide at this stage.' }, 403);
   }
   const id = c.req.param('id') || '';
   if (!/^\d+$/.test(id)) {
@@ -1472,6 +1395,17 @@ export async function handleApprovalPurchaseReject(c: AppContext) {
   if (String(item.created_by || '').toLowerCase() === email.toLowerCase()) {
     return c.json(
       { success: false, error_code: 'FORBIDDEN', message: 'You raised this request, so you cannot approve or reject it. Another approver must decide.' },
+      403,
+    );
+  }
+  // Finance-policy alignment: under S$1,000 the finance approvers (Treasurer/
+  // Assistant Treasurer) may also decide this stage — policy §3.2 puts
+  // "Below $1000" with the Treasurer/Secretary. At S$1,000+ (or unknown
+  // amount — fail closed) purchase approvers only.
+  const rejectAmount = item.requested_amount === null || item.requested_amount === undefined ? null : Number(item.requested_amount);
+  if (!canDecidePurchaseStage(email, rejectAmount)) {
+    return c.json(
+      { success: false, error_code: 'FORBIDDEN', message: 'This request needs a purchase approver — finance approvers may only decide purchases under S$1,000.' },
       403,
     );
   }
@@ -1545,9 +1479,7 @@ export async function handleApprovalEdit(c: AppContext) {
   try {
     item = await c.env.DB.prepare(
       'SELECT id, status, rejected_stage, approval_required, category, created_by, ai_comparison, requested_amount, ' +
-        'title, payee, description, comparison, ' +
-        'board_approval_ref, quotation_waiver_reason, supplier_is_cheapest, supplier_choice_reason, ' +
-        'budget_approved, budget_amount, budget_officer, budget_date, coi_declared, no_split_declared ' +
+        'title, payee, description, comparison, board_approval_ref ' +
         'FROM approval_items WHERE id = ?',
     )
       .bind(Number(id))
@@ -1761,13 +1693,9 @@ export async function handleApprovalEdit(c: AppContext) {
     }
   }
 
-  // --- Compliance evidence (plan §7.1): "effective" = the form value when
-  //     provided, otherwise the stored value. The comparison-row count for
-  //     the quotes-or-waiver rule is the table AFTER this edit (sent or
-  //     stored). Validated only when the effective amount is S$1,000+. ---
-  const evidenceForm = parseEvidenceForm(form);
-  const evidenceStored = storedEvidence(item);
-  const effectiveEvidence = mergeEvidence(evidenceForm, evidenceStored);
+  // Comparison-row count AFTER this edit — used by the R1 'comparison' audit
+  // pair (the quotes-or-waiver rule itself moved offline, owner decision
+  // 2026-09-06).
   let storedComparisonCount = 0;
   if (typeof item.comparison === 'string' && item.comparison.length > 0) {
     try {
@@ -1778,50 +1706,18 @@ export async function handleApprovalEdit(c: AppContext) {
     }
   }
   const effectiveComparisonCount = form['comparison'] !== undefined ? (comparisonJson ? JSON.parse(comparisonJson).length : 0) : storedComparisonCount;
-  const evidenceCheck = validateEvidence(effectiveEvidence, effectiveComparisonCount, effectiveAmount);
-  if (!evidenceCheck.ok) {
-    return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: evidenceCheck.message }, 400);
-  }
-  // Store whichever evidence fields the form actually sent (absent = keep).
+  // Owner decision 2026-09-06: declarations moved offline; the board-approval
+  // reference is the only evidence field still stored (absent = keep stored).
+  let boardRefAuditNew: unknown = item.board_approval_ref;
   if (form['boardApprovalRef'] !== undefined) {
+    const boardRef = parseBoardApprovalRef(form);
+    const boardRefCheck = validBoardApprovalRef(boardRef);
+    if (!boardRefCheck.ok) {
+      return c.json({ success: false, error_code: 'VALIDATION_ERROR', message: boardRefCheck.message }, 400);
+    }
     updates.push('board_approval_ref = ?');
-    params.push(evidenceForm.boardApprovalRef);
-  }
-  if (form['quotationWaiverReason'] !== undefined) {
-    updates.push('quotation_waiver_reason = ?');
-    params.push(evidenceForm.quotationWaiverReason);
-  }
-  if (evidenceForm.supplierIsCheapest !== null) {
-    updates.push('supplier_is_cheapest = ?');
-    params.push(evidenceForm.supplierIsCheapest ? 1 : 0);
-  }
-  if (form['supplierChoiceReason'] !== undefined) {
-    updates.push('supplier_choice_reason = ?');
-    params.push(evidenceForm.supplierChoiceReason);
-  }
-  if (form['budgetApproved'] !== undefined) {
-    updates.push('budget_approved = ?');
-    params.push(evidenceForm.budgetApproved ? 1 : 0);
-  }
-  if (form['budgetAmount'] !== undefined) {
-    updates.push('budget_amount = ?');
-    params.push(evidenceForm.budgetAmount);
-  }
-  if (form['budgetOfficer'] !== undefined) {
-    updates.push('budget_officer = ?');
-    params.push(evidenceForm.budgetOfficer);
-  }
-  if (form['budgetDate'] !== undefined) {
-    updates.push('budget_date = ?');
-    params.push(evidenceForm.budgetDate);
-  }
-  if (form['coiDeclared'] !== undefined) {
-    updates.push('coi_declared = ?');
-    params.push(evidenceForm.coiDeclared ? 1 : 0);
-  }
-  if (form['noSplitDeclared'] !== undefined) {
-    updates.push('no_split_declared = ?');
-    params.push(evidenceForm.noSplitDeclared ? 1 : 0);
+    params.push(boardRef);
+    boardRefAuditNew = boardRef;
   }
 
   // --- 1. Upload new files to R2 (before the UPDATE so ids exist) ---
@@ -1930,6 +1826,41 @@ export async function handleApprovalEdit(c: AppContext) {
     }
   }
 
+  // --- 3c. Board-approval document flag (owner decision 2026-09-06): marks
+  //     ONE attachment as THE board minutes / approval email. Accepts an
+  //     existing attachment id or the name of a file added in this request.
+  //     Best-effort, same as the Tax Invoice tick. ---
+  const boardAttRaw = typeof form['boardApprovalAttachmentId'] === 'string' ? form['boardApprovalAttachmentId'].trim() : '';
+  const boardFilename = typeof form['boardApprovalFilename'] === 'string' ? form['boardApprovalFilename'].trim() : '';
+  let boardTargetId = 0;
+  if (boardAttRaw && /^\d+$/.test(boardAttRaw)) {
+    boardTargetId = Number(boardAttRaw);
+  } else if (boardFilename && newAttachmentIds.length > 0) {
+    const idx = uploadedKeys.findIndex(({ file }) => file.name === boardFilename);
+    if (idx >= 0) boardTargetId = newAttachmentIds[idx];
+  }
+  if (boardTargetId > 0) {
+    try {
+      const own = await c.env.DB.prepare('SELECT id FROM approval_attachments WHERE item_id = ? AND id = ?')
+        .bind(Number(id), boardTargetId)
+        .first();
+      if (own) {
+        await c.env.DB
+          .prepare('UPDATE approval_attachments SET is_board_approval = CASE WHEN id = ? THEN 1 ELSE 0 END WHERE item_id = ?')
+          .bind(boardTargetId, Number(id))
+          .run();
+      }
+    } catch (err) {
+      await logError(c.env, {
+        endpoint,
+        error_type: 'D1_UPDATE_BOARD_APPROVAL_FLAG',
+        error_message: `edit board-approval flag failed: ${err instanceof Error ? err.message : String(err)}`,
+        http_status: 500,
+        user_email: session.email,
+      });
+    }
+  }
+
   // --- 4. Item update, then audit rows. Two writings, so a lost race (an
   //     approver acts on the item between the read above and this write) never
   //     writes a false audit entry. The WHERE re-checks the editable states. ---
@@ -1998,22 +1929,7 @@ export async function handleApprovalEdit(c: AppContext) {
       if (effectiveAmount !== null && effectiveAmount >= APPROVAL_TWO_STAGE_THRESHOLD && Number(item.approval_required) !== 1) {
         pushPair(auditPair('approval_required', item.approval_required, 1));
       }
-      pushPair(auditPair('board_approval_ref', evidenceStored.boardApprovalRef, effectiveEvidence.boardApprovalRef));
-      pushPair(auditPair('quotation_waiver_reason', evidenceStored.quotationWaiverReason, effectiveEvidence.quotationWaiverReason));
-      pushPair(
-        auditPair(
-          'supplier_is_cheapest',
-          evidenceStored.supplierIsCheapest === null ? null : evidenceStored.supplierIsCheapest ? 'yes' : 'no',
-          effectiveEvidence.supplierIsCheapest === null ? null : effectiveEvidence.supplierIsCheapest ? 'yes' : 'no',
-        ),
-      );
-      pushPair(auditPair('supplier_choice_reason', evidenceStored.supplierChoiceReason, effectiveEvidence.supplierChoiceReason));
-      pushPair(auditPair('budget_approved', evidenceStored.budgetApproved, effectiveEvidence.budgetApproved));
-      pushPair(auditPair('budget_amount', evidenceStored.budgetAmount, effectiveEvidence.budgetAmount));
-      pushPair(auditPair('budget_officer', evidenceStored.budgetOfficer, effectiveEvidence.budgetOfficer));
-      pushPair(auditPair('budget_date', evidenceStored.budgetDate, effectiveEvidence.budgetDate));
-      pushPair(auditPair('coi_declared', evidenceStored.coiDeclared, effectiveEvidence.coiDeclared));
-      pushPair(auditPair('no_split_declared', evidenceStored.noSplitDeclared, effectiveEvidence.noSplitDeclared));
+      pushPair(auditPair('board_approval_ref', item.board_approval_ref, boardRefAuditNew));
       if (form['comparison'] !== undefined) {
         pushPair(auditPair('comparison', `${storedComparisonCount} rows`, `${effectiveComparisonCount} rows`));
       }

@@ -89,20 +89,6 @@ function pdfFile(name: string, content = '%PDF-1.4 test'): File {
   return new File([content], name, { type: 'application/pdf' });
 }
 
-// Compliance Batch B: any S$1,000+ create must carry the declarations and a
-// waiver (or two comparison rows). Seeders with amounts append these fields
-// so the tests below isolate their own rules.
-const COMPLIANCE_EVIDENCE: Record<string, string> = {
-  quotationWaiverReason: 'Sole authorised supplier',
-  budgetApproved: 'true',
-  budgetAmount: 'Within budget',
-  budgetOfficer: 'Hon Treasurer',
-  budgetDate: '2026-08-20',
-  coiDeclared: 'true',
-  noSplitDeclared: 'true',
-  supplierIsCheapest: 'yes',
-};
-
 beforeAll(async () => {
   await applyMigrations(env.DB);
   for (const email of ADMIN_EMAILS) {
@@ -171,7 +157,6 @@ describe('POST /api/approvals — create', () => {
     form.append('payee', 'Grand Copthorne Waterfront Hotel');
     form.append('requestedAmount', '36772.50');
     form.append('files', pdfFile('quote.pdf'));
-    for (const [key, value] of Object.entries(COMPLIANCE_EVIDENCE)) form.append(key, value);
 
     const res = await SELF.fetch('https://example.com/api/approvals', {
       method: 'POST',
@@ -813,7 +798,6 @@ async function seedPendingItem(): Promise<number> {
   form.append('payee', 'Test Vendor Pte Ltd');
   form.append('requestedAmount', '1200.50');
   form.append('files', pdfFile('quote.pdf'));
-  for (const [key, value] of Object.entries(COMPLIANCE_EVIDENCE)) form.append(key, value);
   const res = await SELF.fetch('https://example.com/api/approvals', {
     method: 'POST',
     headers: { Cookie: await adminCookie() },

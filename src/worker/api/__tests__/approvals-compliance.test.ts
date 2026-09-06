@@ -79,7 +79,8 @@ interface CreateOptions {
   title?: string;
   amount?: string;
   file?: boolean;
-  evidence?: Record<string, string>;
+  boardRef?: string;
+  boardFile?: boolean;
   comparisonCount?: number;
 }
 
@@ -103,9 +104,8 @@ async function createItem(opts: CreateOptions = {}): Promise<number> {
     }));
     form.append('comparison', JSON.stringify(rows));
   }
-  for (const [key, value] of Object.entries(opts.evidence ?? {})) {
-    form.append(key, value);
-  }
+  if (opts.boardRef !== undefined) form.append('boardApprovalRef', opts.boardRef);
+  if (opts.boardFile) form.append('boardApprovalFile', pdfFile('board-minutes.pdf'));
   const res = await SELF.fetch('https://example.com/api/approvals', {
     method: 'POST',
     headers: { Cookie: await adminCookie() },
@@ -115,21 +115,6 @@ async function createItem(opts: CreateOptions = {}): Promise<number> {
   const body = await res.json<{ success: boolean; id: number }>();
   expect(body.success).toBe(true);
   return body.id;
-}
-
-/** Evidence that satisfies every S$1,000+ requirement (declarations + waiver
- *  when the test creates fewer than two comparison rows). */
-function fullEvidence(): Record<string, string> {
-  return {
-    quotationWaiverReason: 'Sole authorised supplier for this item',
-    budgetApproved: 'true',
-    budgetAmount: 'S$1,500',
-    budgetOfficer: 'Hon Treasurer',
-    budgetDate: '2026-08-20',
-    coiDeclared: 'true',
-    noSplitDeclared: 'true',
-    supplierIsCheapest: 'yes',
-  };
 }
 
 async function purchaseApprove(id: number): Promise<void> {
@@ -266,9 +251,7 @@ describe('office capture (plan §6.2)', () => {
 
 describe('both stages forced at S$5,000 and above (plan §6.3)', () => {
   it('a payroll item at S$6,000 starts at pending with approval_required = 1', async () => {
-    // Batch B: any S$1,000+ create carries the declarations — fullEvidence()
-    // provides them so this test isolates the two-stage rule.
-    const id = await createItem({ category: 'payroll', amount: '6000', title: 'September payroll', evidence: fullEvidence() });
+    const id = await createItem({ category: 'payroll', amount: '6000', title: 'September payroll' });
     const item = await env.DB.prepare('SELECT status, approval_required FROM approval_items WHERE id = ?')
       .bind(id)
       .first<{ status: string; approval_required: number }>();
@@ -277,7 +260,7 @@ describe('both stages forced at S$5,000 and above (plan §6.3)', () => {
   });
 
   it('a payroll item at S$4,999.99 still skips the purchase stage', async () => {
-    const id = await createItem({ category: 'payroll', amount: '4999.99', file: false, title: 'Small payroll', evidence: fullEvidence() });
+    const id = await createItem({ category: 'payroll', amount: '4999.99', file: false, title: 'Small payroll' });
     const item = await env.DB.prepare('SELECT status, approval_required FROM approval_items WHERE id = ?')
       .bind(id)
       .first<{ status: string; approval_required: number }>();
@@ -344,135 +327,15 @@ describe('invoice number and duplicate warning (plan §6.4)', () => {
   });
 });
 
-describe('declarations and quotation rules at S$1,000+ (plan §7.1, Batch B)', () => {
-  it('create at S$1,500 with one comparison row and no waiver expects 400', async () => {
-    const form = new FormData();
-    form.append('category', 'quotation');
-    form.append('title', 'Under-quoted');
-    form.append('requestedAmount', '1500');
-    form.append('files', pdfFile('quote.pdf'));
-    form.append('comparison', JSON.stringify([{ file: 'quote.pdf', description: 'Only quote' }]));
-    const res = await SELF.fetch('https://example.com/api/approvals', {
-      method: 'POST',
-      headers: { Cookie: await adminCookie() },
-      body: form,
-    });
-    expect(res.status).toBe(400);
-    const body = await res.json<{ message?: string }>();
-    expect(body.message).toContain('two quotations');
-  });
+// Owner decision 2026-09-06: the S$1,000 declarations moved offline to the
+// paper Purchase Requisition Form, so their 400-validation tests are gone.
+// What the portal still enforces lives in the board-approval describe below;
+// comparison rows (with their optional quotation dates) stay optional at any
+// amount and are covered by the AI + board suites.
 
-  it('create at S$1,500 with a waiver reason and every declaration expects 201 and stores the fields', async () => {
-    const cookie = await adminCookie();
-    const form = new FormData();
-    form.append('category', 'quotation');
-    form.append('title', 'Fully declared');
-    form.append('requestedAmount', '1500');
-    form.append('files', pdfFile('quote.pdf'));
-    for (const [key, value] of Object.entries(fullEvidence())) form.append(key, value);
-    const res = await SELF.fetch('https://example.com/api/approvals', {
-      method: 'POST',
-      headers: { Cookie: cookie },
-      body: form,
-    });
-    expect(res.status).toBe(201);
-    const { id } = await res.json<{ success: boolean; id: number }>();
-    const item = await env.DB.prepare(
-      'SELECT quotation_waiver_reason, budget_approved, budget_amount, budget_officer, budget_date, coi_declared, no_split_declared, supplier_is_cheapest FROM approval_items WHERE id = ?',
-    )
-      .bind(id)
-      .first<Record<string, unknown>>();
-    expect(item?.quotation_waiver_reason).toBe('Sole authorised supplier for this item');
-    expect(Number(item?.budget_approved)).toBe(1);
-    expect(item?.budget_amount).toBe('S$1,500');
-    expect(item?.budget_officer).toBe('Hon Treasurer');
-    expect(item?.budget_date).toBe('2026-08-20');
-    expect(Number(item?.coi_declared)).toBe(1);
-    expect(Number(item?.no_split_declared)).toBe(1);
-    expect(Number(item?.supplier_is_cheapest)).toBe(1);
-  });
-
-  it('create at S$1,500 missing each declaration in turn expects 400 naming the field', async () => {
-    const cases: Array<Record<string, string>> = [];
-    for (const missing of Object.keys(fullEvidence())) {
-      const partial: Record<string, string> = {};
-      for (const [k, v] of Object.entries(fullEvidence())) if (k !== missing) partial[k] = v;
-      cases.push(partial);
-    }
-    for (const evidence of cases) {
-      const res = await SELF.fetch('https://example.com/api/approvals', {
-        method: 'POST',
-        headers: { Cookie: await adminCookie() },
-        body: (() => {
-          const form = new FormData();
-          form.append('category', 'quotation');
-          form.append('title', 'Missing something');
-          form.append('requestedAmount', '1500');
-          form.append('files', pdfFile('quote.pdf'));
-          for (const [key, value] of Object.entries(evidence)) form.append(key, value);
-          return form;
-        })(),
-      });
-      expect(res.status).toBe(400);
-    }
-  });
-
-  it('create at S$999 with no declarations expects 201', async () => {
-    const id = await createItem({ amount: '999', title: 'Under the threshold' });
-    const item = await env.DB.prepare('SELECT coi_declared, budget_approved FROM approval_items WHERE id = ?').bind(id).first<{ coi_declared: number; budget_approved: number }>();
-    expect(Number(item?.coi_declared)).toBe(0);
-    expect(Number(item?.budget_approved)).toBe(0);
-  });
-
-  it('supplierIsCheapest = no without a reason expects 400; with a reason expects 201', async () => {
-    const without = { ...fullEvidence(), supplierIsCheapest: 'no', supplierChoiceReason: '' };
-    const resNo = await SELF.fetch('https://example.com/api/approvals', {
-      method: 'POST',
-      headers: { Cookie: await adminCookie() },
-      body: (() => {
-        const form = new FormData();
-        form.append('category', 'quotation');
-        form.append('title', 'Not cheapest, no reason');
-        form.append('requestedAmount', '1500');
-        form.append('files', pdfFile('quote.pdf'));
-        for (const [key, value] of Object.entries(without)) form.append(key, value);
-        return form;
-      })(),
-    });
-    expect(resNo.status).toBe(400);
-
-    const withReason = { ...fullEvidence(), supplierIsCheapest: 'no', supplierChoiceReason: 'Preferred supplier is the only one with same-day service' };
-    const resYes = await SELF.fetch('https://example.com/api/approvals', {
-      method: 'POST',
-      headers: { Cookie: await adminCookie() },
-      body: (() => {
-        const form = new FormData();
-        form.append('category', 'quotation');
-        form.append('title', 'Not cheapest, reason given');
-        form.append('requestedAmount', '1500');
-        form.append('files', pdfFile('quote.pdf'));
-        for (const [key, value] of Object.entries(withReason)) form.append(key, value);
-        return form;
-      })(),
-    });
-    expect(resYes.status).toBe(201);
-  });
-
-  it('two comparison rows with quotation dates satisfy the quotes rule with no waiver, and the dates are stored', async () => {
-    const id = await createItem({ amount: '1500', title: 'Two dated quotes', comparisonCount: 2, evidence: { ...fullEvidence(), quotationWaiverReason: '' } });
-    const detail = await SELF.fetch(`https://example.com/api/approvals/${id}`, {
-      headers: { Cookie: await adminCookie() },
-    });
-    const body = await detail.json<{ item: { comparison: Array<{ quoteDate?: string }> | null } }>();
-    expect(body.item.comparison).toHaveLength(2);
-    expect(body.item.comparison?.[0]?.quoteDate).toBe('2026-08-01');
-    expect(body.item.comparison?.[1]?.quoteDate).toBeUndefined();
-  });
-});
-
-describe('board approval above S$10,000 (plan §7.3, Batch B)', () => {
+describe('board approval above S$10,000 (plan §7.3, owner update 2026-09-06)', () => {
   it('purchase approve without a board reference expects 409', async () => {
-    const id = await createItem({ amount: '12000', title: 'Board needed', evidence: fullEvidence() });
+    const id = await createItem({ amount: '12000', title: 'Board needed', boardFile: true });
     const res = await SELF.fetch(`https://example.com/api/approvals/${id}/approve`, {
       method: 'POST',
       headers: { Cookie: await purchaseCookie(), 'Content-Type': 'application/json' },
@@ -485,22 +348,50 @@ describe('board approval above S$10,000 (plan §7.3, Batch B)', () => {
     expect(item?.status).toBe('pending');
   });
 
-  it('purchase approve with the reference and an attachment expects 200', async () => {
+  it('purchase approve with a reference but no flagged board document expects 409', async () => {
+    const id = await createItem({ amount: '12000', title: 'Board ref only', boardRef: 'Board meeting 12 Aug 2026, item 4' });
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/approve`, {
+      method: 'POST',
+      headers: { Cookie: await purchaseCookie(), 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    expect(res.status).toBe(409);
+    const body = await res.json<{ message?: string }>();
+    expect(body.message).toContain('board approval document');
+  });
+
+  it('purchase approve with the reference and the flagged board document expects 200', async () => {
     const id = await createItem({
       amount: '12000',
       title: 'Board evidenced',
-      evidence: { ...fullEvidence(), boardApprovalRef: 'Board meeting 12 Aug 2026, item 4' },
+      boardRef: 'Board meeting 12 Aug 2026, item 4',
+      boardFile: true,
     });
+    const flag = await env.DB.prepare('SELECT COUNT(*) AS n FROM approval_attachments WHERE item_id = ? AND is_board_approval = 1')
+      .bind(id)
+      .first<{ n: number }>();
+    expect(Number(flag?.n || 0)).toBe(1);
     await purchaseApprove(id);
     const item = await env.DB.prepare('SELECT status FROM approval_items WHERE id = ?').bind(id).first<{ status: string }>();
     expect(item?.status).toBe('purchase_approved');
   });
 
   it('below S$10,000 no board reference is needed', async () => {
-    const id = await createItem({ amount: '9999.99', title: 'Just under', evidence: fullEvidence() });
+    const id = await createItem({ amount: '9999.99', title: 'Just under' });
     await purchaseApprove(id);
     const item = await env.DB.prepare('SELECT status FROM approval_items WHERE id = ?').bind(id).first<{ status: string }>();
     expect(item?.status).toBe('purchase_approved');
+  });
+
+  it('quotation dates ride the comparison rows and are stored', async () => {
+    const id = await createItem({ amount: '1500', title: 'Two dated quotes', comparisonCount: 2 });
+    const detail = await SELF.fetch(`https://example.com/api/approvals/${id}`, {
+      headers: { Cookie: await adminCookie() },
+    });
+    const body = await detail.json<{ item: { comparison: Array<{ quoteDate?: string }> | null } }>();
+    expect(body.item.comparison).toHaveLength(2);
+    expect(body.item.comparison?.[0]?.quoteDate).toBe('2026-08-01');
+    expect(body.item.comparison?.[1]?.quoteDate).toBeUndefined();
   });
 });
 
@@ -534,10 +425,10 @@ describe('R1: field-level audit trail (Batch B)', () => {
     expect(edited?.note).not.toContain('payee'); // unchanged fields stay out
   });
 
-  it('evidence changes are captured too', async () => {
-    const id = await createItem({ amount: '1500', title: 'Evidence audit', evidence: fullEvidence() });
+  it('a board reference change is captured too', async () => {
+    const id = await createItem({ amount: '1500', title: 'Evidence audit', boardRef: 'Board meeting 1 Sep 2026, item 2' });
     const form = new FormData();
-    form.append('quotationWaiverReason', 'Emergency purchase, single source');
+    form.append('boardApprovalRef', 'Board meeting 3 Sep 2026, item 5');
     const res = await SELF.fetch(`https://example.com/api/approvals/${id}/edit`, {
       method: 'POST',
       headers: { Cookie: await adminCookie() },
@@ -547,7 +438,7 @@ describe('R1: field-level audit trail (Batch B)', () => {
     const edited = await env.DB.prepare("SELECT note FROM approval_audit_log WHERE item_id = ? AND action = 'item_edited'")
       .bind(id)
       .first<{ note: string | null }>();
-    expect(edited?.note).toContain('quotation_waiver_reason: Sole authorised supplier for this item → Emergency purchase, single source');
+    expect(edited?.note).toContain('board_approval_ref: Board meeting 1 Sep 2026, item 2 → Board meeting 3 Sep 2026, item 5');
   });
 });
 
@@ -703,7 +594,7 @@ describe('R2: view-only auditor role (Batch C)', () => {
 
 describe('R3: board-list CSV export (Batch C)', () => {
   it('exports the requested status tab with the board columns', async () => {
-    await createItem({ title: 'Export pending one', amount: '800', evidence: fullEvidence() });
+    await createItem({ title: 'Export pending one', amount: '800' });
     await createItem({ title: 'Export under-threshold', amount: '900' });
 
     const res = await SELF.fetch('https://example.com/api/approvals/export?status=pending', {
@@ -745,5 +636,80 @@ describe('R3: board-list CSV export (Batch C)', () => {
       headers: { Cookie: await adminCookie() },
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('small-purchase purchase-stage authority (policy §3.2, 2026-09-06)', () => {
+  it('a finance approver can purchase-approve a S$999 item, recorded with the Treasurer office', async () => {
+    const id = await createItem({ amount: '999', title: 'Small purchase approve' });
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/approve`, {
+      method: 'POST',
+      headers: { Cookie: await financeCookie() },
+    });
+    expect(res.status).toBe(200);
+    const item = await env.DB.prepare('SELECT status, purchase_decision_office FROM approval_items WHERE id = ?')
+      .bind(id)
+      .first<{ status: string; purchase_decision_office: string | null }>();
+    expect(item?.status).toBe('purchase_approved');
+    expect(item?.purchase_decision_office).toBe('Treasurer');
+    const audit = await env.DB.prepare(
+      "SELECT note FROM approval_audit_log WHERE item_id = ? AND action = 'purchase_approved'",
+    )
+      .bind(id)
+      .first<{ note: string | null }>();
+    expect(audit?.note).toBe('office=Treasurer');
+  });
+
+  it('a finance approver can purchase-reject a S$999 item', async () => {
+    const id = await createItem({ amount: '999', title: 'Small purchase reject' });
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/reject`, {
+      method: 'POST',
+      headers: { Cookie: await financeCookie(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Wrong vendor chosen' }),
+    });
+    expect(res.status).toBe(200);
+    const item = await env.DB.prepare('SELECT status, rejected_stage, purchase_decision_office FROM approval_items WHERE id = ?')
+      .bind(id)
+      .first<{ status: string; rejected_stage: string; purchase_decision_office: string | null }>();
+    expect(item?.status).toBe('rejected');
+    expect(item?.rejected_stage).toBe('purchase');
+    expect(item?.purchase_decision_office).toBe('Treasurer');
+  });
+
+  it('a finance approver cannot purchase-approve at S$1,000 (403)', async () => {
+    const id = await createItem({ amount: '1000', title: 'At the threshold' });
+    const res = await SELF.fetch(`https://example.com/api/approvals/${id}/approve`, {
+      method: 'POST',
+      headers: { Cookie: await financeCookie() },
+    });
+    expect(res.status).toBe(403);
+    const body = await res.json<{ message?: string }>();
+    expect(body.message).toContain('purchase approver');
+    const item = await env.DB.prepare('SELECT status FROM approval_items WHERE id = ?').bind(id).first<{ status: string }>();
+    expect(item?.status).toBe('pending');
+  });
+
+  it('a null amount fails closed for the finance approver, purchase approver still decides', async () => {
+    // No requestedAmount field → requested_amount NULL.
+    const id = await createItem({ title: 'No amount yet' });
+    const financeRes = await SELF.fetch(`https://example.com/api/approvals/${id}/approve`, {
+      method: 'POST',
+      headers: { Cookie: await financeCookie() },
+    });
+    expect(financeRes.status).toBe(403);
+
+    const purchaseRes = await SELF.fetch(`https://example.com/api/approvals/${id}/approve`, {
+      method: 'POST',
+      headers: { Cookie: await purchaseCookie(), 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    expect(purchaseRes.status).toBe(200);
+  });
+
+  it('the purchase approver is unaffected at both amounts', async () => {
+    const small = await createItem({ amount: '999', title: 'Purchase approver small' });
+    await purchaseApprove(small);
+    const big = await createItem({ amount: '1000', title: 'Purchase approver at threshold' });
+    await purchaseApprove(big);
   });
 });

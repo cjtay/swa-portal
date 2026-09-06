@@ -1,6 +1,6 @@
 # Approval Workflow — Functional Spec
 
-> **Status**: live (Phases 1–5 complete, 2026-08-23; not yet deployed to production). Finance-policy compliance **Batches A, B and C** built 2026-09-05 — A: self-approval ban, approver offices, S$5,000 two-stage force, invoice number + duplicate warning, GIRO payment method, full voucher print, tax-invoice column; B: S$1,000 declarations + quotations-or-waiver, quotation dates + 12-month warning, S$10,000 board guard, R1 field-level audit, R6 remembered payment method, R7 tax-invoice checkbox; C: R2 view-only auditor role, R3 board-list CSV export. `docs/plans/approvals-finance-compliance-implementation-plan.md` §6–§7 + §17.
+> **Status**: live (Phases 1–5 complete, 2026-08-23; not yet deployed to production). Finance-policy compliance **Batches A, B and C** built 2026-09-05 — A: self-approval ban, approver offices, S$5,000 two-stage force, invoice number + duplicate warning, GIRO payment method, full voucher print, tax-invoice column; B: S$1,000 declarations + quotations-or-waiver, quotation dates + 12-month warning, S$10,000 board guard, R1 field-level audit, R6 remembered payment method, R7 tax-invoice checkbox; C: R2 view-only auditor role, R3 board-list CSV export. `docs/plans/approvals-finance-compliance-implementation-plan.md` §6–§7 + §17. 2026-09-06: under S$1,000 the finance approvers may also decide the purchase stage (policy §3.2 — "Below $1000: Treasurer/Secretary"). **2026-09-06 (owner decision): the Batch B S$1,000 declarations moved offline** to the paper Purchase Requisition Form (manual Annex A); the ≥ S$10,000 board guard now requires one attachment flagged `is_board_approval` (migration 014) instead of any attachment.
 > **Plan**: `docs/plans/Approval-Workflow-Implementation-Plan.md` (v2, owner decisions)
 > **Owner decisions**: two-stage approval (purchase then finance), no signatures, office admin raises items, built-in comparison table, insert-only audit log, browser "Save as PDF".
 
@@ -15,7 +15,7 @@ Permission groups (email lists in `src/constants/portal.ts`, on top of the base 
 | Group | Determined by | Grants |
 |-------|---------------|--------|
 | Purchase approvers | `APPROVAL_PURCHASE_APPROVER_EMAILS` **∪** `IT_ADMIN_EMAILS` (`isPurchaseApprover()`) | Read the board; approve/reject at the purchase stage |
-| Finance approvers | `APPROVAL_FINANCE_APPROVER_EMAILS` (`isFinanceApprover()`) | Read the board; approve/reject the voucher. IT admins are **excluded by design** — an IT account can never approve a payment voucher (proven by test) |
+| Finance approvers | `APPROVAL_FINANCE_APPROVER_EMAILS` (`isFinanceApprover()`) | Read the board; approve/reject the voucher. IT admins are **excluded by design** — an IT account can never approve a payment voucher (proven by test). For items **under S$1,000** they may also approve/reject at the purchase stage (`canDecidePurchaseStage()` — policy §3.2 puts "Below $1000" with the Treasurer/Secretary; null amounts fail closed) |
 | Item creators | `canRaiseApprovalItem()` — admin tier today | Create, edit, vouchers, record payment, remind |
 | View-only auditors (R2) | `APPROVAL_AUDITOR_EMAILS` (`isApprovalsAuditor()`) — an email list, not a member category | Read-only: board list, status tabs, drawer and its documents. Cannot create, edit, prepare vouchers, approve, reject, pay, remind **or export**. Middleware admits auditors to GET approvals endpoints only |
 
@@ -35,8 +35,8 @@ Entry gate (middleware 7c): all `/api/approvals*` methods require admin, purchas
 | `POST /api/approvals` | POST | Item creator | Multipart create: fields, ≤10 files, comparison rows. ≥1 file required when `approvalRequired` resolves true (400 otherwise) |
 | `GET /api/approvals/:id` | GET | — | Detail with attachments (tax invoice first, `ORDER BY is_tax_invoice DESC, id`) + parsed comparison + `duplicate_invoice` warning |
 | `GET /api/approvals/:id/attachment/:attId` | GET | — | Stream attachment (`?download=1`); nosniff + sanitised filename |
-| `POST /api/approvals/:id/approve` | POST | Purchase approver | Atomic pending → purchase_approved; emails creator. **403 when the caller raised the item** (self-approval ban, plan §6.1) |
-| `POST /api/approvals/:id/reject` | POST | Purchase approver | Reason required; resubmission returns to pending. Same self-approval 403 |
+| `POST /api/approvals/:id/approve` | POST | Purchase approver; finance approver when amount < S$1,000 | Atomic pending → purchase_approved; emails creator. **403 when the caller raised the item** (self-approval ban, plan §6.1) |
+| `POST /api/approvals/:id/reject` | POST | Purchase approver; finance approver when amount < S$1,000 | Reason required; resubmission returns to pending. Same self-approval 403 |
 | `POST /api/approvals/:id/edit` | POST | Item creator | Edit fields, add attachments, comparison rebuild, AI summary/recommendation text edits, resubmit. Effective amount ≥ S$5,000 forces `approval_required = 1` (plan §6.3) |
 | `POST /api/approvals/:id/remind` | POST | Item creator | Re-send the waiting stage's email (pending or finance_check) |
 | `POST /api/approvals/:id/voucher` | POST | Item creator | Submit/resubmit voucher; assigns PV number; → finance_check. **`invoiceNo` (1–100 chars) required on first submission**; optional on resubmission (keeps the stored value). Response carries `duplicateInvoice` when the number already exists on another item (NOCASE match — warns, never blocks, plan §6.4) |
@@ -56,7 +56,7 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 
 | Status | Meaning | Who acts next |
 |--------|---------|---------------|
-| `pending` | Raised, awaiting purchase approval | Purchase approvers |
+| `pending` | Raised, awaiting purchase approval | Purchase approvers; finance approvers when amount < S$1,000 |
 | `rejected` | Rejected at some stage; `rejected_stage` (`purchase`/`finance`) remembers which | Item creator (edit + resubmit) |
 | `purchase_approved` | Purchase approved, voucher not prepared | Item creator (prepare voucher) |
 | `finance_check` | Voucher submitted, awaiting finance | Finance approvers |
@@ -78,13 +78,14 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 **Finance-policy rules** (compliance Batch A, 2026-09-05; manual = "Finance Policy, Accounting and Procedure Manual", SWA, v2, 15 Dec 2024):
 
 - **Self-approval ban**: whoever raised an item can never approve or reject it, at either stage (403, all four decision endpoints). Closes the IT-admin union path by design.
+- **Small-purchase purchase-stage authority (2026-09-06)**: below S$1,000 (before GST) the finance approvers may approve or reject at the purchase stage — the manual's purchase matrix puts "Below $1000" with the Treasurer/Secretary, so the Treasurer signs small purchases and the President is not needed (`canDecidePurchaseStage()` in `portal.ts`; the raise/resubmit/reminder emails use `resolvePurchaseStageRecipients()` to include the finance pair at those amounts). S$1,000+ or a null amount fails closed: purchase approvers only. Documents stay mandatory and the Treasurer still runs the finance check afterwards.
 - **Offices recorded**: every decision stores the signer's office and prints it beside their name (drawer, decision emails, voucher print).
 - **S$5,000 two-stage force**: at the requested amount ≥ S$5,000 (before GST), `approval_required` is forced on at create and edit — even recurring categories start at `pending` and need their documents.
 - **Invoice number**: required at voucher submission (400 when missing); a repeated number **warns, never blocks** (suppliers legitimately reuse numbers monthly) — response flag + `possible_duplicate_invoice` audit row + amber warning in the drawer and above the paid form.
 - **Voucher signatures**: at a voucher total ≥ S$5,000 the print shows **both** signers with offices (Purchase approved by + Payment approved by); below S$5,000 one Treasurer-side signature suffices (manual 4.1.1); recurring items keep "No approval required".
 - **Seven-year retention**: approval items, attachments and audit rows are kept for a minimum of seven years; no portal code path deletes them; any future cleanup job must respect the seven-year minimum.
-- **Declarations & evidence (Batch B)**: at a requested amount ≥ S$1,000 (before GST), create and edit require two comparison rows **or** a waiver reason, the budget declaration (tick + amount/officer/date — budget approvers are not portal users, so the amount is typed text), the conflict-of-interest and no-splitting ticks, and the cheapest-supplier Yes/No (No reveals a required reason; the AI preview informs the answer but never fills it). Comparison rows may carry an optional quotation date; a date older than twelve months shows an amber chip in the drawer — warn, never block.
-- **Board approval above S$10,000 (Batch B)**: purchase approve refuses with 409 until the item carries a board approval reference **and** at least one attached document (the minutes/approval email PDF). The reference text points the approver to the evidence; which file is the minutes stays a human judgement.
+- **Declarations moved offline (owner decision 2026-09-06)**: the Batch B S$1,000 declarations block (budget tick + amount/officer/date, conflict-of-interest and no-splitting ticks, cheapest-supplier Yes/No, waiver reason) was **removed** from the portal — that evidence is captured again on the paper Purchase Requisition Form (manual Annex A). The `approval_items` declaration columns stay in the schema but dormant. Comparison rows remain optional at any amount and may carry an optional quotation date; a date older than twelve months shows an amber chip in the drawer — warn, never block.
+- **Board approval above S$10,000 (Batch B, updated 2026-09-06)**: purchase approve refuses with 409 until the item carries a board approval reference **and** one attachment flagged as the board document (the minutes/approval email PDF, `is_board_approval` — migration 014). The reference text points the approver to the evidence; the flag makes "which file is the minutes" explicit.
 - **Field-level audit (R1)**: the create and edit audit notes carry every changed field as `field: old → new` pairs (values truncate at 60 chars). Attachments stay excluded — they keep their own `attachments_added` rows. The audit CSV shape is unchanged; the detail lives in the note column.
 - **Remembered payment method (R6)**: the detail response returns `last_paid_method` — the method used on the most recent **paid** item in the same category (by category, not by payee) — and the paid form pre-selects it. The admin can always override.
 - **Tax Invoice checkbox (R7)**: each attached document can be ticked "This is the Tax Invoice" in the create form, the edit form and the drawer. At most one document per item is ticked (ticking one clears the other); the display always puts the ticked document first (API `ORDER BY is_tax_invoice DESC, id`), with a chip in the drawer and the ticked document listed first on the voucher print's document context.
@@ -95,12 +96,10 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 |--------|------------------------------|
 | Every decision | Signer's office recorded and displayed; requestor cannot decide their own request |
 | Every voucher | Invoice/receipt number required at submission; repeats warn, never block |
-| S$1,000 and above | Two comparison rows (quotations) or a recorded waiver reason, else 400 *(live, Batch B)* |
-| S$1,000 and above | Declarations required at create/edit: budget tick + amount/officer/date (typed text), conflict-of-interest tick, no-splitting tick, cheapest-supplier Yes/No (No ⇒ reason) *(live, Batch B)* |
+| Under S$1,000 | Purchase approval may be signed by the finance approvers (Treasurer/Assistant Treasurer) as well as the purchase approvers; null amounts fail closed *(live, 2026-09-06)* |
+| S$1,000 and above | Declarations handled **offline** on the paper Purchase Requisition Form *(owner decision 2026-09-06 — no portal enforcement)* |
 | S$5,000 and above | Both approval stages forced on; printed voucher carries both signers |
-| S$6,000 – S$90,000 | Form reminder: obtain two written invitations to quote *(live, Batch B — reminder only)* |
-| Above S$10,000 | Board approval reference + attached evidence required before purchase approval (409) *(live, Batch B)* |
-| Above S$90,000 | Form reminder: formal tender required *(live, Batch B — reminder only)* |
+| Above S$10,000 | Board approval reference + flagged board document required before purchase approval (409) *(live, Batch B + 2026-09-06 flag)* |
 | Always | Records kept at least seven years |
 
 ## 5. UI rules (`/approvals`)
@@ -113,7 +112,7 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 | Export CSV button (R3) | `is_admin` only (auditors excluded). Exports the currently open status tab |
 | Column sorting | Every data column header clicks to sort (again to reverse; dates start newest-first, text A→Z). Browser-side; empty values always sink last |
 | Pagination | Browser-side, 20 rows per page, under the table; resets to page 1 on tab or sort change |
-| Approve / Reject | Item `pending` AND `is_purchase_approver` |
+| Approve / Reject | Item `pending` AND (`is_purchase_approver` OR item amount < S$1,000 AND `is_finance_approver`) |
 | Approve voucher / Reject voucher | Item `finance_check` AND `is_finance_approver` |
 | Prepare voucher / Edit voucher & resubmit | `is_admin` AND (`purchase_approved`, or `rejected` at finance stage) |
 | Edit (fields) + resubmit | `is_admin` AND (`pending`, or `rejected` at the purchase stage) |
@@ -162,23 +161,19 @@ AI comparison kill-switch: IT admins toggle it in Settings (`swa:ai_config`, ser
 | `comparison` | TEXT | JSON `[{attachmentId, description}]` |
 | `ai_comparison` | TEXT | Nullable JSON: the AI analysis (version, generated at/by, models, FX date, per-file status notes, extracted quotations with S$ conversions, summary, recommendation). Added migration 011 |
 | `board_approval_ref` | TEXT | ≤500 chars; required by the purchase-approve guard ≥ S$10,000 (migration 013) |
-| `quotation_waiver_reason` | TEXT | ≤1,000 chars; substitutes for two comparison rows at ≥ S$1,000 (migration 013) |
-| `supplier_is_cheapest` | INTEGER | 0/1 answer; null = unanswered (migration 013) |
-| `supplier_choice_reason` | TEXT | ≤1,000 chars; required when the answer is No (migration 013) |
-| `budget_approved`, `budget_amount`, `budget_officer`, `budget_date` | INTEGER/TEXT | The budget declaration; the amount is typed text (≤50 chars) because budget approvers are not portal users (migration 013) |
-| `coi_declared`, `no_split_declared` | INTEGER | 0/1 declaration ticks (migration 013) |
+| `quotation_waiver_reason`, `supplier_is_cheapest`, `supplier_choice_reason`, `budget_approved`, `budget_amount`, `budget_officer`, `budget_date`, `coi_declared`, `no_split_declared` | TEXT/INTEGER | **Dormant** — the declarations moved offline (owner decision 2026-09-06); columns kept, never written |
 
-**`approval_attachments`** — `item_id` FK, UNIQUE `r2_key` under `approvals/<itemId>/`, filename/mime/size, `is_tax_invoice` INTEGER 0/1 (migration 012 — the "This is the Tax Invoice" tick; at most one per item, the ticked document always renders first). Add-only in v1; caps 10 files × 10 MB.
+**`approval_attachments`** — `item_id` FK, UNIQUE `r2_key` under `approvals/<itemId>/`, filename/mime/size, `is_tax_invoice` INTEGER 0/1 (migration 012 — the "This is the Tax Invoice" tick; at most one per item, the ticked document always renders first), `is_board_approval` INTEGER 0/1 (migration 014 — at most one per item; the ≥ S$10,000 purchase-approve guard requires it). Add-only in v1; caps 10 files × 10 MB.
 
 **`approval_audit_log`** — insert-only (no UPDATE/DELETE path exists). `item_id`, `action`, `actor_email`, `actor_name`, `note`. Actions: item_created, purchase_approved/rejected, item_edited, item_resubmitted, attachments_added, voucher_submitted, finance_approved/rejected, paid_recorded, reminder_sent, ai_comparison_generated, **possible_duplicate_invoice** (note: `invoice_no=<n>; matches item <id> (<voucher_no>)`). Decision rows append `; office=<label>` when the signer holds a mapped office.
 
 ## 7. Emails (`src/worker/lib/email-approval.ts`, Resend, non-blocking)
 
-- New / resubmitted request + reminders → purchase approvers (description truncated to 500 chars).
+- New / resubmitted request + reminders → purchase approvers, **plus the finance approvers when the item is under S$1,000** (`resolvePurchaseStageRecipients`) (description truncated to 500 chars).
 - Voucher submitted / resubmitted / reminder → finance approvers.
 - Every decision → the creator (rejections include the reason).
 - Recipients are the named lists only — the IT-admin union grants authority, not mailbox traffic.
 
 ## 8. Tests
 
-`src/worker/api/__tests__/approvals.test.ts` (integration: role gates, create validation — including the ≥1-document rule for approval-required items — comparison mapping, numbering + 99-cap, race 409s, resubmit routing, IT-admin-excluded-from-finance proof, paid step, CSV with date-range filter + 400 guards, AI-analysis replay at create) and `src/worker/lib/__tests__/ai-comparison.test.ts` (pipeline against a fake AI binding — JSON extraction, S$ conversion maths, kill-switch default, daily breaker, per-file skip/error notes, endpoint guards that return before any AI call). The csv-guard tripwire watches the audit exporter. `src/worker/api/__tests__/approvals-compliance.test.ts` (compliance Batches A-C: self-approval 403 at both stages, office capture President/Treasurer, S$6,000 payroll forced to pending vs S$4,999.99 skipping purchase, invoice-number 400, duplicate warning + `possible_duplicate_invoice` audit row + detail flag, GIRO accepted / cheque rejected; S$1,000 declarations per-field 400s + S$999 exemption, dated comparison rows, board guard 409/200/below-threshold, R1 field-level audit diffs, R6 last-paid ordering, R7 create-tick + re-tick; R2 auditor GET reads 200 with every write 403 and export blocked, R3 status-tab export headers/rows/filter-400 + finance-approver 403).
+`src/worker/api/__tests__/approvals.test.ts` (integration: role gates, create validation — including the ≥1-document rule for approval-required items — comparison mapping, numbering + 99-cap, race 409s, resubmit routing, IT-admin-excluded-from-finance proof, paid step, CSV with date-range filter + 400 guards, AI-analysis replay at create) and `src/worker/lib/__tests__/ai-comparison.test.ts` (pipeline against a fake AI binding — JSON extraction, S$ conversion maths, kill-switch default, daily breaker, per-file skip/error notes, endpoint guards that return before any AI call). The csv-guard tripwire watches the audit exporter. `src/worker/api/__tests__/approvals-compliance.test.ts` (compliance Batches A-C: self-approval 403 at both stages, office capture President/Treasurer, S$6,000 payroll forced to pending vs S$4,999.99 skipping purchase, invoice-number 400, duplicate warning + `possible_duplicate_invoice` audit row + detail flag, GIRO accepted / cheque rejected; dated comparison rows, board guard 409 (missing reference) / 409 (no flagged board document) / 200 with flag / below-threshold, R1 field-level audit diffs incl. board reference, R6 last-paid ordering, R7 create-tick + re-tick; R2 auditor GET reads 200 with every write 403 and export blocked, R3 status-tab export headers/rows/filter-400 + finance-approver 403; 2026-09-06 small-purchase rule — finance approver purchases-approves/rejects a S$999 item, 403 at S$1,000, purchase approver unchanged, null amount fails closed, request email includes the finance pair under S$1,000).

@@ -1,7 +1,7 @@
 import type { Env } from '../types';
 import { logError } from './log-error';
 import { isResendSuppressed } from './resend';
-import { resolveFinanceApproverRecipients, resolvePurchaseApproverRecipients } from './notify-recipients';
+import { resolveFinanceApproverRecipients, resolvePurchaseStageRecipients } from './notify-recipients';
 
 // Approval-workflow emails — docs/plans/Approval-Workflow-Implementation-Plan.md §10.
 //
@@ -95,7 +95,7 @@ function wrap(inner: string): string {
   );
 }
 
-/** "New item for approval" / resubmission / reminder — goes to the purchase approvers. */
+/** "New item for approval" / resubmission / reminder — goes to the purchase approvers, plus the finance approvers for items under S$1,000. */
 export function buildApprovalRequestEmail(env: Env, item: ApprovalEmailItem, kind: 'new' | 'resubmitted' | 'reminder'): string {
   const heading = kind === 'new' ? 'New Item for Approval' : kind === 'resubmitted' ? 'Item Resubmitted for Approval' : 'Reminder: Item Awaiting Approval';
   const intro =
@@ -183,7 +183,16 @@ async function sendViaResend(env: Env, to: string[], subject: string, html: stri
 export async function sendApprovalRequestEmail(env: Env, item: ApprovalEmailItem, kind: 'new' | 'resubmitted' | 'reminder'): Promise<void> {
   const subject =
     (kind === 'new' ? 'New approval request: ' : kind === 'resubmitted' ? 'Resubmitted approval request: ' : 'Reminder — approval request: ') + item.title;
-  await sendViaResend(env, resolvePurchaseApproverRecipients(env), subject, buildApprovalRequestEmail(env, item, kind), 'approvals-request-email');
+  // Under S$1,000 the finance approvers may sign the purchase stage (policy
+  // §3.2 — the Treasurer signs small purchases), so the request email asks
+  // them as well. S$1,000+ goes to the purchase approvers only.
+  await sendViaResend(
+    env,
+    resolvePurchaseStageRecipients(env, item.requestedAmount),
+    subject,
+    buildApprovalRequestEmail(env, item, kind),
+    'approvals-request-email',
+  );
 }
 
 export async function sendPurchaseDecisionEmail(

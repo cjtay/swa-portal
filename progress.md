@@ -12,6 +12,90 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-09-06 (session 35): Declarations moved offline; board-document upload; voucher stage stamp
+
+Owner decisions taken live with the finance manual open. Verified locally
+(typecheck/build clean, 331/331 tests), nothing deployed.
+
+### Done
+- **Declarations moved offline (owner decision)**: the Batch B S$1,000
+  declarations block (budget tick + amount/officer/date, cheapest-supplier
+  Yes/No + reason, quotation waiver, COI, no-splitting) removed from the
+  create/edit forms, drawer evidence card, API validation, R1 audit pairs
+  and the voucher print. That evidence returns to the paper Purchase
+  Requisition Form (manual Annex A). `approval_items` declaration columns
+  stay in the schema but dormant — no destructive migration. Comparison
+  table stays optional at any amount (quotation dates still stored);
+  S$6,000/S$90,000 reminders removed.
+- **Board-approval document upload (≥ S$10,000)**: migration 014 adds
+  `approval_attachments.is_board_approval` (mirrors the R7 Tax Invoice
+  flag; backported into schema.sql). Create form board box gains a file
+  upload (flagged at insert); edit form gains a "mark the board document"
+  selector over existing attachments plus an upload. The purchase-approve
+  guard now requires the FLAGGED board document (not just any attachment)
+  alongside the reference. Voucher print shows a "Board approval" line.
+- **Voucher stage stamp**: `/approvals/voucher` prints a bordered stamp by
+  status — PENDING FINANCE APPROVAL / APPROVED — AWAITING PAYMENT / PAID /
+  REJECTED — AWAITING REVISION — so two printouts from different stages
+  are never mistaken for each other. Stamp prints in the PDF; all fields
+  remain visible (owner constraint).
+- Tests: declaration 400-tests removed; new board-flag tests (flag stored,
+  guard 409 without flagged document / 200 with it, board-ref audit pair).
+- Docs: feature spec (status line, finance-policy rules, matrix, schema,
+  tests), guide (`/approvals/guide` money-rules list), `docs/finance/`
+  policy PDF added to the repo.
+
+### Verify
+`astro check` 0 errors; `vitest run` 331/331; `npm run build` clean.
+
+### Next
+Owner runs migration 014 on the local D1 (command in the migration file)
+for manual UAT; remote migrations stay owner-gated at ship time.
+
+---
+
+## 2026-09-06 (session 34): Under-S$1,000 purchase stage opened to finance approvers
+
+Aligned the approvals workflow with Finance Policy §3.2 ("Below $1000:
+Treasurer/Secretary") — for items under S$1,000 (before GST) the finance
+approvers (Treasurer/Assistant Treasurer) may now approve/reject at the
+PURCHASE stage; S$1,000+ unchanged (purchase approvers only), null amounts
+fail closed. Verified locally, nothing deployed.
+
+### Done
+- `src/constants/portal.ts`: `canDecidePurchaseStage(email, amount)` —
+  single source of truth (purchase approvers always; finance approvers when
+  amount < `APPROVAL_QUOTE_RULE_THRESHOLD`; null → false).
+- `src/worker/api/approvals.ts`: purchase approve + reject handlers relax
+  the entry check to either approver list, then re-check amount-aware
+  authority after the item load (403 otherwise).
+- `src/worker/lib/notify-recipients.ts`: `resolvePurchaseStageRecipients`
+  (union with the finance list under S$1,000, de-duplicated; local-dev
+  override semantics preserved) — used by `sendApprovalRequestEmail`, so
+  new/resubmitted/reminder mail reaches the Treasurer for small purchases.
+- `src/pages/approvals.astro`: drawer Approve/Reject buttons amount-aware
+  (uses the existing `is_finance_approver` session flag; no new flag).
+- Guide (`/approvals/guide`): flow step, money-rules row, purchase-approver
+  and finance-approver chapters updated; board intro line updated.
+- Docs: feature spec (status line, roles table, §3 rows, workflow row,
+  finance-policy rule + matrix row, UI rule, emails, tests), functional
+  spec (2 rows), `docs/ARCHITECTURE.md`.
+- Tests: compliance file +5 (finance approver approve/reject at S$999 with
+  Treasurer office captured, 403 at S$1,000, null-amount fail-closed,
+  purchase approver unaffected) and notify-recipients +5 (union, boundary,
+  dedupe, null fail-closed, local collapse/override).
+
+### Verify
+`npm run typecheck`, `typecheck:worker`, `build` clean; `npm run test:run`
+335/335. No migration, no feature flag (rule change to a shipped feature).
+
+### Next
+Owner-gated §14 ship steps for the compliance batches (remote D1 backup +
+migrations 012/013, office map swap, deploy) now also carry this rule;
+staging UAT.
+
+---
+
 ## 2026-09-05 (session 33): Approvals compliance Batch C implemented — R1-R8 complete
 
 Executed plan §17.2 (Batch C): R2 view-only auditor role + R3 board-list

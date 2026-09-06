@@ -30,6 +30,7 @@ import type { Env } from '../types';
 import {
   APPROVAL_FINANCE_APPROVER_EMAILS,
   APPROVAL_PURCHASE_APPROVER_EMAILS,
+  APPROVAL_QUOTE_RULE_THRESHOLD,
 } from '../../constants/portal';
 
 const LOCAL_DEV_SECRET_PREFIX = 'local-dev-';
@@ -65,6 +66,24 @@ export function resolvePurchaseApproverRecipients(env: Env): string[] {
 export function resolveFinanceApproverRecipients(env: Env): string[] {
   if (!isLocalMailEnvironment(env)) return [...APPROVAL_FINANCE_APPROVER_EMAILS];
   return localRecipients(env, [LOCAL_FINANCE_RECIPIENT]);
+}
+
+/**
+ * Purchase-stage recipients for an item of the given amount (before GST,
+ * null when unknown). Under S$1,000 the finance approvers may sign the
+ * purchase stage too (finance policy §3.2 puts "Below $1000" with the
+ * Treasurer/Secretary; canDecidePurchaseStage mirrors this authority), so
+ * the request email asks them as well. At S$1,000+ or unknown amount —
+ * purchase approvers only. Local dev collapses to the shared test inbox
+ * through the same resolvers as always.
+ */
+export function resolvePurchaseStageRecipients(env: Env, amount: number | null): string[] {
+  const purchase = resolvePurchaseApproverRecipients(env);
+  if (amount === null || amount >= APPROVAL_QUOTE_RULE_THRESHOLD) return purchase;
+  const finance = resolveFinanceApproverRecipients(env);
+  const merged = [...purchase];
+  for (const email of finance) if (!merged.includes(email)) merged.push(email);
+  return merged;
 }
 
 /** Form-notification recipients (volunteer / laughter yoga / membership):

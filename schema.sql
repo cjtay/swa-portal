@@ -400,6 +400,7 @@ CREATE TABLE IF NOT EXISTS approval_attachments (
   mime_type      TEXT NOT NULL,
   size           INTEGER NOT NULL,
   is_tax_invoice INTEGER NOT NULL DEFAULT 0,
+  is_board_approval INTEGER NOT NULL DEFAULT 0,
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

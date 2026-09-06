@@ -254,7 +254,10 @@ path returns 404 in production. See AGENTS.md, "Local dev login".
   `APPROVAL_PURCHASE_APPROVER_EMAILS` plus all IT admins (`isPurchaseApprover()`).
   Finance approvers are `APPROVAL_FINANCE_APPROVER_EMAILS` only (`isFinanceApprover()`)
   — IT admins are deliberately excluded so an IT account can never approve a payment
-  voucher. Item creation is gated by `canRaiseApprovalItem()` (admin tier only today).
+  voucher. Under S$1,000 (before GST) the finance approvers may also decide the
+  purchase stage — the finance policy's purchase matrix puts "Below $1000" with the
+  Treasurer/Secretary (`canDecidePurchaseStage()` in `portal.ts`; null amounts fail
+  closed). Item creation is gated by `canRaiseApprovalItem()` (admin tier only today).
   Email recipients are environment-aware (`lib/notify-recipients.ts`): local dev (the
   `local-dev-` SESSION_SECRET anchor) redirects approval and form-notification mail to
   the shared test inboxes / cjtay@, while staging and production use the real lists;
@@ -266,7 +269,9 @@ path returns 404 in production. See AGENTS.md, "Local dev login".
   attachment stream; Phase 3 adds the purchase stage — approve/reject (atomic,
   race-safe), edit + resubmit with routing by `rejected_stage`, reminders, and the
   emails in `src/worker/lib/email-approval.ts` (request → purchase approvers,
-  decision → creator; description included truncated). Phase 4 adds the finance
+  plus the finance approvers for items under S$1,000 via
+  `resolvePurchaseStageRecipients`; decision → creator; description included
+  truncated). Phase 4 adds the finance
   stage: voucher submission with `PV<YY>-<MM><NN>` numbering (UNIQUE-index retry,
   two digits cap at 99 per month, number survives rejection), finance
   approve/reject (finance approvers only — verified by a test that IT admins get

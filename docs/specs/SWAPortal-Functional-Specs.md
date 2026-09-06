@@ -68,7 +68,7 @@ Beyond base roles, specific powers are granted by email lists in `src/constants/
 |-------|------|--------|
 | Membership approvers | `MEMBERSHIP_APPROVER_EMAILS` ∪ IT admins (`isMembershipApprover()`) | Approve/reject membership applications |
 | Purchase approvers | `APPROVAL_PURCHASE_APPROVER_EMAILS` ∪ IT admins (`isPurchaseApprover()`) | Purchase-stage decisions |
-| Finance approvers | `APPROVAL_FINANCE_APPROVER_EMAILS` only (`isFinanceApprover()`) | Voucher decisions; **IT admins deliberately excluded** |
+| Finance approvers | `APPROVAL_FINANCE_APPROVER_EMAILS` only (`isFinanceApprover()`) | Voucher decisions; **IT admins deliberately excluded**. May also sign purchase-stage decisions for items under S$1,000 (`canDecidePurchaseStage()`) |
 
 ## 3. Access control
 
@@ -110,7 +110,7 @@ Rules:
 | Approvals — view board | Approvers only | Yes | Yes | `features/approvals.md` |
 | Approvals — view board (auditor, read-only) | Auditor email list only (R2): read + tabs + drawer, no actions | 〃 | 〃 | 〃 |
 | Approvals — raise/edit/voucher/paid/remind | No | Yes | Yes | 〃 |
-| Approvals — purchase decision | Approvers only | No | Yes | 〃 |
+| Approvals — purchase decision | Approvers only; items **under S$1,000** may also be decided by the finance approvers (policy §3.2) | No | Yes | 〃 |
 | Approvals — voucher decision | Finance approvers only | No | **No** (by design) | 〃 |
 | Approvals — list CSV export (R3) | No | Yes | Yes | 〃 |
 | Approvals — audit CSV export | No | No | Yes | 〃 |

@@ -261,6 +261,23 @@ export const APPROVAL_BOARD_APPROVAL_THRESHOLD = 10_000;
 export const APPROVAL_INVITATION_REMINDER_THRESHOLD = 6_000; // form reminder only
 export const APPROVAL_TENDER_REMINDER_THRESHOLD = 90_000; // form reminder only
 
+/**
+ * True if the email may decide (approve or reject) the PURCHASE stage of an
+ * item with the given requested amount (before GST, null when unknown).
+ *
+ * Finance Policy §3.2 puts purchases "Below $1000" with the
+ * Treasurer/Secretary, so below the quote-rule threshold the finance
+ * approvers (Treasurer/Assistant Treasurer) join the purchase approvers at
+ * this stage — the Treasurer signs the small purchase and the President is
+ * not needed. At S$1,000 and above only purchase approvers decide, as
+ * before. A null/unknown amount fails closed: purchase approvers only.
+ */
+export function canDecidePurchaseStage(email: string, amount: number | null): boolean {
+	if (isPurchaseApprover(email)) return true;
+	if (amount === null || amount >= APPROVAL_QUOTE_RULE_THRESHOLD) return false;
+	return isFinanceApprover(email);
+}
+
 // Office held by each approver address, shown beside the decider's name on
 // the board, drawer, emails and voucher print. Local dev uses the shared
 // test addresses; production addresses are owner-swapped at ship time.

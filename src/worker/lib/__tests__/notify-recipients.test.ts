@@ -13,6 +13,7 @@ import {
   isLocalMailEnvironment,
   resolvePurchaseApproverRecipients,
   resolveFinanceApproverRecipients,
+  resolvePurchaseStageRecipients,
   resolveFormNotifyRecipients,
   LOCAL_APPROVAL_RECIPIENT,
   LOCAL_FINANCE_RECIPIENT,
@@ -87,6 +88,44 @@ describe('resolveFinanceApproverRecipients', () => {
     expect(recipients).toContain('wong.ys@singaporewomenassociation.org');
     expect(recipients).toContain('joyce.yeo@singaporewomenassociation.org');
     expect(recipients).toContain('finance@singaporewomenassociation.org');
+  });
+});
+
+describe('resolvePurchaseStageRecipients', () => {
+  it('under S$1,000 (deployed): purchase approvers plus the finance approvers, no duplicates', () => {
+    const recipients = resolvePurchaseStageRecipients(envWith(REAL_SECRET), 999);
+    expect(recipients).toContain('roxanne.zhang@singaporewomenassociation.org');
+    expect(recipients).toContain('angela.wong@singaporewomenassociation.org');
+    expect(recipients).toContain('wong.ys@singaporewomenassociation.org');
+    expect(recipients).toContain('joyce.yeo@singaporewomenassociation.org');
+    // The purchase list may already overlap the finance list (shared inboxes);
+    // each address must appear exactly once.
+    expect(new Set(recipients).size).toBe(recipients.length);
+  });
+
+  it('at S$1,000 or above (deployed): purchase approvers only', () => {
+    const atThreshold = resolvePurchaseStageRecipients(envWith(REAL_SECRET), 1000);
+    expect(atThreshold).toContain('roxanne.zhang@singaporewomenassociation.org');
+    expect(atThreshold).not.toContain('wong.ys@singaporewomenassociation.org');
+
+    const above = resolvePurchaseStageRecipients(envWith(REAL_SECRET), 2500);
+    expect(above).not.toContain('joyce.yeo@singaporewomenassociation.org');
+  });
+
+  it('a null amount fails closed: purchase approvers only', () => {
+    const recipients = resolvePurchaseStageRecipients(envWith(REAL_SECRET), null);
+    expect(recipients).toContain('angela.wong@singaporewomenassociation.org');
+    expect(recipients).not.toContain('wong.ys@singaporewomenassociation.org');
+  });
+
+  it('locally: both lists collapse to the shared inboxes', () => {
+    const recipients = resolvePurchaseStageRecipients(envWith(LOCAL_SECRET), 999);
+    expect(recipients).toEqual([LOCAL_APPROVAL_RECIPIENT, LOCAL_FINANCE_RECIPIENT]);
+  });
+
+  it('locally: the override wins and is de-duplicated across both resolvers', () => {
+    const recipients = resolvePurchaseStageRecipients(envWith(LOCAL_SECRET, ' test@example.com '), 999);
+    expect(recipients).toEqual(['test@example.com']);
   });
 });
 

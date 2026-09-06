@@ -48,6 +48,21 @@
       color: var(--swa-2);
     }
     .voucher-meta { font-size: 0.9rem; text-align: right; }
+    /* Workflow-stage stamp: bordered text so the stage survives greyscale
+       printing; inside .voucher-sheet and not .no-print, so it appears in
+       the Print / Save-as-PDF output alongside every field. */
+    .voucher-stamp {
+      display: inline-block;
+      margin: 0 0 1rem;
+      padding: 0.3rem 0.9rem;
+      border: 2px solid var(--swa-2);
+      border-radius: 0.3rem;
+      color: var(--swa-2);
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
     .voucher-payee { margin: 0 0 1.25rem; font-size: 0.95rem; }
     .voucher-payee strong { font-weight: 600; }
     table.voucher-lines { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
@@ -122,6 +137,7 @@
         <div id="v-invoice-row" hidden><strong>Invoice/Receipt No:</strong> <span id="v-invoice"></span></div>
       </div>
     </div>
+    <div id="v-stamp" class="voucher-stamp" hidden></div>
     <p class="voucher-payee"><strong>Payable to:</strong> <span id="v-payee"></span></p>
     <table class="voucher-lines">
       <thead>
@@ -145,7 +161,7 @@
       <div id="v-payment-lines"></div>
     </div>
     <div class="voucher-payment" id="v-evidence-block" hidden>
-      <p style="margin:0 0 0.35rem;"><strong>Declarations &amp; evidence</strong></p>
+      <p style="margin:0 0 0.35rem;"><strong>Board approval</strong></p>
       <div id="v-evidence-lines"></div>
     </div>
     <p class="voucher-note" id="v-note" hidden></p>
@@ -170,6 +186,7 @@
       payee: string | null;
       approval_required: number;
       status: string;
+      rejected_stage: string | null;
       voucher_no: string | null;
       voucher_date: string | null;
       voucher_lines: string | null;
@@ -187,15 +204,6 @@
       payment_method: string | null;
       payment_reference: string | null;
       board_approval_ref: string | null;
-      quotation_waiver_reason: string | null;
-      supplier_is_cheapest: number | null;
-      supplier_choice_reason: string | null;
-      budget_approved: number | null;
-      budget_amount: string | null;
-      budget_officer: string | null;
-      budget_date: string | null;
-      coi_declared: number | null;
-      no_split_declared: number | null;
     }
 
     // Mirrors PAYMENT_METHODS in src/worker/api/approvals.ts (R4: GIRO
@@ -272,6 +280,30 @@
 
       document.getElementById('v-no')!.textContent = item.voucher_no;
       document.getElementById('v-date')!.textContent = fmtVoucherDate(item.voucher_date);
+
+      // Workflow-stage stamp so two printouts from different stages are
+      // never mistaken for each other. Unmapped statuses (e.g. pending
+      // resubmission carrying an old voucher number) print with no stamp.
+      const stampEl = document.getElementById('v-stamp');
+      if (stampEl) {
+        const stamp =
+          item.status === 'finance_check'
+            ? 'Pending finance approval'
+            : item.status === 'finance_approved'
+              ? 'Approved \u2014 awaiting payment'
+              : item.status === 'paid'
+                ? 'Paid'
+                : item.status === 'rejected' && item.rejected_stage === 'finance'
+                  ? 'Rejected \u2014 awaiting revision'
+                  : '';
+        if (stamp) {
+          stampEl.textContent = stamp;
+          stampEl.removeAttribute('hidden');
+        } else {
+          stampEl.setAttribute('hidden', '');
+        }
+      }
+
       document.getElementById('v-payee')!.textContent = item.payee || '—';
 
       let lines: VoucherLine[] = [];
@@ -357,21 +389,14 @@
         }
       }
 
-      // Declarations & evidence (compliance Batch B, plan §7.4): printed
-      // whenever the fields exist.
+      // Board approval (manual §3.3): printed whenever the reference exists.
+      // Owner decision 2026-09-06: the other declarations moved offline to
+      // the paper Purchase Requisition Form and no longer print here.
       const evidenceBlock = document.getElementById('v-evidence-block');
       const evidenceLinesEl = document.getElementById('v-evidence-lines');
       if (evidenceBlock && evidenceLinesEl) {
         const rows: string[] = [];
         if (item.board_approval_ref) rows.push(`Board approval: ${item.board_approval_ref}`);
-        if (item.quotation_waiver_reason) rows.push(`Quotation waiver: ${item.quotation_waiver_reason}`);
-        if (item.supplier_is_cheapest === 0 && item.supplier_choice_reason) rows.push(`Supplier (not the cheapest): ${item.supplier_choice_reason}`);
-        if (Number(item.budget_approved) === 1) {
-          const budgetBits = [item.budget_amount, item.budget_officer, item.budget_date ? fmtVoucherDate(item.budget_date) : ''].filter(Boolean).join(', ');
-          if (budgetBits) rows.push(`Budget approved by: ${budgetBits}`);
-        }
-        if (Number(item.coi_declared) === 1) rows.push('Conflict of interest: none declared');
-        if (Number(item.no_split_declared) === 1) rows.push('Purchase not split to avoid approval limits (declared)');
         if (rows.length > 0) {
           evidenceLinesEl.innerHTML = rows.map((r) => `<div>${esc(r)}</div>`).join('');
           evidenceBlock.removeAttribute('hidden');

@@ -1,0 +1,27 @@
+-- 014_approvals_board_attachment.sql
+--
+-- Date: 2026-09-06
+--
+-- Owner decision 2026-09-06: the S$1,000 declarations block (budget, cheapest
+-- supplier, quotation waiver, conflict of interest, no-splitting) is removed
+-- from the portal — that compliance evidence is handled offline on the paper
+-- Purchase Requisition Form again. The declaration columns on approval_items
+-- stay in place but dormant (no destructive migration).
+--
+-- What survives and grows: the board-approval evidence above S$10,000. One
+-- attachment per item can be marked as THE board document (minutes or the
+-- approval email), mirroring the R7 Tax Invoice flag. The purchase-approve
+-- guard now requires this flagged attachment instead of "any attachment".
+--
+-- Apply (OWNER, MANUAL, after a D1 backup):
+--   1. wrangler d1 export swa-portal --remote --output=backup.sql
+--   2. wrangler d1 execute swa-portal --remote --file=migrations/014_approvals_board_attachment.sql
+--
+-- Local dev:
+--   node ./node_modules/wrangler/bin/wrangler.js d1 execute swa-portal --local --file=migrations/014_approvals_board_attachment.sql
+--
+-- The same column is backported into schema.sql in the same commit, so fresh
+-- local databases (and the test suite, which applies schema.sql only) never
+-- need this file.
+
+ALTER TABLE approval_attachments ADD COLUMN is_board_approval INTEGER NOT NULL DEFAULT 0;

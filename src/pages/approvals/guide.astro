@@ -56,7 +56,7 @@ const SECTIONS = [
         </p>
         <ol class="guide-flow">
           <li><strong>Raised</strong>: the office admin fills in a request and attaches documents. Status shown: <em>For approval</em>.</li>
-          <li><strong>Purchase decision</strong>: the purchase approvers look at the request and approve or reject it. Status shown: <em>For approval</em>, then <em>Approved</em>.</li>
+          <li><strong>Purchase decision</strong>: the purchase approvers look at the request and approve or reject it. For requests under S$1,000 the finance approvers may make this decision instead, as the Finance Policy puts small purchases with the Treasurer. Status shown: <em>For approval</em>, then <em>Approved</em>.</li>
           <li><strong>Voucher</strong>: the office admin prepares the payment voucher (the paper the bank payment is based on). Status shown: <em>Approved</em>, then <em>In finance check</em>.</li>
           <li><strong>Finance decision</strong>: the finance approver checks the voucher against the documents and approves or rejects it. Status shown: <em>Finance approved</em> when happy.</li>
           <li><strong>Payment</strong>: the office admin pays the vendor and records who paid, when and how. Status shown: <em>Paid</em>.</li>
@@ -90,11 +90,12 @@ const SECTIONS = [
         </p>
         <ul class="guide-rules">
           <li><strong>Every decision:</strong> whoever decided is recorded with their office (for example &ldquo;President&rdquo; or &ldquo;Treasurer&rdquo;), shown beside their name on the request, in emails and on the printed voucher. Nobody can approve or reject a request they raised themselves.</li>
+          <li><strong>Under S$1,000:</strong> the finance approvers (Treasurer and Assistant Treasurer) may sign the purchase approval — the Finance Policy&rsquo;s purchase matrix puts purchases below $1,000 with the Treasurer/Secretary, so the President is not needed for small purchases. Documents are still required, and the Treasurer still checks the voucher afterwards.</li>
           <li><strong>Every voucher:</strong> an invoice or receipt number is required. If the same number already appears on another request, an amber warning appears — check it, then continue if this is genuinely a new bill. Suppliers legitimately reuse invoice numbers every month, so the portal warns but never blocks.</li>
-          <li><strong>S$1,000 and above:</strong> the request needs either two quotations in the comparison table or a written waiver reason, plus the declarations: the budget details, a conflict-of-interest confirmation, a confirmation the purchase is not split to stay under a limit, and an answer on whether the chosen supplier was the cheapest (a &ldquo;No&rdquo; needs a written reason).</li>
+          <li><strong>S$1,000 and above:</strong> the finance manual's declarations (budget approval, conflict of interest, no-splitting, supplier choice, quotations or waiver) are handled <strong>offline</strong> on the paper Purchase Requisition Form — the portal no longer asks for them. Keep the PRF with your records.</li>
           <li><strong>S$5,000 and above:</strong> both approval stages always apply, even for regular costs like payroll, and the printed voucher carries both signatures with their offices.</li>
-          <li><strong>S$6,000 to S$90,000:</strong> a reminder to obtain two written invitations to quote and attach them. <strong>Above S$90,000:</strong> a formal tender is required — attach the tender documents.</li>
-          <li><strong>Above S$10,000:</strong> the board&rsquo;s decision is needed first. Record the board approval reference on the request (for example &ldquo;Board meeting 12 Aug 2026, item 4&rdquo;) and attach the minutes or approval email before the purchase can be approved.</li>
+          <li><strong>S$6,000 to S$90,000:</strong> the finance manual asks for two written invitations to quote, and <strong>above S$90,000</strong> for a formal tender — the portal no longer reminds you, so note it on the paper form.</li>
+          <li><strong>Above S$10,000:</strong> the board&rsquo;s decision is needed first. Record the board approval reference on the request (for example &ldquo;Board meeting 12 Aug 2026, item 4&rdquo;) and attach the minutes or approval email, marking it as the board approval document, before the purchase can be approved.</li>
           <li><strong>Every change is logged:</strong> when a request is created or edited, the audit log records each changed field with its old and new value, who changed it and when.</li>
           <li><strong>Tax Invoice:</strong> tick &ldquo;This is the Tax Invoice&rdquo; on the one document that is the tax invoice — it always shows first, everywhere the documents appear.</li>
           <li><strong>Seven years:</strong> approvals, their documents and the audit log are kept for at least seven years. Nothing in the portal deletes them.</li>
@@ -279,9 +280,12 @@ const SECTIONS = [
         <h2>Purchase approver: approve purchases</h2>
         <p>
           Purchase approvers (for example, the President and the 1st Vice
-          President) decide whether a purchase should go ahead. Log in with your
-          SWA email address and open <strong>Approvals</strong> in the top bar.
-          The <em>For approval</em> tab shows everything waiting for a decision.
+          President) decide whether a purchase should go ahead. For requests
+          under S$1,000 the finance approvers may make this decision instead —
+          the Finance Policy puts small purchases with the Treasurer. Log in
+          with your SWA email address and open <strong>Approvals</strong> in
+          the top bar. The <em>For approval</em> tab shows everything waiting
+          for a decision.
         </p>
         <figure class="guide-figure">
           <a href="/guide/approval/08-board-approver.png">
@@ -321,9 +325,10 @@ const SECTIONS = [
         <p>
           The finance approver is the second pair of eyes: the purchase is
           already approved, and you check that the payment voucher matches the
-          documents before any money moves. Log in with your SWA email address
-          and open <strong>Approvals</strong>. The <em>In finance check</em> tab
-          shows the vouchers waiting for you.
+          documents before any money moves. For requests under S$1,000 you may
+          also be the one who signs the purchase approval itself. Log in with
+          your SWA email address and open <strong>Approvals</strong>. The
+          <em>In finance check</em> tab shows the vouchers waiting for you.
         </p>
         <p>
           Open a request and read down the page: the voucher with its lines and
