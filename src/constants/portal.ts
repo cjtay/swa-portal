@@ -157,8 +157,8 @@ export const APPROVAL_PURCHASE_APPROVER_EMAILS = [
 	// Dev/test only (shared inbox the owner controls):
 	"approval@singaporewomenassociation.org",
 	// Production (swap in at ship time):
-	// 'roxanne.zhang@singaporewomenassociation.org',
-	// 'angela.wong@singaporewomenassociation.org',
+	'roxanne.zhang@singaporewomenassociation.org',
+	'angela.wong@singaporewomenassociation.org',
 ] as const;
 
 // Stage two — finance approvers. IT admins are deliberately NOT added here:
@@ -169,10 +169,10 @@ export const APPROVAL_FINANCE_APPROVER_EMAILS = [
 	"finance@singaporewomenassociation.org",
 	// Dev-only Assistant Treasurer stand-in (compliance plan §5, settled
 	// decision 1) — the second finance signature in local testing.
-	"internal@singaporewomenassociation.org",
+	// "internal@singaporewomenassociation.org",
 	// Production — owner confirms YS's and Joyce's real addresses at ship time:
-	// 'wong.ys@singaporewomenassociation.org',
-	// 'joyce.yeo@singaporewomenassociation.org',
+	'wong.ys@singaporewomenassociation.org',
+	'joyce.yeo@singaporewomenassociation.org',
 ] as const;
 
 /**
@@ -283,15 +283,15 @@ export function canDecidePurchaseStage(email: string, amount: number | null): bo
 // test addresses; production addresses are owner-swapped at ship time.
 // system@ holds no office and stays unmapped on purpose.
 export const APPROVAL_OFFICE_LABELS: Record<string, string> = {
-	"approval@singaporewomenassociation.org": "President",
-	"cjtay@singaporewomenassociation.org": "1st Vice President",
-	"finance@singaporewomenassociation.org": "Treasurer",
-	"internal@singaporewomenassociation.org": "Assistant Treasurer",
+	// "approval@singaporewomenassociation.org": "President",
+	// "cjtay@singaporewomenassociation.org": "1st Vice President",
+	// "finance@singaporewomenassociation.org": "Treasurer",
+	// "internal@singaporewomenassociation.org": "Assistant Treasurer",
 	// Production (owner swaps in at ship time):
-	// 'roxanne.zhang@singaporewomenassociation.org': 'President',
-	// 'angela.wong@singaporewomenassociation.org': '1st Vice President',
-	// 'wong.ys@singaporewomenassociation.org': 'Treasurer',
-	// 'joyce.yeo@singaporewomenassociation.org': 'Assistant Treasurer',
+	'roxanne.zhang@singaporewomenassociation.org': 'President',
+	'angela.wong@singaporewomenassociation.org': '1st Vice President',
+	'wong.ys@singaporewomenassociation.org': 'Treasurer',
+	'joyce.yeo@singaporewomenassociation.org': 'Assistant Treasurer',
 };
 
 /** The office label for an approver email, or null when none is mapped. */

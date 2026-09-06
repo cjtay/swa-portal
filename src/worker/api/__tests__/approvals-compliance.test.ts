@@ -11,7 +11,13 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { SELF, env } from 'cloudflare:test';
 import { signHmac, base64urlEncode } from '../../lib/crypto';
-import { SESSION_COOKIE_NAME, IT_ADMIN_EMAILS } from '../../../constants/portal';
+import {
+  SESSION_COOKIE_NAME,
+  IT_ADMIN_EMAILS,
+  APPROVAL_PURCHASE_APPROVER_EMAILS,
+  APPROVAL_FINANCE_APPROVER_EMAILS,
+  APPROVAL_OFFICE_LABELS,
+} from '../../../constants/portal';
 import { applyMigrations, seedMember } from '../../../../test/db-helpers';
 
 const ADMIN_EMAILS = [
@@ -33,8 +39,15 @@ const ADMIN_EMAILS = [
   'approvals-compliance-admin15@example.com',
   'approvals-compliance-admin16@example.com',
 ];
-const PURCHASE_EMAIL = 'approval@singaporewomenassociation.org';
-const FINANCE_EMAIL = 'finance@singaporewomenassociation.org';
+// Identities come straight from the portal.ts approver lists so the suite
+// holds under the local-dev address set and the production set alike (the
+// owner swaps them for staging UAT / ship). Offices assert the capture
+// mechanism against whatever APPROVAL_OFFICE_LABELS maps — unmapped
+// addresses must record null, mapped ones the mapped label.
+const PURCHASE_EMAIL = APPROVAL_PURCHASE_APPROVER_EMAILS[0];
+const FINANCE_EMAIL = APPROVAL_FINANCE_APPROVER_EMAILS[0];
+const PURCHASE_OFFICE = APPROVAL_OFFICE_LABELS[PURCHASE_EMAIL] ?? null;
+const FINANCE_OFFICE = APPROVAL_OFFICE_LABELS[FINANCE_EMAIL] ?? null;
 const IT_ADMIN = IT_ADMIN_EMAILS[0]; // cjtay@ — purchase approver via the IT-admin union
 const AUDITOR_EMAIL = 'audit@singaporewomenassociation.org'; // R2 view-only auditor
 
@@ -219,14 +232,14 @@ describe('office capture (plan §6.2)', () => {
     });
     expect(res.status).toBe(200);
     const body = await res.json<{ item: { purchase_decision_office?: string | null } }>();
-    expect(body.item.purchase_decision_office).toBe('President');
+    expect(body.item.purchase_decision_office).toBe(PURCHASE_OFFICE);
 
     const audit = await env.DB.prepare(
       "SELECT note FROM approval_audit_log WHERE item_id = ? AND action = 'purchase_approved'",
     )
       .bind(id)
       .first<{ note: string | null }>();
-    expect(audit?.note).toBe('office=President');
+    expect(audit?.note).toBe(PURCHASE_OFFICE ? `office=${PURCHASE_OFFICE}` : null);
   });
 
   it('records the finance approver office through the full create → approve → voucher → finance-approve flow', async () => {
@@ -245,7 +258,7 @@ describe('office capture (plan §6.2)', () => {
     });
     const body = await detail.json<{ item: { finance_decision_office?: string | null; status: string } }>();
     expect(body.item.status).toBe('finance_approved');
-    expect(body.item.finance_decision_office).toBe('Treasurer');
+    expect(body.item.finance_decision_office).toBe(FINANCE_OFFICE);
   });
 });
 
@@ -672,7 +685,7 @@ describe('R3: board-list CSV export (Batch C)', () => {
 });
 
 describe('small-purchase purchase-stage authority (policy §3.2, 2026-09-06)', () => {
-  it('a finance approver can purchase-approve a S$999 item, recorded with the Treasurer office', async () => {
+  it('a finance approver can purchase-approve a S$999 item, recorded with the mapped office', async () => {
     const id = await createItem({ amount: '999', title: 'Small purchase approve' });
     const res = await SELF.fetch(`https://example.com/api/approvals/${id}/approve`, {
       method: 'POST',
@@ -683,13 +696,13 @@ describe('small-purchase purchase-stage authority (policy §3.2, 2026-09-06)', (
       .bind(id)
       .first<{ status: string; purchase_decision_office: string | null }>();
     expect(item?.status).toBe('purchase_approved');
-    expect(item?.purchase_decision_office).toBe('Treasurer');
+    expect(item?.purchase_decision_office).toBe(FINANCE_OFFICE);
     const audit = await env.DB.prepare(
       "SELECT note FROM approval_audit_log WHERE item_id = ? AND action = 'purchase_approved'",
     )
       .bind(id)
       .first<{ note: string | null }>();
-    expect(audit?.note).toBe('office=Treasurer');
+    expect(audit?.note).toBe(FINANCE_OFFICE ? `office=${FINANCE_OFFICE}` : null);
   });
 
   it('a finance approver can purchase-reject a S$999 item', async () => {
@@ -705,7 +718,7 @@ describe('small-purchase purchase-stage authority (policy §3.2, 2026-09-06)', (
       .first<{ status: string; rejected_stage: string; purchase_decision_office: string | null }>();
     expect(item?.status).toBe('rejected');
     expect(item?.rejected_stage).toBe('purchase');
-    expect(item?.purchase_decision_office).toBe('Treasurer');
+    expect(item?.purchase_decision_office).toBe(FINANCE_OFFICE);
   });
 
   it('a finance approver cannot purchase-approve at S$1,000 (403)', async () => {
