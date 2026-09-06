@@ -116,7 +116,20 @@ import '../styles/admin.css';
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <!-- Turnstile explicit-render handshake. api.js is async, so it can finish
+       loading before this page's bundled (deferred) module script runs. The
+       ready flag and the onload callback must therefore live in this inline
+       script, which the browser always runs first. The module script later
+       sets SWA_TURNSTILE_RENDER and calls it once the site key arrives —
+       whichever of the two happens last triggers the actual render. -->
+  <script is:inline>
+    window.SWA_TURNSTILE_READY = false;
+    window.onTurnstileLoad = function () {
+      window.SWA_TURNSTILE_READY = true;
+      if (window.SWA_TURNSTILE_RENDER) window.SWA_TURNSTILE_RENDER();
+    };
+  </script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad&render=explicit" async defer></script>
 </head>
 <body>
   <div class="login-wrapper">
@@ -176,6 +189,14 @@ import '../styles/admin.css';
   // login-capable member. /api/dev/members 404s in production, so the panel
   // stays hidden there. Only renders when DEV_BYPASS_AUTH is active.
   async function initDevLogin() {
+    // The dev picker only exists where the dev bypass can be active — a
+    // local dev server. Everywhere else /api/dev/members answers 404 by
+    // design, and probing it puts a confusing 404 in the browser console on
+    // staging and production, so skip the request entirely there. (If the
+    // bypass is ever enabled on a deployed URL, widen this guard.)
+    const host = window.location.hostname;
+    if (host !== 'localhost' && host !== '127.0.0.1' && host !== '[::1]') return;
+
     let res;
     try {
       res = await fetch('/api/dev/members');
@@ -275,6 +296,52 @@ import '../styles/admin.css';
   let turnstileWidgetId: string | null = null;
   let turnstileSiteKey = '';
 
+  // Render the widget once BOTH inputs exist: the site key (from our API)
+  // and the Turnstile script (flagged by the inline handshake in <head>).
+  // Safe to call repeatedly — it returns unless both are ready.
+  function tryRenderTurnstile(): void {
+    if (!turnstileSiteKey || turnstileWidgetId !== null) return;
+    if (!(window as any).turnstile) return;
+
+    turnstileWidgetId = (window as any).turnstile.render('#turnstile-container', {
+      sitekey: turnstileSiteKey,
+      callback: (token: string) => {
+        turnstileToken = token;
+        btnSendOtp.disabled = false;
+      },
+      'error-callback': () => {
+        emailError.textContent = 'Security verification failed. Please refresh.';
+        emailError.style.display = '';
+      },
+      'expired-callback': () => {
+        turnstileToken = null;
+        btnSendOtp.disabled = true;
+      },
+    });
+  }
+
+  // The inline handshake in <head> calls this when api.js becomes ready. It
+  // can fire before or after this module script runs; assigning it here and
+  // checking the flag covers both orders.
+  (window as any).SWA_TURNSTILE_RENDER = tryRenderTurnstile;
+  if ((window as any).SWA_TURNSTILE_READY) tryRenderTurnstile();
+
+  // Safety net: if the handshake never fires (script blocked or slow),
+  // poll briefly before telling the user to refresh.
+  function retryTurnstileUntil(deadline: number): void {
+    if (turnstileWidgetId !== null) return;
+    if ((window as any).turnstile) {
+      tryRenderTurnstile();
+      return;
+    }
+    if (Date.now() >= deadline) {
+      emailError.textContent = 'Security verification unavailable. Please refresh.';
+      emailError.style.display = '';
+      return;
+    }
+    setTimeout(() => retryTurnstileUntil(deadline), 250);
+  }
+
   async function initTurnstile() {
     try {
       const res = await fetch('/api/turnstile-config');
@@ -293,27 +360,8 @@ import '../styles/admin.css';
       return;
     }
 
-    if (!(window as any).turnstile) {
-      emailError.textContent = 'Security verification unavailable. Please refresh.';
-      emailError.style.display = '';
-      return;
-    }
-
-    turnstileWidgetId = (window as any).turnstile.render('#turnstile-container', {
-      sitekey: turnstileSiteKey,
-      callback: (token: string) => {
-        turnstileToken = token;
-        btnSendOtp.disabled = false;
-      },
-      'error-callback': () => {
-        emailError.textContent = 'Security verification failed. Please refresh.';
-        emailError.style.display = '';
-      },
-      'expired-callback': () => {
-        turnstileToken = null;
-        btnSendOtp.disabled = true;
-      },
-    });
+    tryRenderTurnstile();
+    retryTurnstileUntil(Date.now() + 8000);
   }
 
   initTurnstile();

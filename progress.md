@@ -12,6 +12,32 @@ For role access, API permissions, and feature specs see
 
 ---
 
+## 2026-09-07 (session 37): Login page — staging console 404 + Turnstile cold-load race fixed
+
+Owner reported: clicking the staging preview link always logged a 404 in the
+console and needed a refresh before login worked. Root-caused on staging
+(browser repro) — two separate issues, both in `src/pages/login.astro`:
+
+1. **Console 404 (harmless noise).** `/login` always probed
+   `/api/dev/members` for the dev quick-login picker; that endpoint answers
+   404 by design on staging/prod. The probe is now skipped unless the
+   hostname is localhost/127.0.0.1/[::1], so the console stays clean.
+2. **The real refresh bug.** Turnstile `api.js` (`async defer`) often
+   finished loading after the module script checked `window.turnstile`,
+   leaving "Send Login Code" disabled with "Security verification
+   unavailable. Please refresh." on cold cache. Switched to explicit
+   render: `api.js?onload=onTurnstileLoad&render=explicit` plus an
+   `is:inline` handshake script in `<head>` (ready flag + callback);
+   `tryRenderTurnstile()` fires once the script AND the site key are both
+   ready, with an 8-second retry safety net. Also affects production
+   first-time visitors — takes effect there on the next `npm run deploy`.
+
+Deployed to staging and verified fresh-load: no `/api/dev/members` request,
+no console 404, button enabled on first load without refresh. Production
+not deployed (owner-gated). `npm run typecheck` 0 errors.
+
+---
+
 ## 2026-09-06 (session 36): Role-aware dashboard
 
 The home page was a static grid of link cards; it now shows live,
