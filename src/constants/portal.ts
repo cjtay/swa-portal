@@ -56,8 +56,8 @@ export const LAUGHTER_YOGA_NOTIFY_EMAILS = [
 // Membership application form — recipients for new submission notifications.
 export const MEMBERSHIP_NOTIFY_EMAILS = [
 	"cjtay@singaporewomenassociation.org",
-	// 'jolene.lim@singaporewomenassociation.org',
-	// 'angela.wong@singaporewomenassociation.org',
+	'jolene.lim@singaporewomenassociation.org',
+	'angela.wong@singaporewomenassociation.org',
 ];
 
 // Restricted set of admins who can approve or reject membership applications.
@@ -68,8 +68,8 @@ export const MEMBERSHIP_NOTIFY_EMAILS = [
 // which checks membership in MEMBERSHIP_APPROVER_EMAILS OR IT_ADMIN_EMAILS.
 // Per 14-07-2026 SWA review: IT admins can also approve/reject.
 export const MEMBERSHIP_APPROVER_EMAILS = [
-	// 'angela.wong@singaporewomenassociation.org',
-	// 'roxanne.zhang@singaporewomenassociation.org',
+	'angela.wong@singaporewomenassociation.org',
+	'roxanne.zhang@singaporewomenassociation.org',
 	"cjtay@singaporewomenassociation.org",
 ] as const;
 
@@ -157,8 +157,8 @@ export const APPROVAL_PURCHASE_APPROVER_EMAILS = [
 	// Dev/test only (shared inbox the owner controls):
 	"approval@singaporewomenassociation.org",
 	// Production (swap in at ship time):
-	'roxanne.zhang@singaporewomenassociation.org',
-	'angela.wong@singaporewomenassociation.org',
+	// 'roxanne.zhang@singaporewomenassociation.org',
+	// 'angela.wong@singaporewomenassociation.org',
 ] as const;
 
 // Stage two — finance approvers. IT admins are deliberately NOT added here:
@@ -171,8 +171,8 @@ export const APPROVAL_FINANCE_APPROVER_EMAILS = [
 	// decision 1) — the second finance signature in local testing.
 	"internal@singaporewomenassociation.org",
 	// Production — owner confirms YS's and Joyce's real addresses at ship time:
-	'wong.ys@singaporewomenassociation.org',
-	'joyce.yeo@singaporewomenassociation.org',
+	// 'wong.ys@singaporewomenassociation.org',
+	// 'joyce.yeo@singaporewomenassociation.org',
 ] as const;
 
 /**

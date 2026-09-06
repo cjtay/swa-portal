@@ -1111,9 +1111,11 @@ export async function handleApprovalDetail(c: AppContext) {
       return c.json({ success: false, error_code: 'NOT_FOUND', message: 'Approval item not found.' }, 404);
     }
 
-    // R7: the ticked Tax Invoice always renders first, then upload order.
+    // R7: the ticked Tax Invoice always renders first, then upload order;
+    //     the board document renders last (owner request 2026-09-06) so the
+    //     drawer's evidence trail ends on the minutes/approval email.
     const attachmentsResult = await c.env.DB.prepare(
-      'SELECT id, filename, mime_type, size, is_tax_invoice, is_board_approval, created_at FROM approval_attachments WHERE item_id = ? ORDER BY is_tax_invoice DESC, is_board_approval DESC, id',
+      'SELECT id, filename, mime_type, size, is_tax_invoice, is_board_approval, created_at FROM approval_attachments WHERE item_id = ? ORDER BY is_tax_invoice DESC, is_board_approval ASC, id',
     )
       .bind(Number(id))
       .all();

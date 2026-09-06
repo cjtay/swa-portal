@@ -74,6 +74,9 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
         <input type="checkbox" id="ap-approval-required" checked />
         <span>Approval required (purchase approvers decide before the voucher)</span>
       </label>
+      <p id="ap-approval-lock-note" role="status" aria-live="polite" style="margin:0.25rem 0 0 1.6rem;font-size:0.8rem;color:#92400e;" hidden>
+        Forced on: both approval stages apply to requests of S$5,000 and above.
+      </p>
 
       <label class="ap-field" style="display:block;margin-top:0.75rem;">
         <span>Documents: add one at a time or several at once (PDF or photos, up to 10 files, 10 MB each). At least one document is required when approval is required.</span>
@@ -731,6 +734,7 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   import { requireAuth, type SessionResponse } from '../scripts/auth-gate';
   import {
     APPROVAL_QUOTE_RULE_THRESHOLD,
+    APPROVAL_TWO_STAGE_THRESHOLD,
     APPROVAL_BOARD_APPROVAL_THRESHOLD,
   } from '../constants/portal';
 
@@ -2086,7 +2090,29 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
     approvalCheck.checked = option?.dataset.requiresApproval !== 'false';
   }
 
-  categorySelect?.addEventListener('change', syncApprovalDefault);
+  categorySelect?.addEventListener('change', () => {
+    syncApprovalDefault();
+    updateApprovalLock();
+  });
+
+  let preLockChecked: boolean | null = null;
+
+  function updateApprovalLock(): void {
+    if (!approvalCheck) return;
+    const note = document.getElementById('ap-approval-lock-note');
+    const amt = typedCreateAmount();
+    if (amt !== null && amt >= APPROVAL_TWO_STAGE_THRESHOLD) {
+      if (!approvalCheck.disabled) preLockChecked = approvalCheck.checked;
+      approvalCheck.disabled = true;
+      approvalCheck.checked = true;
+      if (note) note.hidden = false;
+    } else if (approvalCheck.disabled) {
+      approvalCheck.disabled = false;
+      if (preLockChecked !== null) approvalCheck.checked = preLockChecked;
+      preLockChecked = null;
+      if (note) note.hidden = true;
+    }
+  }
 
   function renderComparisonBuilder(): void {
     if (!comparisonRows || !comparisonBuilder || !comparisonToggleWrap || !comparisonToggle) return;
@@ -2182,6 +2208,8 @@ import { APPROVAL_CATEGORIES } from '../constants/portal';
   }
 
   document.getElementById('ap-amount')?.addEventListener('input', updateBoardBoxVisibility);
+  document.getElementById('ap-amount')?.addEventListener('input', updateApprovalLock);
+  updateApprovalLock();
 
   comparisonToggle?.addEventListener('change', () => {
     invalidateAiPreview();

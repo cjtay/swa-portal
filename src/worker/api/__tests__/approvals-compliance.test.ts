@@ -383,6 +383,38 @@ describe('board approval above S$10,000 (plan §7.3, owner update 2026-09-06)', 
     expect(item?.status).toBe('purchase_approved');
   });
 
+  it('drawer order: tax invoice first, quotations by upload order, board document last', async () => {
+    const form = new FormData();
+    form.append('category', 'quotation');
+    form.append('title', 'Board doc renders last');
+    form.append('requestedAmount', '12000');
+    form.append('files', pdfFile('first-quote.pdf'));
+    form.append('files', pdfFile('second-quote.pdf'));
+    form.append('taxInvoice', 'first-quote.pdf');
+    form.append('boardApprovalFile', pdfFile('board-minutes.pdf'));
+    const res = await SELF.fetch('https://example.com/api/approvals', {
+      method: 'POST',
+      headers: { Cookie: await adminCookie() },
+      body: form,
+    });
+    expect(res.status).toBe(201);
+    const { id } = await res.json<{ success: boolean; id: number }>();
+
+    const detail = await SELF.fetch(`https://example.com/api/approvals/${id}`, {
+      headers: { Cookie: await adminCookie() },
+    });
+    const body = await detail.json<{
+      attachments: Array<{ filename: string; is_tax_invoice: number; is_board_approval: number }>;
+    }>();
+    expect(body.attachments.map((a) => a.filename)).toEqual([
+      'first-quote.pdf',
+      'second-quote.pdf',
+      'board-minutes.pdf',
+    ]);
+    expect(body.attachments[0].is_tax_invoice).toBe(1);
+    expect(body.attachments[2].is_board_approval).toBe(1);
+  });
+
   it('quotation dates ride the comparison rows and are stored', async () => {
     const id = await createItem({ amount: '1500', title: 'Two dated quotes', comparisonCount: 2 });
     const detail = await SELF.fetch(`https://example.com/api/approvals/${id}`, {
